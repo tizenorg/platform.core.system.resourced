@@ -1,0 +1,61 @@
+CMAKE_MINIMUM_REQUIRED (VERSION 2.6)
+
+PROJECT(resourced)
+
+SET(CMAKE_EXTRA_INCLUDE_FILES unistd.h)
+
+INCLUDE_DIRECTORIES(${RESOURCED_INCLUDEDIR}
+  ${RESOURCED_SOURCE_DIR}
+)
+
+CONFIGURE_FILE(${INCLUDE_COMMON_DIR}/config.h.in
+  ${INCLUDE_COMMON_DIR}/config.h)
+
+SET (HEADERS
+  ${INCLUDE_COMMON_DIR}/config.h
+  ${INCLUDE_COMMON_DIR}/config-parser.h
+  ${INCLUDE_COMMON_DIR}/macro.h
+  ${INCLUDE_COMMON_DIR}/module.h
+)
+
+SET (SOURCES
+  ${COMMON_SOURCE_DIR}/config-parser.c
+  ${COMMON_SOURCE_DIR}/edbus-handler.c
+  ${COMMON_SOURCE_DIR}/file-helper.c
+  ${COMMON_SOURCE_DIR}/module.c
+  ${RESOURCED_SOURCE_DIR}/init.c
+  ${RESOURCED_SOURCE_DIR}/main.c
+  )
+
+SET (REQUIRES_LIST ${REQUIRES_LIST}
+	ecore
+	dlog
+	glib-2.0
+    sqlite3
+	vconf
+	vconf-internal-keys
+	x11
+	ecore-x
+	ecore-input
+	ecore-file
+	evas
+	edbus)
+
+INCLUDE(FindPkgConfig)
+pkg_check_modules(daemon_pkgs REQUIRED ${REQUIRES_LIST})
+
+FOREACH(flag ${daemon_pkgs_CFLAGS})
+        SET(EXTRA_CFLAGS "${EXTRA_CFLAGS} ${flag} -pthread")
+ENDFOREACH(flag)
+
+SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${EXTRA_CFLAGS}")
+
+ADD_EXECUTABLE (${PROJECT_NAME} ${HEADERS} ${SOURCES})
+TARGET_LINK_LIBRARIES(${PROJECT_NAME}
+  ${daemon_pkgs_LDFLAGS})
+
+SET_TARGET_PROPERTIES(${PROJECT_NAME} PROPERTIES SKIP_BUILD_RPATH true)
+INSTALL(FILES ${PROJECT_NAME}
+  DESTINATION ${MAKE_INSTALL_PREFIX}/usr/bin RENAME resourced
+  PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE WORLD_EXECUTE)
+INSTALL(FILES ${INCLUDE_PUBLIC_DIR}/resourced.h DESTINATION include/system)
