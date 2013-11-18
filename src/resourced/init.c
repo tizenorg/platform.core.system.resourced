@@ -25,7 +25,6 @@
  **/
 
 #include "edbus-handler.h"
-#include "cgroup.h"
 #include "init.h"
 #include "macro.h"
 #include "trace.h"
