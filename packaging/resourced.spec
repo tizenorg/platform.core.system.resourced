@@ -85,6 +85,7 @@ fi
 %config %{_sysconfdir}/dbus-1/system.d/resourced.conf
 %{_libdir}/systemd/system/resourced.service
 %{_libdir}/systemd/system/multi-user.target.wants/resourced.service
+%config /etc/resourced/memory.conf
 
 %files devel
 %{_libdir}/pkgconfig/*.pc
