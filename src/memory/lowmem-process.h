@@ -25,6 +25,8 @@
 #ifndef __LOWMEM_PROCESS_H__
 #define __LOWMEM_PROCESS_H__
 
+#include <proc_stat.h>
+
 #define OOMADJ_SU                   (0)
 #define OOMADJ_INIT                 (100)
 #define OOMADJ_FOREGRD_LOCKED       (150)

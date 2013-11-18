@@ -18,41 +18,28 @@
  */
 
 /*
- * @file main.c
+ * @file proc-handler.c
  *
  * Copyright (c) 2013 Samsung Electronics Co., Ltd. All rights reserved.
  *
  */
 
-#include "init.h"
-#include "macro.h"
-#include "module.h"
-#include "proc-main.h"
-#include "proc-monitor.h"
 #include "trace.h"
-#include "version.h"
+#include "edbus-handler.h"
 
-#include <Ecore.h>
-#include <mcheck.h>
+#define SIGNAL_NAME_OOMADJ_SET		"OomadjSet"
 
-int main(int argc, char **argv)
+void dbus_proc_handler(char* type, char *buf)
 {
-	int ret_code = 0;
-	struct daemon_arg darg = { argc, argv };
+	char *pa[3];
+	int ret;
 
-#ifdef DEBUG_ENABLED
-	mtrace();
-	mcheck(0);
-#endif
-	ret_code = resourced_init(&darg);
-	ret_value_msg_if(ret_code < 0, ret_code,
-			 "Resourced initialization failed\n");
-	modules_init(NULL);
-	ret_code = resourced_proc_init();
-	if (ret_code < 0)
-		_E("Proc init failed");
-	ecore_main_loop_begin();
-	modules_exit(NULL);
-	resourced_deinit(&darg);
-	return ret_code;
+	pa[0] = type;
+	pa[1] = "1";
+	pa[2] = buf;
+
+	ret = broadcast_edbus_signal_str(DEVICED_PATH_PROCESS, DEVICED_INTERFACE_PROCESS,
+			SIGNAL_NAME_OOMADJ_SET, "sis", pa);
+	if (ret < 0)
+		_E("Fail to send dbus signal to deviced!!");
 }

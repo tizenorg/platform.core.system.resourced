@@ -28,9 +28,12 @@
 
 #include "resourced.h"
 #include "trace.h"
+#include "proc-main.h"
 #include "lowmem-process.h"
 #include "lowmem-handler.h"
 #include "macro.h"
+#include "proc-noti.h"
+#include "proc-winstate.h"
 
 #define PROC_NAME_MAX 512
 #define PROC_BUF_MAX  64

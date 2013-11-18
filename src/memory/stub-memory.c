@@ -27,6 +27,7 @@
 
 #include "lowmem-process.h"
 #include "macro.h"
+#include "proc-main.h"
 #include "resourced.h"
 
 #include <string.h>

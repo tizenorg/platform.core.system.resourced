@@ -46,6 +46,7 @@
 #include <glib.h>
 
 #include "trace.h"
+#include "proc-main.h"
 #include "lowmem-handler.h"
 #include "lowmem-process.h"
 #include "resourced.h"

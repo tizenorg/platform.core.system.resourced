@@ -53,7 +53,7 @@ echo "\
 	CFLAGS+=" -DTIZEN_ENGINEER_MODE"
 %endif
 
-cmake . -DCMAKE_INSTALL_PREFIX=/usr -DFULLVER=%{version} -DCMAKE_BUILD_TYPE=Release
+cmake . -DCMAKE_INSTALL_PREFIX=/usr -DFULLVER=%{version} -DMAJORVER=${MAJORVER} -DCMAKE_BUILD_TYPE=Release
 
 make %{?jobs:-j%jobs}
 
@@ -80,6 +80,7 @@ fi
 
 %files
 %manifest resourced.manifest
+%{_libdir}/libproc-stat.so.*
 /usr/share/license/%{name}
 %attr(-,root, root) %{_bindir}/resourced
 %config %{_sysconfdir}/dbus-1/system.d/resourced.conf
@@ -89,4 +90,6 @@ fi
 
 %files devel
 %{_libdir}/pkgconfig/*.pc
+%{_includedir}/system/proc_stat.h
+%{_libdir}/libproc-stat.so
 %{_includedir}/system/resourced.h

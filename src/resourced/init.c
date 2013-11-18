@@ -27,6 +27,8 @@
 #include "edbus-handler.h"
 #include "init.h"
 #include "macro.h"
+#include "proc-main.h"
+#include "proc-monitor.h"
 #include "trace.h"
 #include "version.h"
 
@@ -75,6 +77,7 @@ static int parse_cmd(int argc, char **argv)
 			print_version();
 			return RESOURCED_ERROR_FAIL;
 		case 'w':
+			proc_set_watchdog_state(PROC_WATCHDOG_ENABLE);
 			break;
 		default:
 			printf("Unknown option %c\n", (char)retval);
