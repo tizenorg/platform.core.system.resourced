@@ -21,7 +21,6 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdbool.h>
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
@@ -211,9 +210,9 @@ API bool proc_stat_get_free_mem_size(unsigned int *free_mem)
 	char *buffer = NULL;
 	const int buffer_size = 4096;
 	int len = 0;
-	static const char *const items[] = { "MemFree:", "Buffers:", "Cached:", "SwapCached:", "Shmem:" };
+	static const char *const items[] = { "MemFree:", "Buffers:", "Cached:", "Shmem:" };
 	static const int items_len[] = { sizeof("MemFree:"), sizeof("Buffers:"), sizeof("Cached:"),
-							  sizeof("SwapCached:"), sizeof("Shmem:") };
+							  sizeof("Shmem:") };
 	static const int items_cnt = ARRAY_SIZE(items);
 	unsigned int mem_size[items_cnt];
 	int num_found;
@@ -241,8 +240,8 @@ API bool proc_stat_get_free_mem_size(unsigned int *free_mem)
 	if (num_found < items_cnt)
 		return false;
 
-	/* free_mem = "MemFree" + "Buffers" + "Cached" + "SwapCache" - "Shmem" */
-	*free_mem = (mem_size[0] + mem_size[1] + mem_size[2] + mem_size[3] - mem_size[4]) / 1024;
+	/* free_mem = "MemFree" + "Buffers" + "Cached" - "Shmem" */
+	*free_mem = (mem_size[0] + mem_size[1] + mem_size[2] - mem_size[4]) / 1024;
 
 	return true;
 }
@@ -813,7 +812,7 @@ static int send_socket(struct resman_noti *msg, bool sync)
 static resourced_ret_c proc_cgroup_send_status(const int type, int num, ...)
 {
 	struct resman_noti *msg;
-	resourced_ret_c ret = RESOURCED_ERROR_OK;
+	resourced_ret_c ret = RESOURCED_ERROR_NONE;
 	va_list argptr;
 
 	int i;

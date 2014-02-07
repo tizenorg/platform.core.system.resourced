@@ -17,45 +17,45 @@
  *
  */
 
-/*
- * @file main.c
+/**
+ * @file cpu-common.c
+ * @desc Implement lowmem API for external module
  *
  * Copyright (c) 2013 Samsung Electronics Co., Ltd. All rights reserved.
  *
  */
 
-#include "init.h"
-#include "macro.h"
-#include "module-data.h"
 #include "module.h"
-#include "proc-main.h"
-#include "proc-monitor.h"
-#include "trace.h"
-#include "version.h"
+#include "resourced.h"
+#include "cpu-common.h"
 
-#include <Ecore.h>
-#include <mcheck.h>
+static const struct module_ops *cpu;
+static int cpu_module;
 
-int main(int argc, char **argv)
+void cpu_find_module()
 {
-	int ret_code = 0;
-	struct daemon_arg darg = { argc, argv, NULL };
-	struct modules_arg marg;
-
-#ifdef DEBUG_ENABLED
-	mtrace();
-	mcheck(0);
-#endif
-	ret_code = resourced_init(&darg);
-	ret_value_msg_if(ret_code < 0, ret_code,
-			 "Resourced initialization failed\n");
-	init_modules_arg(&marg, &darg);
-	modules_init(&marg);
-	ret_code = resourced_proc_init(darg.opts);
-	if (ret_code < 0)
-		_E("Proc init failed");
-	ecore_main_loop_begin();
-	modules_exit(&marg);
-	resourced_deinit(&darg);
-	return ret_code;
+	if (!cpu_module) {
+		cpu = find_module("cpu");
+		cpu_module = 1;
+	}
 }
+
+int cpu_control(enum cpu_control_type type, pid_t pid)
+{
+	struct cpu_data_type l_data;
+	int ret = RESOURCED_ERROR_NONE;
+
+	if (!cpu) {
+		cpu_find_module();
+		if (!cpu)
+			return ret;
+	}
+
+	l_data.control_type = type;
+	l_data.pid = pid;
+
+	if (cpu->control)
+		ret = cpu->control(&l_data);
+	return ret;
+}
+

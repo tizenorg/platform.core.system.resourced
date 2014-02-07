@@ -17,45 +17,44 @@
  *
  */
 
-/*
- * @file main.c
+/**
+ * @file lowmem-common.c
+ * @desc Implement lowmem API for external module
  *
  * Copyright (c) 2013 Samsung Electronics Co., Ltd. All rights reserved.
  *
  */
 
-#include "init.h"
-#include "macro.h"
-#include "module-data.h"
 #include "module.h"
-#include "proc-main.h"
-#include "proc-monitor.h"
-#include "trace.h"
-#include "version.h"
+#include "resourced.h"
+#include "lowmem-common.h"
 
-#include <Ecore.h>
-#include <mcheck.h>
+static const struct module_ops *lowmem;
+static int lowmem_module;
 
-int main(int argc, char **argv)
+void lowmem_find_module()
 {
-	int ret_code = 0;
-	struct daemon_arg darg = { argc, argv, NULL };
-	struct modules_arg marg;
+	if (!lowmem_module) {
+		lowmem = find_module("lowmem");
+		lowmem_module = 1;
+	}
+}
 
-#ifdef DEBUG_ENABLED
-	mtrace();
-	mcheck(0);
-#endif
-	ret_code = resourced_init(&darg);
-	ret_value_msg_if(ret_code < 0, ret_code,
-			 "Resourced initialization failed\n");
-	init_modules_arg(&marg, &darg);
-	modules_init(&marg);
-	ret_code = resourced_proc_init(darg.opts);
-	if (ret_code < 0)
-		_E("Proc init failed");
-	ecore_main_loop_begin();
-	modules_exit(&marg);
-	resourced_deinit(&darg);
-	return ret_code;
+int lowmem_control(enum lowmem_control_type type, unsigned long *args)
+{
+	struct lowmem_data_type l_data;
+	int ret = RESOURCED_ERROR_NONE;
+
+	if (!lowmem) {
+		lowmem_find_module();
+		if (!lowmem)
+			return ret;
+	}
+
+	l_data.control_type = type;
+	l_data.args = args;
+
+	if (lowmem->control)
+		ret = lowmem->control(&l_data);
+	return ret;
 }

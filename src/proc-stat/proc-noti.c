@@ -35,10 +35,10 @@
 
 #include <Ecore.h>
 
-#include "lowmem-process.h"
 #include "macro.h"
 #include "proc-main.h"
 #include "proc-noti.h"
+#include "proc-process.h"
 #include "resourced.h"
 #include "trace.h"
 
