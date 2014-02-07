@@ -5,7 +5,8 @@
 
 #include "proc-winstate.h"
 #include "proc-main.h"
-#include "lowmem-process.h"
+#include "proc-process.h"
+#include "proc-monitor.h"
 #include "trace.h"
 
 #include <X11/Xlib.h>
@@ -16,7 +17,13 @@
 #include <Ecore_Input_Evas.h>
 
 static Atom a_pid;
-static Ecore_Event_Handler *hvchange;
+
+typedef struct  _ProcWininfo {
+    struct _ProcWininfo *prev, *next;
+    int idx;
+    long pid;
+    Window winid;
+} ProcWininfo, *ProcWininfoPtr;
 
 static pid_t __get_win_pid(Display *d, Window win)
 {
@@ -55,36 +62,136 @@ static pid_t __get_win_pid(Display *d, Window win)
 	return pid;
 }
 
-
-static int __find_win(Display *d, Window *win, pid_t pid)
+static Window get_window(Display *d, Window win)
 {
-	int r;
-	pid_t p;
-	unsigned int n;
-	Window root, parent, *child;
+	Atom type_ret = 0;
+	int ret, size_ret = 0;
+	unsigned long num_ret = 0, bytes = 0;
+	unsigned char *prop_ret = NULL;
+	unsigned int xid;
+	Atom prop_user_created_win;
 
-	p = __get_win_pid(d, *win);
-	if (p == pid)
-		return 1;
+	prop_user_created_win = XInternAtom(d, "_E_USER_CREATED_WINDOW", False);
 
-	r = XQueryTree(d, *win, &root, &parent, &child, &n);
-	if (r) {
-		int i;
-		int found = 0;
+	ret = XGetWindowProperty(d, win, prop_user_created_win, 0L, 1L,
+            False, XA_WINDOW, &type_ret, &size_ret,
+            &num_ret, &bytes, &prop_ret);
 
-		for (i = 0; i < n; i++) {
-			found = __find_win(d, &child[i], pid);
-			if (found) {
-				*win = child[i];
-				break;
-			}
-		}
-		XFree(child);
-
-		if (found)
-			return 1;
+	if( ret != Success )
+	{
+		if( prop_ret ) XFree( (void*)prop_ret );
+		return win;
+	}
+	else if( !prop_ret )
+	{
+		return win;
 	}
 
+	memcpy( &xid, prop_ret, sizeof(unsigned int) );
+	XFree( (void *)prop_ret );
+
+	return xid;
+}
+
+static void free_procwininfo(ProcWininfoPtr procwininfo)
+{
+	ProcWininfoPtr w;
+/* TODO : free winname and appname map_state*/
+	w = procwininfo;
+	if (!w)
+		return;
+	while(1)
+	{
+		if(w && w->next)
+			w = w->next;
+		else
+			break;
+	}
+	while(1)
+	{
+		if(w && w->prev)
+		{
+			w = w->prev;
+			free(w->next);
+		}
+		else
+		{
+			if(w)
+				free(w);
+			break;
+		}
+	}
+}
+
+
+static int __find_win(Display *d, pid_t pid)
+{
+	int r, i, found = 0;
+	pid_t p;
+	unsigned int n;
+	int win_index = 0, winid = 0;
+	Window root, parent, *child;
+	Window win;
+	ProcWininfoPtr prev_wininfo = NULL;
+	ProcWininfoPtr cur_wininfo = NULL;
+	ProcWininfoPtr origin_wininfo = NULL;
+	XWindowAttributes attr;
+
+	win = XDefaultRootWindow(d);
+
+	r = XQueryTree(d, win, &root, &parent, &child, &n);
+	if (!r) {
+		_E("Can't query window tree.");
+		return 0;
+	}
+
+	for (i = (int)n - 1; i >= 0; i--)
+	{
+		if (!XGetWindowAttributes(d, child[i], &attr)) {
+			_E("Can't get window tree.");
+			continue;
+		}
+		if (attr.map_state) {
+			cur_wininfo = (ProcWininfoPtr) malloc(sizeof(ProcWininfo));
+			cur_wininfo->idx = win_index++;
+			cur_wininfo->next = NULL;
+		        cur_wininfo->prev = NULL;
+			cur_wininfo->winid = child[i];
+		} else
+			continue;
+		if(prev_wininfo)
+		{
+			prev_wininfo->next = cur_wininfo;
+			cur_wininfo->prev = prev_wininfo;
+		} else
+			origin_wininfo = cur_wininfo;
+
+	        /* set the pre_wininfo is the cur_wininfo now */
+	        prev_wininfo = cur_wininfo;
+	}
+	if (!origin_wininfo) {
+		_E("Can't get valid window info");
+		if (child)
+		        XFree((char *)child);
+		return 0;
+	}
+
+	ProcWininfoPtr w = origin_wininfo;
+	for(i = 0; i < win_index; i++)
+	{
+		winid = get_window(d, w->winid);
+		w->winid = winid;
+		p = __get_win_pid(d, w->winid);
+		if (p == pid) {
+			found++;
+			_D("__find_win : pid %d, win %x", pid, w->winid);
+			ecore_x_window_client_sniff(w->winid);
+		}
+		w = w->next;
+	}
+	if (child)
+	        XFree((char *)child);
+	free_procwininfo(origin_wininfo);
 	return 0;
 }
 
@@ -114,6 +221,36 @@ static inline int _get_pid(Ecore_X_Window win)
 	return pid;
 }
 
+static Eina_Bool __proc_deiconify_cb(void *data, int type, void *event)
+{
+	Ecore_X_Event_Client_Message *ev;
+	int pid, oom_score_adj;
+
+	ev = event;
+
+	if (ev->format != 32)
+		return ECORE_CALLBACK_RENEW;
+	if (ev->message_type == ECORE_X_ATOM_E_DEICONIFY_APPROVE)
+	{
+		pid = _get_pid(ev->win);
+
+		_D("pid : %d received ediconify approve", pid);
+
+		if (proc_get_oom_score_adj(pid, &oom_score_adj) < 0) {
+			_E("Failed to get oom_score_adj");
+			return ECORE_CALLBACK_RENEW;
+		}
+
+		if (oom_score_adj >= OOMADJ_BACKGRD_UNLOCKED) {
+			/* init oom_score_value */
+			proc_set_oom_score_adj(pid, OOMADJ_INIT);
+		}
+	}
+
+	return ECORE_CALLBACK_RENEW;
+
+}
+
 static Eina_Bool __proc_visibility_cb(void *data, int type, void *event)
 {
 	Ecore_X_Event_Window_Visibility_Change *ev;
@@ -125,14 +262,14 @@ static Eina_Bool __proc_visibility_cb(void *data, int type, void *event)
 
 	_D("pid : %d, bvisibility : %d", pid, ev->fully_obscured);
 
-	if (get_proc_oom_score_adj(pid, &oom_score_adj) < 0) {
+	if (proc_get_oom_score_adj(pid, &oom_score_adj) < 0) {
 		_E("Failed to get oom_score_adj");
 		return ECORE_CALLBACK_RENEW;
 	}
 
 	if (oom_score_adj >= OOMADJ_BACKGRD_UNLOCKED) {
 		/* init oom_score_value */
-		set_proc_oom_score_adj(pid, OOMADJ_INIT);
+		proc_set_oom_score_adj(pid, OOMADJ_INIT);
 	}
 
 	return ECORE_CALLBACK_RENEW;
@@ -143,8 +280,9 @@ int proc_add_visibiliry(int pid)
 {
 	int found;
 	Display *d;
-	Window win;
 
+	if (proc_get_dbus_proc_state())
+		return RESOURCED_ERROR_NO_DATA;
 	d = XOpenDisplay(NULL);
 
 	if (d == NULL) {
@@ -152,33 +290,30 @@ int proc_add_visibiliry(int pid)
 		return RESOURCED_ERROR_FAIL;
 	}
 
-	win = XDefaultRootWindow(d);
-
 	if (!a_pid)
 		a_pid = XInternAtom(d, "_NET_WM_PID", True);
 
-	found = __find_win(d, &win, pid);
-
-	_D("pid %d, win %x, display %x, found %d", pid, win, d, found);
+	found = __find_win(d, pid);
 
 	if (!found) {
 		XCloseDisplay(d);
 		errno = ENOENT;
 		return RESOURCED_ERROR_FAIL;
-	}
+	} else
+		_D("%d window added for pid = %d", found, pid);
 
-	ecore_x_window_client_sniff(win);
-	return RESOURCED_ERROR_OK;
+	return RESOURCED_ERROR_NONE;
 }
 
 
 int proc_win_status_init(void)
 {
 	ecore_x_init(NULL);
-	hvchange =
-	    ecore_event_handler_add(ECORE_X_EVENT_WINDOW_VISIBILITY_CHANGE,
-				    __proc_visibility_cb, NULL);
+	ecore_event_handler_add(ECORE_X_EVENT_CLIENT_MESSAGE,
+				    __proc_deiconify_cb, NULL);
 
-	return RESOURCED_ERROR_OK;
+	ecore_event_handler_add(ECORE_X_EVENT_WINDOW_VISIBILITY_CHANGE,
+				    __proc_visibility_cb, NULL);
+	return RESOURCED_ERROR_NONE;
 }
 

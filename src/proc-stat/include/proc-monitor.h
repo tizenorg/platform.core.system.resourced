@@ -36,8 +36,14 @@ enum proc_watchdog_type {
 	PROC_WATCHDOG_ENABLE,
 };
 
+enum proc_dbus_use_type { /** cgroup command type **/
+	PROC_DBUS_DISABLE,
+	PROC_DBUS_ENABLE,
+};
+
 resourced_ret_c proc_monitor_init(void);
 void proc_set_watchdog_state(int state);
+int proc_get_dbus_proc_state(void);
 
 #endif /* __RESOURCED_PROC_MONITOR_H__ */
 

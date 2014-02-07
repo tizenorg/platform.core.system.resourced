@@ -22,7 +22,10 @@
 #ifndef __LIB_PROC_STAT__
 #define __LIB_PROC_STAT__
 
+#ifndef __cplusplus
 #include <stdbool.h>
+#endif /* !__cplusplus */
+
 #include <glib.h>
 #include <resourced.h>
 

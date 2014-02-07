@@ -18,30 +18,23 @@
  */
 
 /**
- * @file proc-main.h
- * @desc intialize and start pthread for lowmem handler
+ * @file lowmem-common.h
+ * @desc lowmem common process
  **/
 
-#ifndef __PROC_MAIN_H__
-#define __PROC_MAIN_H__
+#ifndef __LOWMEM_COMMON_H__
+#define __LOWMEM_COMMON_H__
 
-#include <unistd.h>
-#include "resourced.h"
+enum lowmem_control_type {
+	LOWMEM_MOVE_CGROUP,
+	LOWMEM_MANAGE_FOREGROUND,
+};
 
-#define PROC_BUF_MAX 64
-#define PROC_NAME_MAX 512
+struct lowmem_data_type {
+	enum lowmem_control_type control_type;
+	unsigned long *args;
+};
 
+int lowmem_control(enum lowmem_control_type type, unsigned long *args);
 
-int resourced_proc_init(const struct daemon_opts *opts);
-
-/**
- * @desc This function handle PROC_ typs @see
- */
-int resourced_proc_action(int type, int argnum, char **arg);
-
-int resourced_proc_excluded(const char *app_name);
-
-int resourced_proc_status_change(int type, pid_t pid, char* app_name);
-
-#endif /*__PROC_MAIN_H__ */
-
+#endif /* __LOWMEM_COMMON_H__ */

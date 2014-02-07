@@ -7,6 +7,8 @@ License:    Apache-2.0
 Source0:    %{name}-%{version}.tar.gz
 Source1:    resourced.service
 
+%define exclude_list_opt_full_path /opt/usr/etc/_exclude_list_file_name_
+
 BuildRequires:  cmake
 BuildRequires:  pkgconfig(glib-2.0)
 BuildRequires:  pkgconfig(dlog)
@@ -53,7 +55,8 @@ echo "\
 	CFLAGS+=" -DTIZEN_ENGINEER_MODE"
 %endif
 
-cmake . -DCMAKE_INSTALL_PREFIX=/usr -DFULLVER=%{version} -DMAJORVER=${MAJORVER} -DCMAKE_BUILD_TYPE=Release
+cmake . -DCMAKE_INSTALL_PREFIX=/usr -DFULLVER=%{version} -DMAJORVER=${MAJORVER} -DCMAKE_BUILD_TYPE=Release \
+	-DEXCLUDE_LIST_OPT_FULL_PATH=%{exclude_list_opt_full_path} 
 
 make %{?jobs:-j%jobs}
 
