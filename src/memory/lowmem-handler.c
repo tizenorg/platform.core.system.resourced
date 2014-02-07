@@ -41,14 +41,16 @@
 #include <sys/shm.h>
 #include <sys/eventfd.h>
 #include <Ecore.h>
-#include <glib.h>
 
 #include "trace.h"
+#include "cgroup.h"
 #include "proc-main.h"
 #include "lowmem-handler.h"
-#include "lowmem-process.h"
+#include "proc-process.h"
+#include "lowmem-common.h"
 #include "resourced.h"
 #include "macro.h"
+#include "module.h"
 
 enum {
 	MEMGC_OOM_NORMAL,
@@ -61,6 +63,7 @@ enum {
 	MEMGC_GROUP_FOREGROUND,
 	MEMGC_GROUP_BACKGROUND,
 };
+
 
 #define MEMCG_GROUP_MAX		2
 
@@ -88,6 +91,8 @@ enum {
 
 #define MEMCG_FOREGROUND_MIN_LIMIT	MBtoB(400)
 #define MEMCG_BACKGROUND_MIN_LIMIT	UINT_MAX
+
+#define MEMCG_TRHES_SOFTSWAP_RATIO		0.75
 
 /* threshold lv 2 : lowmem warning */
 #define MEMCG_THRES_WARNING_RATIO		0.92
@@ -481,7 +486,28 @@ static int lowmem_set_cgroup_leave_threshold(unsigned int value)
 static int lowmem_set_threshold(void)
 {
 	FILE *f;
-	unsigned int val;
+	unsigned int val, total;
+
+	f = fopen(SET_THRESHOLD_RECLAIM, "w");
+
+	if (!f) {
+		return RESOURCED_ERROR_FAIL;
+	}
+
+	/* set threshold reclaim */
+	total = _get_total_memory();
+
+	/*
+	 * check total memory because total memory is over 1GiB,
+	 * we want to start reclaim under 300 MiB remained memory.
+	 * But, we check condition 700MiB because reserved memory.
+	 */
+	if (total > MBtoB(700))
+		val = MEM_THRESHOLD_RECLAIM;
+	else
+		val = MEM_THRESHOLD_RECLAIM >> 1;
+	fprintf(f, "%d", val);
+	fclose(f);
 
 	/* set threshold level1 */
 	f = fopen(SET_THRESHOLD_LV1, "w");
@@ -540,7 +566,7 @@ void *_lowmem_oom_killer_cb(void *data)
 		if (pid <= 0)
 			continue;
 		_D("oom total memory size : %d", total_size);
-		ret = lowmem_get_proc_cmdline(pid, appname);
+		ret = proc_get_cmdline(pid, appname);
 		if (ret != 0) {
 			_D("invalid pid(%d) was selected", pid);
 			continue;
@@ -558,7 +584,7 @@ void *_lowmem_oom_killer_cb(void *data)
 		if (i == 0)
 			make_memps_log(MEMPS_LOG_FILE, pid, appname);
 
-		if (get_proc_oom_score_adj(pid, &oom_score_adj) < 0) {
+		if (proc_get_oom_score_adj(pid, &oom_score_adj) < 0) {
 			_D("pid(%d) was already terminated", pid);
 			continue;
 		}
@@ -623,7 +649,7 @@ static void lowmem_cgroup_oom_killer(int memcg_index)
 		if (pid <= 0)
 			continue;
 		_D("oom total memory size : %d", total_size);
-		ret = lowmem_get_proc_cmdline(pid, appname);
+		ret = proc_get_cmdline(pid, appname);
 		if (ret != 0) {
 			_E("invalid pid(%d) was selected", pid);
 			continue;
@@ -636,7 +662,7 @@ static void lowmem_cgroup_oom_killer(int memcg_index)
 			_E("crash-worker(%d) was selected, skip it", pid);
 			continue;
 		}
-		if (get_proc_oom_score_adj(pid, &oom_score_adj) < 0) {
+		if (proc_get_oom_score_adj(pid, &oom_score_adj) < 0) {
 			_D("pid(%d) was already terminated", pid);
 			continue;
 		}
@@ -690,6 +716,7 @@ static void print_lowmem_state(unsigned int mem_state)
 		convert_to_str(mem_state));
 }
 
+
 static int memory_reclaim_act(void *data)
 {
 	int ret, status;
@@ -702,7 +729,6 @@ static int memory_reclaim_act(void *data)
 	if (status != VCONFKEY_SYSMAN_LOW_MEMORY_NORMAL)
 		vconf_set_int(VCONFKEY_SYSMAN_LOW_MEMORY,
 				  VCONFKEY_SYSMAN_LOW_MEMORY_NORMAL);
-
 	return 0;
 }
 
@@ -711,6 +737,7 @@ static int memory_low_act(void *data)
 	_I("[LOW MEM STATE] memory low state");
 	print_mem_state();
 	remove_shm();
+
 
 	vconf_set_int(VCONFKEY_SYSMAN_LOW_MEMORY,
 		      VCONFKEY_SYSMAN_LOW_MEMORY_SOFT_WARNING);
@@ -1015,15 +1042,14 @@ static int init_memcg(void)
 	return 0;
 }
 
-void lowmem_move_memcgroup(int pid, int oom_score_adj)
+static void lowmem_move_memcgroup(int pid, int oom_score_adj)
 {
 	char buf[LOWMEM_PATH_MAX] = {0,};
 	FILE *f;
-	int size, background = 0;
+	int size;
 
 	if (oom_score_adj > OOMADJ_BACKGRD_LOCKED) {
 		sprintf(buf, "%s/background/cgroup.procs", MEMCG_PATH);
-		background = 1;
 	}
 	else if (oom_score_adj >= OOMADJ_FOREGRD_LOCKED &&
 					oom_score_adj < OOMADJ_BACKGRD_LOCKED)
@@ -1043,7 +1069,7 @@ void lowmem_move_memcgroup(int pid, int oom_score_adj)
 	fclose(f);
 }
 
-void lowmem_cgroup_foregrd_manage(int currentpid)
+static void lowmem_cgroup_foregrd_manage(int currentpid)
 {
 	char buf[LOWMEM_PATH_MAX] = {0,};
 	int pid, pgid;
@@ -1177,3 +1203,43 @@ static int lowmem_fd_stop(int fd)
 	}
 	return 0;
 }
+
+static int resourced_memory_control(void *data)
+{
+	int ret = RESOURCED_ERROR_NONE;
+	struct lowmem_data_type *l_data;
+
+	l_data = (struct lowmem_data_type *)data;
+	switch(l_data->control_type) {
+	case LOWMEM_MOVE_CGROUP:
+		if (l_data->args)
+			lowmem_move_memcgroup((pid_t)l_data->args[0], l_data->args[1]);
+		break;
+	case LOWMEM_MANAGE_FOREGROUND:
+		if (l_data->args)
+			lowmem_cgroup_foregrd_manage((pid_t)l_data->args[0]);
+		break;
+
+	}
+	return ret;
+}
+
+static int resourced_memory_init(void *data)
+{
+	return lowmem_init();
+}
+
+static int resourced_memory_finalize(void *data)
+{
+	return RESOURCED_ERROR_NONE;
+}
+
+static struct module_ops memory_modules_ops = {
+	.priority	= MODULE_PRIORITY_NORMAL,
+	.name		= "lowmem",
+	.init		= resourced_memory_init,
+	.exit		= resourced_memory_finalize,
+	.control	= resourced_memory_control,
+};
+
+MODULE_REGISTER(&memory_modules_ops)

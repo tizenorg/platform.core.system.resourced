@@ -35,6 +35,7 @@
 
 #define SIGNAL_NAME_OOM_SET_THRESHOLD			"SetThreshold"
 #define SIGNAL_NAME_OOM_SET_LEAVE_THRESHOLD		"SetLeaveThreshold"
+#define SIGNAL_NAME_OOM_TRIGGER			"Trigger"
 
 static void lowmem_dbus_oom_set_threshold(void *data, DBusMessage *msg)
 {
@@ -86,39 +87,38 @@ static void lowmem_dbus_oom_set_leave_threshold(void *data, DBusMessage *msg)
 	set_leave_threshold(thres);
 }
 
-static DBusMessage *edbus_oom_triger(E_DBus_Object *obj, DBusMessage *msg)
+static void lowmem_dbus_oom_trigger(void *data, DBusMessage *msg)
 {
-	DBusMessageIter iter;
-	DBusMessage *reply;
-	int state = 1;
+	DBusError err;
+	int ret;
 
-	lowmem_oom_killer_cb(MEMCG_MEMORY);
+	ret = dbus_message_is_signal(msg, RESOURCED_INTERFACE_OOM, SIGNAL_NAME_OOM_TRIGGER);
 
-	reply = dbus_message_new_method_return(msg);
-	dbus_message_iter_init_append(reply, &iter);
-	dbus_message_iter_append_basic(&iter, DBUS_TYPE_INT32, &state);
+	if (ret == 0) {
+		_D("there is no oom trigger signal");
+		return;
+	}
 
-	return reply;
+	dbus_error_init(&err);
+
+	if (ret == 0) {
+		_D("there is no message");
+		return;
+	}
+
+	lowmem_oom_killer_cb(MEMCG_MEMORY, 1);
 }
-
-static struct edbus_method edbus_methods[] = {
-	{ "oom_triger",   NULL,   "i", edbus_oom_triger },
-	/* Add methods here */
-};
 
 void lowmem_dbus_init(void)
 {
-	const resourced_ret_c ret = edbus_add_methods(RESOURCED_PATH_OOM,
-		edbus_methods, ARRAY_SIZE(edbus_methods));
-
-	ret_value_msg_if(ret != RESOURCED_ERROR_NONE, ,
-		"DBus method registration for %s is failed",
-			RESOURCED_PATH_OOM);
-
 	register_edbus_signal_handler(RESOURCED_PATH_OOM, RESOURCED_INTERFACE_OOM,
 			SIGNAL_NAME_OOM_SET_THRESHOLD,
 		    lowmem_dbus_oom_set_threshold);
 	register_edbus_signal_handler(RESOURCED_PATH_OOM, RESOURCED_INTERFACE_OOM,
 			SIGNAL_NAME_OOM_SET_LEAVE_THRESHOLD,
 		    lowmem_dbus_oom_set_leave_threshold);
+	register_edbus_signal_handler(RESOURCED_PATH_OOM, RESOURCED_INTERFACE_OOM,
+			SIGNAL_NAME_OOM_TRIGGER,
+		    lowmem_dbus_oom_trigger);
+
 }

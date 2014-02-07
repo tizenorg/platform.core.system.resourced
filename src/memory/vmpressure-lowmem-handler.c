@@ -43,15 +43,16 @@
 #include <sys/eventfd.h>
 #include <sys/sysinfo.h>
 #include <Ecore.h>
-#include <glib.h>
 
 #include "trace.h"
 #include "proc-main.h"
 #include "lowmem-handler.h"
-#include "lowmem-process.h"
+#include "proc-process.h"
+#include "lowmem-common.h"
 #include "resourced.h"
 #include "macro.h"
 #include "config-parser.h"
+#include "module.h"
 
 #define MEMINFO_PATH			"/proc/meminfo"
 #define MEMCG_PATH			"/sys/fs/cgroup"
@@ -60,22 +61,24 @@
 #define MEMCG_MOVE_CHARGE_PATH		"memory.move_charge_at_immigrate"
 #define MEMCG_OOM_CONTROL_PATH		"memory.oom_control"
 #define MEMCG_LIMIT_PATH		"memory.limit_in_bytes"
-#define MEM_CONF_FILE                  "/etc/resourced/memory.conf"
+#define MEM_CONF_FILE                   "/etc/resourced/memory.conf"
+#define MEM_CONF_SECTION                "VIP_PROCESS"
+#define MEM_CONF_PREDEFINE              "PREDEFINE"
 
-#define BtoMB(x)			((x) / 1024 / 1024)
+#define BtoMB(x)			((x) >> 20)
+#define BtoKB(x)			((x) >> 10)
 #define BtoPAGE(x)			((x) >> 12)
-#define MBtoB(x)			(x<<20)
 
 #define NO_LIMIT			-1
 /* for memory cgroup, set no limit */
 #define MEMCG_MEMORY_LIMIT_RATIO	NO_LIMIT
-#define MEMCG_FOREGROUND_LIMIT_RATIO	0.6
+#define MEMCG_FOREGROUND_LIMIT_RATIO	1
 /* for background cgroup, set no limit */
 #define MEMCG_BACKGROUND_LIMIT_RATIO	NO_LIMIT
-#define MEMCG_FOREGROUND_MIN_LIMIT	MBtoB(400)
+#define MEMCG_FOREGROUND_MIN_LIMIT	UINT_MAX
 #define MEMCG_BACKGROUND_MIN_LIMIT	UINT_MAX
 #define MEMCG_LOW_RATIO			0.8
-#define MEMCG_MEDIUM_RATIO		0.98
+#define MEMCG_MEDIUM_RATIO		0.96
 #define MEMCG_FOREGROUND_THRES_LEAVE	100 /* MB */
 #define MEMCG_FOREGROUND_LEAVE_RATIO	0.25
 
@@ -86,11 +89,14 @@
 #define OOM_TIMER_INTERVAL		2
 #define MAX_TIMER_CHECK 		10
 #define OOM_MULTIKILL_WAIT		(1000*1000)
+#define OOM_SCORE_POINT_WEIGHT		1500
+#define MAX_FD_VICTIMS			10
 
 #define MEM_SIZE_64			64  /* MB */
 #define MEM_SIZE_256			256 /* MB */
 #define MEM_SIZE_512			512 /* MB */
 #define MEM_SIZE_1024			1024 /* MB */
+#define MEM_SIZE_2048			2048 /* MB */
 
 /* thresholds for 64M RAM*/
 #define MEMCG_MEMORY_64_THRES_LOW		8 /* MB */
@@ -109,8 +115,13 @@
 
 /* threshold for more than 1024M RAM */
 #define MEMCG_MEMORY_1024_THRES_LOW		200 /* MB */
-#define MEMCG_MEMORY_1024_THRES_MEDIUM		160 /* MB */
-#define MEMCG_MEMORY_1024_THRES_LEAVE		300 /* MB */
+#define MEMCG_MEMORY_1024_THRES_MEDIUM		100 /* MB */
+#define MEMCG_MEMORY_1024_THRES_LEAVE		150 /* MB */
+
+/* threshold for more than 2048M RAM */
+#define MEMCG_MEMORY_2048_THRES_LOW		200 /* MB */
+#define MEMCG_MEMORY_2048_THRES_MEDIUM		160 /* MB */
+#define MEMCG_MEMORY_2048_THRES_LEAVE		300 /* MB */
 
 enum {
 	MEMNOTIFY_NORMAL,
@@ -157,6 +168,7 @@ struct mem_info {
 /* low memory action function for cgroup */
 static void memory_cgroup_medium_act(int memcg_idx);
 static int compare_mem_victims(const struct task_info *ta, const struct task_info *tb);
+static int compare_bg_victims(const struct task_info *ta, const struct task_info *tb);
 static int compare_fg_victims(const struct task_info *ta, const struct task_info *tb);
 /* low memory action function */
 static void normal_act(void);
@@ -186,23 +198,23 @@ static struct memcg_class memcg_class[MEMCG_MAX_GROUPS] = {
 	{MEMCG_FOREGROUND_MIN_LIMIT,	MEMCG_FOREGROUND_LIMIT_RATIO,
 	0,				"memory/foreground1",
 	0,				0,
-	MEMCG_FOREGROUND_THRES_LEAVE,	"critical",
+	MEMCG_FOREGROUND_THRES_LEAVE,	"medium",
 	compare_fg_victims},
 	{MEMCG_FOREGROUND_MIN_LIMIT,	MEMCG_FOREGROUND_LIMIT_RATIO,
 	0,				"memory/foreground2",
 	0,				0,
-	MEMCG_FOREGROUND_THRES_LEAVE,	"critical",
+	MEMCG_FOREGROUND_THRES_LEAVE,	"medium",
 	compare_fg_victims},
 	{MEMCG_FOREGROUND_MIN_LIMIT,	MEMCG_FOREGROUND_LIMIT_RATIO,
 	0,				"memory/foreground3",
 	0,				0,
-	MEMCG_FOREGROUND_THRES_LEAVE,	"critical",
+	MEMCG_FOREGROUND_THRES_LEAVE,	"medium",
 	compare_fg_victims},
 	{MEMCG_BACKGROUND_MIN_LIMIT,	MEMCG_BACKGROUND_LIMIT_RATIO,
 	0,				"memory/background",
 	0,				0,
 	0,				NULL, /* register no event*/
-	compare_mem_victims},
+	compare_bg_victims},
 };
 
 static int evfd[MEMCG_MAX_GROUPS] = {-1, };
@@ -214,18 +226,18 @@ static pthread_t	oom_thread	= 0;
 static pthread_mutex_t	oom_mutex	= PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t	oom_cond	= PTHREAD_COND_INITIALIZER;
 
-/* return total ram size in bytes */
-static inline unsigned long get_total_memory(void)
+static unsigned long totalram;
+static unsigned long ktotalram;
+static inline void get_total_memory(void)
 {
-	static unsigned long totalram = 0;
+	struct sysinfo si;
+	if (totalram)
+		return;
 
-	if (!totalram) {
-		struct sysinfo si;
-		if (!sysinfo(&si))
-			totalram = si.totalram;
+	if (!sysinfo(&si)) {
+		totalram = si.totalram;
+		ktotalram = BtoKB(totalram);
 	}
-
-	return totalram;
 }
 
 static void get_mem_info(struct mem_info *mi)
@@ -427,7 +439,7 @@ static int lowmem_check_current_state(int memcg_index)
 	if (oomleave > usage) {
 		_D("%s : usage : %u, oomleave : %u",
 				__func__, usage, oomleave);
-		return RESOURCED_ERROR_OK;
+		return RESOURCED_ERROR_NONE;
 	} else {
 		_D("%s : usage : %u, oomleave : %u",
 				__func__, usage, oomleave);
@@ -436,6 +448,23 @@ static int lowmem_check_current_state(int memcg_index)
 }
 
 static int compare_mem_victims(const struct task_info *ta, const struct task_info *tb)
+{
+	int pa, pb;
+	assert(ta != NULL);
+	assert(tb != NULL);
+
+	/*
+	 * Weight task size ratio to totalram by OOM_SCORE_POINT_WEIGHT so that
+	 * tasks with score -1000 or -900 could be selected as victims if they consumes
+	 * memory more than 70% of totalram.
+	 */
+	pa = (int)(ta->size * OOM_SCORE_POINT_WEIGHT) / ktotalram + ta->oom_score_adj;
+	pb = (int)(tb->size * OOM_SCORE_POINT_WEIGHT) / ktotalram + tb->oom_score_adj;
+
+	return (pb - pa);
+}
+
+static int compare_bg_victims(const struct task_info *ta, const struct task_info *tb)
 {
 	/*
 	* Firstly, sort by oom_score_adj
@@ -462,9 +491,10 @@ static int compare_fg_victims(const struct task_info *ta, const struct task_info
 }
 
 static int lowmem_get_cgroup_victims(int idx, int nsel, int max_victims, struct task_info *selected,
-					unsigned *total_size, unsigned should_be_freed)
+					unsigned *total_size, unsigned
+					should_be_freed, int force)
 {
-	FILE *f;
+	FILE *f = NULL;
 	char buf[LOWMEM_PATH_MAX] = {0, };
 	int i = 0;
 	int sel = nsel;
@@ -479,17 +509,25 @@ static int lowmem_get_cgroup_victims(int idx, int nsel, int max_victims, struct 
 	if (victim_candidates == NULL)
 		return sel;
 
-	sprintf(buf, "%s/%s/cgroup.procs",
+	if (idx == MEMCG_MEMORY) {
+		sprintf(buf, "%s/%s/system.slice/cgroup.procs",
+				MEMCG_PATH, memcg_class[idx].cgroup_name);
+		f = fopen(buf, "r");
+	}
+
+	if (!f) {
+		sprintf(buf, "%s/%s/cgroup.procs",
 			MEMCG_PATH, memcg_class[idx].cgroup_name);
 
-	f = fopen(buf, "r");
-	if (!f) {
-		_E("%s open failed, %d", buf, f);
-		/*
-		 * if task read in this cgroup fails,
-		 * return the current number of victims
-		 */
-		return sel;
+		f = fopen(buf, "r");
+		if (!f) {
+			_E("%s open failed, %d", buf, f);
+			/*
+			 * if task read in this cgroup fails,
+			 * return the current number of victims
+			 */
+			return sel;
+		}
 	}
 
 	while (fgets(buf, 32, f) != NULL) {
@@ -500,7 +538,7 @@ static int lowmem_get_cgroup_victims(int idx, int nsel, int max_victims, struct 
 
 		tpid = atoi(buf);
 
-		if (get_proc_oom_score_adj(tpid, &toom) < 0) {
+		if (proc_get_oom_score_adj(tpid, &toom) < 0) {
 			_D("pid(%d) was already terminated", tpid);
 			continue;
 		}
@@ -510,7 +548,7 @@ static int lowmem_get_cgroup_victims(int idx, int nsel, int max_victims, struct 
 			continue;
 		}
 
-		if(lowmem_get_proc_cmdline(tpid, appname) == RESOURCED_ERROR_FAIL)
+		if(proc_get_cmdline(tpid, appname) == RESOURCED_ERROR_FAIL)
 			continue;
 
 		for (i = 0; i < victim_candidates->len; i++) {
@@ -554,7 +592,7 @@ static int lowmem_get_cgroup_victims(int idx, int nsel, int max_victims, struct 
 	for (i = 0; i < victim_candidates->len; i++) {
 		struct task_info tsk;
 		if (sel >= max_victims ||
-			total_victim_size >= should_be_freed) {
+			(!force && total_victim_size >= should_be_freed)) {
 			break;
 		}
 		tsk = g_array_index(victim_candidates, struct task_info, i);
@@ -576,12 +614,19 @@ static int lowmem_get_cgroup_victims(int idx, int nsel, int max_victims, struct 
 
 }
 
-/* Find victims: (SWAP -> ) BACKGROUND */
-static int lowmem_get_memory_cgroup_victims(struct task_info *selected)
+/* Find victims: BACKGROUND */
+static int lowmem_get_memory_cgroup_victims(struct task_info *selected, int force)
 {
 	int i, count = 0;
 	unsigned available, should_be_freed = 0, total_size = 0;
 	struct mem_info mi;
+
+	if (force ) {
+		count = lowmem_get_cgroup_victims(MEMCG_BACKGROUND, count,
+				MAX_FD_VICTIMS, selected,
+				&total_size, 0, force);
+		return count;
+	}
 
 	get_mem_info(&mi);
 	available = mi.real_free + mi.reclaimable;
@@ -594,7 +639,8 @@ static int lowmem_get_memory_cgroup_victims(struct task_info *selected)
 		for (i = MEMCG_MAX_GROUPS - 1; i >= 0; i--) {
 			count = lowmem_get_cgroup_victims(i, count,
 						MAX_MEMORY_CGROUP_VICTIMS, selected,
-						&total_size, should_be_freed);
+						&total_size, should_be_freed,
+						force);
 			if (count >= MAX_MEMORY_CGROUP_VICTIMS || total_size >= should_be_freed)
 				break;
 		}
@@ -603,23 +649,24 @@ static int lowmem_get_memory_cgroup_victims(struct task_info *selected)
 	return count;
 }
 
-static int lowmem_get_victims(int idx, struct task_info *selected)
+static int lowmem_get_victims(int idx, struct task_info *selected, int force)
 {
 	int count = 0;
 	unsigned total_size = 0;
 
 	if (idx == MEMCG_MEMORY)
-		count = lowmem_get_memory_cgroup_victims(selected);
+		count = lowmem_get_memory_cgroup_victims(selected, force);
 	else
 		count = lowmem_get_cgroup_victims(idx, count,
 					MAX_CGROUP_VICTIMS, selected,
-					&total_size, memcg_class[idx].thres_leave);
+					&total_size,
+					memcg_class[idx].thres_leave, force);
 
 	return count;
 }
 
 /* To Do: decide the number of victims based on size */
-void lowmem_oom_killer_cb(int memcg_idx)
+void lowmem_oom_killer_cb(int memcg_idx, int force)
 {
 	const pid_t self = getpid();
 	int pid, ret, oom_score_adj, i;
@@ -629,7 +676,7 @@ void lowmem_oom_killer_cb(int memcg_idx)
 	int count = 0;
 
 	/* get multiple victims from /sys/fs/cgroup/memory/.../tasks */
-	count = lowmem_get_victims(memcg_idx, selected);
+	count = lowmem_get_victims(memcg_idx, selected, force);
 
 	if (count == 0) {
 		_D("get %s cgroup victim is failed",
@@ -648,7 +695,7 @@ void lowmem_oom_killer_cb(int memcg_idx)
 
 		if (pid <= 0 || self == pid)
 			continue;
-		ret = lowmem_get_proc_cmdline(pid, appname);
+		ret = proc_get_cmdline(pid, appname);
 		if (ret == RESOURCED_ERROR_FAIL)
 			continue;
 
@@ -667,7 +714,10 @@ void lowmem_oom_killer_cb(int memcg_idx)
 
 		total_size += size;
 
-		kill(pid, SIGKILL);
+		if (force)
+			kill(pid, SIGTERM);
+		else
+			kill(pid, SIGKILL);
 
 		_E("we killed, lowmem lv2 = %d (%s) oom = %d, size = %u KB, victim total size = %u KB\n",
 				pid, appname, oom_score_adj, size, total_size);
@@ -707,7 +757,7 @@ static void *lowmem_oom_killer_pthread(void *arg)
 		}
 
 		_I("oom thread conditional signal received");
-		lowmem_oom_killer_cb(MEMCG_MEMORY);
+		lowmem_oom_killer_cb(MEMCG_MEMORY, 0);
 
 		ret = pthread_mutex_unlock(&oom_mutex);
 		if ( ret ) {
@@ -761,6 +811,8 @@ static void normal_act(void)
 	if (status != VCONFKEY_SYSMAN_LOW_MEMORY_NORMAL)
 		vconf_set_int(VCONFKEY_SYSMAN_LOW_MEMORY,
 			      VCONFKEY_SYSMAN_LOW_MEMORY_NORMAL);
+
+	change_lowmem_state(MEMNOTIFY_NORMAL);
 }
 
 static void low_act(void)
@@ -801,7 +853,7 @@ static Eina_Bool medium_cb(void *data)
 	}
 
 	_I("cannot reach leave threshold, timer again");
-	lowmem_oom_killer_cb(MEMCG_MEMORY);
+	lowmem_oom_killer_cb(MEMCG_MEMORY, 0);
 
 	return ECORE_CALLBACK_RENEW;
 }
@@ -854,12 +906,12 @@ static int lowmem_process(int mem_state)
 			_D("cur_mem_state = %d, new_mem_state = %d\n",
 				cur_mem_state, mem_state);
 			lpe[i].action();
-			return RESOURCED_ERROR_OK;
+			return RESOURCED_ERROR_NONE;
 		}
 
 	}
 
-	return RESOURCED_ERROR_OK;
+	return RESOURCED_ERROR_NONE;
 }
 
 static bool is_fg_victim_killed(int memcg_idx)
@@ -932,7 +984,7 @@ static void memory_cgroup_medium_act(int memcg_idx)
 	if ((memcg_idx >= MEMCG_FOREGROUND && memcg_idx < MEMCG_BACKGROUND)
 	    && is_fg_victim_killed(memcg_idx)) {
 		show_foreground_procs(memcg_idx);
-		lowmem_oom_killer_cb(memcg_idx);
+		lowmem_oom_killer_cb(memcg_idx, 0);
 	}
 }
 
@@ -984,6 +1036,9 @@ static void lowmem_cgroup_handler(int memcg_idx)
 
 	if (usage >= memcg_class[memcg_idx].thres_medium)
 		memory_cgroup_medium_act(memcg_idx);
+	else
+		_I("anon page (%u) is under medium threshold (%u)",
+			usage >> 20, memcg_class[memcg_idx].thres_medium >> 20);
 }
 
 static Eina_Bool lowmem_cb(void *data, Ecore_Fd_Handler *fd_handler)
@@ -1011,7 +1066,6 @@ static Eina_Bool lowmem_cb(void *data, Ecore_Fd_Handler *fd_handler)
 			}
 		}
 	}
-
 
 	return ECORE_CALLBACK_RENEW;
 }
@@ -1128,25 +1182,52 @@ void set_leave_threshold(int thres)
 	return;
 }
 
+void set_foreground_ratio(float ratio)
+{
+	int i;
+	for (i = MEMCG_FOREGROUND; i < MEMCG_BACKGROUND; i++)
+		memcg_class[i].limit_ratio = ratio;
+	return;
+}
+
+static int load_mem_config(struct parse_result *result, void *user_data)
+{
+	pid_t pid = 0;
+	if (!result)
+		return -EINVAL;
+
+	if (strcmp(result->section, MEM_CONF_SECTION))
+		return RESOURCED_ERROR_NONE;
+
+	if (!strcmp(result->name, MEM_CONF_PREDEFINE)) {
+		pid = find_pid_from_cmdline(result->value);
+		if (pid > 0)
+			proc_set_oom_score_adj(pid, OOMADJ_SERVICE_MIN);
+	}
+	return RESOURCED_ERROR_NONE;
+}
+
 static int set_thresholds(const char * section_name, const struct parse_result *result)
 {
-       int value;
-
        if (!result || !section_name)
                return -EINVAL;
 
        if (strcmp(result->section, section_name))
                return RESOURCED_ERROR_NONE;
 
-       value = atoi(result->value);
        if (!strcmp(result->name, "ThresholdLow")) {
-               set_threshold(MEMNOTIFY_LOW, value);
+	       int value = atoi(result->value);
+	       set_threshold(MEMNOTIFY_LOW, value);
        } else if (!strcmp(result->name, "ThresholdMedium")) {
-               set_threshold(MEMNOTIFY_MEDIUM, value);
+	       int value = atoi(result->value);
+	       set_threshold(MEMNOTIFY_MEDIUM, value);
        } else if (!strcmp(result->name, "ThresholdLeave")) {
-               set_leave_threshold(value);
+	       int value = atoi(result->value);
+	       set_leave_threshold(value);
+       } else if (!strcmp(result->name, "ForegroundRatio")) {
+	       float value = atof(result->value);
+	       set_foreground_ratio(value);
        }
-
        return RESOURCED_ERROR_NONE;
 }
 
@@ -1170,10 +1251,16 @@ static int memory_load_1024_config(struct parse_result *result, void *user_data)
        return set_thresholds("Memory1024", result);
 }
 
-/* init thresholds depending on total ram size. */
-static void init_thresholds(unsigned long total_ramsize)
+static int memory_load_2048_config(struct parse_result *result, void *user_data)
 {
-	total_ramsize = BtoMB(total_ramsize);
+       return set_thresholds("Memory2048", result);
+}
+
+/* init thresholds depending on total ram size. */
+static void init_thresholds(void)
+{
+	int i;
+	unsigned long total_ramsize = BtoMB(totalram);
 	_D("Total : %lu MB", total_ramsize);
 
 	if (total_ramsize <= MEM_SIZE_64) {
@@ -1194,13 +1281,22 @@ static void init_thresholds(unsigned long total_ramsize)
 		set_threshold(MEMNOTIFY_MEDIUM, MEMCG_MEMORY_512_THRES_MEDIUM);
 		set_leave_threshold(MEMCG_MEMORY_512_THRES_LEAVE);
 		config_parse(MEM_CONF_FILE, memory_load_512_config, NULL);
-	} else {
+	} else if (total_ramsize <= MEM_SIZE_1024) {
 		/* set thresholds for ram size more than 1G */
 		set_threshold(MEMNOTIFY_LOW, MEMCG_MEMORY_1024_THRES_LOW);
 		set_threshold(MEMNOTIFY_MEDIUM, MEMCG_MEMORY_1024_THRES_MEDIUM);
 		set_leave_threshold(MEMCG_MEMORY_1024_THRES_LEAVE);
 		config_parse(MEM_CONF_FILE, memory_load_1024_config, NULL);
+	} else {
+		/* set thresholds for ram size more than 2G */
+		set_threshold(MEMNOTIFY_LOW, MEMCG_MEMORY_2048_THRES_LOW);
+		set_threshold(MEMNOTIFY_MEDIUM, MEMCG_MEMORY_2048_THRES_MEDIUM);
+		set_leave_threshold(MEMCG_MEMORY_2048_THRES_LEAVE);
+		config_parse(MEM_CONF_FILE, memory_load_2048_config, NULL);
 	}
+
+	for (i = MEMNOTIFY_NORMAL; i < MEMNOTIFY_MAX_LEVELS; i++)
+		_I("set threshold for %d to %u", i, thresholds[i]);
 
 	_I("set thres_leave to %u", memcg_class[MEMCG_MEMORY].thres_leave);
 }
@@ -1220,10 +1316,10 @@ static int create_foreground_memcg(void)
 	return RESOURCED_ERROR_NONE;
 }
 
-static int init_memcg(unsigned long total_ramsize)
+static int init_memcg(void)
 {
 	unsigned int i, limit;
-	_D("Total : %lu", total_ramsize);
+	_D("Total : %lu", totalram);
 	int ret = RESOURCED_ERROR_NONE;
 
 	for (i = 0; i < MEMCG_MAX_GROUPS; i++) {
@@ -1244,15 +1340,17 @@ static int init_memcg(unsigned long total_ramsize)
 			return ret;
 
 		/* write limit_in_bytes */
-		limit = (unsigned int)(memcg_class[i].limit_ratio*(float)total_ramsize);
+		limit = (unsigned int)(memcg_class[i].limit_ratio*(float)totalram);
 		if (limit > memcg_class[i].min_limit)
 			limit = memcg_class[i].min_limit;
 		ret = write_cgroup_node(memcg_class[i].cgroup_name,
 					MEMCG_LIMIT_PATH, limit);
 		if (ret)
 			return ret;
+		else
+			_I("set %s's limit to %u", memcg_class[i].cgroup_name, limit);
 
-		if (BtoMB(total_ramsize) < MEM_SIZE_512 &&
+		if (BtoMB(totalram) < MEM_SIZE_512 &&
 			(i >= MEMCG_FOREGROUND && i < MEMCG_BACKGROUND)) {
 			memcg_class[i].thres_leave = limit * MEMCG_FOREGROUND_LEAVE_RATIO;
 			_I("set foreground%d leave %u for limit %u",
@@ -1270,6 +1368,7 @@ static int init_memcg(unsigned long total_ramsize)
 
 	return ret;
 }
+
 
 static int find_foreground_cgroup(void) {
 	int fg, min_fg = -1;
@@ -1304,7 +1403,6 @@ void lowmem_move_memcgroup(int pid, int oom_score_adj)
 
 	if (oom_score_adj >= OOMADJ_BACKGRD_LOCKED) {
 		sprintf(buf, "%s/memory/background/cgroup.procs", MEMCG_PATH);
-
 	} else if (oom_score_adj >= OOMADJ_FOREGRD_LOCKED &&
 					oom_score_adj < OOMADJ_BACKGRD_LOCKED) {
 		int ret;
@@ -1317,16 +1415,18 @@ void lowmem_move_memcgroup(int pid, int oom_score_adj)
 	} else
 		return;
 
-	_D("buf : %s, pid : %d, oom : %d", buf, pid, oom_score_adj);
-	f = fopen(buf, "w");
-	if (!f) {
-		_E("%s open failed", buf);
-		return;
-	}
-	size = sprintf(buf, "%d", pid);
-	if (fwrite(buf, size, 1, f) != 1)
-		_E("fwrite cgroup tasks : %d\n", pid);
-	fclose(f);
+
+		_D("buf : %s, pid : %d, oom : %d", buf, pid, oom_score_adj);
+		f = fopen(buf, "w");
+		if (!f) {
+			_E("%s open failed", buf);
+			return;
+		}
+		size = sprintf(buf, "%d", pid);
+		if (fwrite(buf, size, 1, f) != 1)
+			_E("fwrite cgroup tasks : %d\n", pid);
+		fclose(f);
+
 }
 
 void lowmem_cgroup_foregrd_manage(int currentpid)
@@ -1355,7 +1455,6 @@ static int oom_thread_create(void)
 {
 	int ret = RESOURCED_ERROR_NONE;
 
-
 	if ( oom_thread ) {
 		_I("oom thread %u already created", (unsigned)oom_thread);
 	} else {
@@ -1376,7 +1475,6 @@ static int oom_thread_create(void)
 int lowmem_init(void)
 {
 	int ret = RESOURCED_ERROR_NONE;
-	unsigned long total;
 
 	ret = create_foreground_memcg();
 
@@ -1384,8 +1482,9 @@ int lowmem_init(void)
 		_E("create foreground memcgs failed");
 		return ret;
 	}
-	total = get_total_memory();
-	init_thresholds(total);
+	get_total_memory();
+	init_thresholds();
+	config_parse(MEM_CONF_FILE, load_mem_config, NULL);
 
 	ret = oom_thread_create();
 	if (ret) {
@@ -1394,7 +1493,7 @@ int lowmem_init(void)
 	}
 
 	/* set default memcg value */
-	ret = init_memcg(total);
+	ret = init_memcg();
 	if (ret) {
 		_E("memory cgroup init failed");
 		return ret;
@@ -1411,3 +1510,43 @@ int lowmem_init(void)
 
 	return ret;
 }
+
+static int resourced_memory_control(void *data)
+{
+	int ret = RESOURCED_ERROR_NONE;
+	struct lowmem_data_type *l_data;
+
+	l_data = (struct lowmem_data_type *)data;
+	switch(l_data->control_type) {
+	case LOWMEM_MOVE_CGROUP:
+		if (l_data->args)
+			lowmem_move_memcgroup((pid_t)l_data->args[0], l_data->args[1]);
+		break;
+	case LOWMEM_MANAGE_FOREGROUND:
+		if (l_data->args)
+			lowmem_cgroup_foregrd_manage((pid_t)l_data->args[0]);
+		break;
+
+	}
+	return ret;
+}
+
+static int resourced_memory_init(void *data)
+{
+	return lowmem_init();
+}
+
+static int resourced_memory_finalize(void *data)
+{
+	return RESOURCED_ERROR_NONE;
+}
+
+static struct module_ops memory_modules_ops = {
+	.priority	= MODULE_PRIORITY_NORMAL,
+	.name		= "lowmem",
+	.init		= resourced_memory_init,
+	.exit		= resourced_memory_finalize,
+	.control	= resourced_memory_control,
+};
+
+MODULE_REGISTER(&memory_modules_ops)

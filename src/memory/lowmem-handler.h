@@ -27,11 +27,10 @@
 #define __LOWMEM_HANDLER_H__
 
 void lowmem_cgroup_foregrd_manage(int currentpid);
-
 void lowmem_move_memcgroup(int pid, int oom_score_adj);
 int lowmem_init(void);
 void lowmem_dbus_init(void);
-void lowmem_oom_killer_cb(int memcg_idx);
+void lowmem_oom_killer_cb(int memcg_idx, int force); /* vmpressure-* version */
 
 void set_threshold(int level, int thres);
 void set_leave_threshold(int thres);
