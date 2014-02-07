@@ -7,7 +7,9 @@ License:    Apache-2.0
 Source0:    %{name}-%{version}.tar.gz
 Source1:    resourced.service
 
+%define powertop_state ON
 %define exclude_list_opt_full_path /opt/usr/etc/_exclude_list_file_name_
+
 
 BuildRequires:  cmake
 BuildRequires:  pkgconfig(glib-2.0)
@@ -38,6 +40,15 @@ Requires: %{name} = %{version}-%{release}
 Development package for Resourced Daemon
 to manage memory and process state
 
+%if %{?powertop_state} == ON
+%package powertop-wrapper
+Summary: Powertop-wrapper libray
+Group:   System/Libraries
+
+%description powertop-wrapper
+Powertop control library
+%endif
+
 %prep
 %setup -q
 
@@ -56,7 +67,8 @@ echo "\
 %endif
 
 cmake . -DCMAKE_INSTALL_PREFIX=/usr -DFULLVER=%{version} -DMAJORVER=${MAJORVER} -DCMAKE_BUILD_TYPE=Release \
-	-DEXCLUDE_LIST_OPT_FULL_PATH=%{exclude_list_opt_full_path} 
+	-DEXCLUDE_LIST_OPT_FULL_PATH=%{exclude_list_opt_full_path} \
+	-DPOWERTOP_MODULE=%{powertop_state}
 
 make %{?jobs:-j%jobs}
 
@@ -65,11 +77,21 @@ rm -rf %{buildroot}
 mkdir -p %{buildroot}/usr/share/license
 cp -f LICENSE %{buildroot}/usr/share/license/%{name}
 
+%if %{?powertop_state} == ON
+cp -f LICENSE %{buildroot}/usr/share/license/%{name}-powertop-wrapper
+%endif
+
 %make_install
 
 mkdir -p %{buildroot}%{_libdir}/systemd/system/multi-user.target.wants
 install -m 0644 %SOURCE1 %{buildroot}%{_libdir}/systemd/system/resourced.service
 ln -s ../resourced.service %{buildroot}%{_libdir}/systemd/system/multi-user.target.wants/resourced.service
+
+#powertop-wrapper part
+%if %{?powertop_state} == ON
+mkdir -p %{buildroot}/usr/share/powertop-wrapper/
+cp -p %_builddir/%name-%version/src/powertop-wrapper/header.html %{buildroot}/usr/share/powertop-wrapper
+%endif
 
 %post -p /sbin/ldconfig
 
@@ -81,6 +103,11 @@ fi
 
 %postun -p /sbin/ldconfig
 
+%if %{?powertop_state} == ON
+%post powertop-wrapper -p /sbin/ldconfig
+%postun powertop-wrapper -p /sbin/ldconfig
+%endif
+
 %files
 %manifest resourced.manifest
 %{_libdir}/libproc-stat.so.*
@@ -91,8 +118,22 @@ fi
 %{_libdir}/systemd/system/multi-user.target.wants/resourced.service
 %config /etc/resourced/memory.conf
 
+%if %{?powertop_state} == ON
+%files powertop-wrapper
+%manifest powertop-wrapper.manifest
+%{_libdir}/libpowertop-wrapper.so.*
+/usr/share/powertop-wrapper/header.html
+/usr/share/license/%{name}-powertop-wrapper
+%endif
+
 %files devel
 %{_libdir}/pkgconfig/*.pc
 %{_includedir}/system/proc_stat.h
 %{_libdir}/libproc-stat.so
 %{_includedir}/system/resourced.h
+
+%if %{?powertop_state} == ON
+#powertop-wrapper part
+%{_includedir}/system/powertop-dapi.h
+%{_libdir}/libpowertop-wrapper.so
+%endif

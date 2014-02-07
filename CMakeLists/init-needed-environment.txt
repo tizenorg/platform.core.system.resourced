@@ -1,13 +1,17 @@
 SET(fw_name "resourced")
 SET(RESOURCED resourced)
-SET(LIBRESOURCED lib${RESOURCED})
+
 SET(LIBS libs)
 SET(PROC-STAT proc-stat)
+SET(POWERTOP-WRAPPER powertop-wrapper)
 PROJECT(${fw_name})
 
 #Set modules, all modules are enabled by default
 IF(NOT DEFINED MEMORY_MODULE)
   SET(MEMORY_MODULE "ON")
+ENDIF()
+IF(NOT DEFINED POWERTOP_MODULE)
+  SET(POWERTOP_MODULE "OFF")
 ENDIF()
 
 #Set visibility
@@ -71,3 +75,6 @@ SET(MODULES_SOURCE_DIR		${SOURCE_DIR}/modules)
 SET(CGROUP_SOURCE_DIR           ${SOURCE_DIR}/cgroup)
 SET(APP-STAT_SOURCE_DIR         ${SOURCE_DIR}/app-stat)
 SET(COMMON_SOURCE_DIR           ${SOURCE_DIR}/common)
+IF("${POWERTOP_MODULE}" STREQUAL "ON")
+SET(POWERTOP-WRAPPER_SOURCE_DIR           ${SOURCE_DIR}/powertop-wrapper)
+ENDIF()
