@@ -119,6 +119,7 @@ fi
 %config /etc/resourced/memory.conf
 %{_libdir}/libresourced.so.*
 %{_libdir}/librd-network.so.*
+%{_bindir}/memps
 
 %if %{?powertop_state} == ON
 %files powertop-wrapper
