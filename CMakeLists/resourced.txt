@@ -8,7 +8,8 @@ INCLUDE_DIRECTORIES(${RESOURCED_INCLUDEDIR}
   ${RESOURCED_SOURCE_DIR}
   ${MEMORY_SOURCE_DIR}
   ${PROC-STAT_SOURCE_DIR}/include
-  ${APP-STAT_SOURCE_DIR}/include)
+  ${APP-STAT_SOURCE_DIR}/include
+  ${NETWORK_SOURCE_DIR}/include)
 
 CONFIGURE_FILE(${INCLUDE_COMMON_DIR}/config.h.in
   ${INCLUDE_COMMON_DIR}/config.h)
@@ -29,6 +30,8 @@ SET (HEADERS
   )
 
 SET (SOURCES
+  ${CGROUP_SOURCE_DIR}/cgroup.c
+  ${COMMON_SOURCE_DIR}/appid-helper.c
   ${COMMON_SOURCE_DIR}/config-parser.c
   ${COMMON_SOURCE_DIR}/edbus-handler.c
   ${COMMON_SOURCE_DIR}/file-helper.c

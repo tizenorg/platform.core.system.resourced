@@ -117,6 +117,8 @@ fi
 %{_libdir}/systemd/system/resourced.service
 %{_libdir}/systemd/system/multi-user.target.wants/resourced.service
 %config /etc/resourced/memory.conf
+%{_libdir}/libresourced.so.*
+%{_libdir}/librd-network.so.*
 
 %if %{?powertop_state} == ON
 %files powertop-wrapper
@@ -131,6 +133,10 @@ fi
 %{_includedir}/system/proc_stat.h
 %{_libdir}/libproc-stat.so
 %{_includedir}/system/resourced.h
+%{_includedir}/system/data_usage.h
+%{_includedir}/system/rd-network.h
+%{_libdir}/libresourced.so
+%{_libdir}/librd-network.so
 
 %if %{?powertop_state} == ON
 #powertop-wrapper part

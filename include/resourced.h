@@ -189,6 +189,52 @@ enum {
 };
 
 /**
+ * @brief Datausage quota
+ * time_period - time interval for quota, use predefined quota
+ *  @see data_usage_quota_period_t
+ * snd_quota - quota for outcoming data
+ * rcv_quota - quota for incoming data
+ * warning_send_threshold - threshold for warning notification on engress bytes
+ * warning_rcv_threshold - threshold for warning notification on ingress bytes
+ *		value - WARNING_THRESHOLD_UNDEF means no threshold
+ *		      - WARNING_THRESHOLD_DEFAULT means system-resource will be
+ *              responsible for evaluation threshold value
+ *		The threshold value is amount of bytes remaining till blocking
+ *
+ * quota_type - at present it can be foreground quota or background
+ * iftype - network interface type
+ * start_time - quota processing activation time, if NULL current time is used
+ */
+typedef struct {
+	int time_period;
+	int64_t snd_quota;
+	int64_t rcv_quota;
+	int snd_warning_threshold;
+	int rcv_warning_threshold;
+	resourced_state_t quota_type;
+	resourced_iface_type iftype;
+	time_t *start_time;
+	resourced_roaming_type roaming_type;
+} data_usage_quota;
+
+/**
+ * @brief Reset filter for quota
+ * app_id is mandatory field
+ * iftype interface type, RESOURCED_IFACE_UNKNOWN
+ *     interface is not valid parameter, use
+ *     RESOURCED_IFACE_ALL instead
+ * roaming_type roaming type
+ * If user will not specify last 2 fields (UNKNOWN by default),
+ *   neither quota with defined interface nor
+ *   quota with defined roaming state will be removed.
+ */
+struct datausage_quota_reset_rule {
+	const char *app_id;
+	resourced_iface_type iftype;
+	resourced_roaming_type roaming;
+};
+
+/**
  * @brief return type of the counters callback
  */
 typedef enum {
@@ -270,6 +316,29 @@ resourced_ret_c exclude_restriction_by_iftype(
  */
 resourced_ret_c set_net_exclusion(const char *app_id,
 			const resourced_net_restrictions *rst);
+
+/**
+ * @desc This function will set time interval based quota for data usage
+ *    Restriction will be applied in case of exceeding of the quota
+ *    during time interval
+ * @param app_id[in] - application identifier, it's package name
+ * @param quotas[in] - time interval based restriction for data usage
+ */
+resourced_ret_c set_datausage_quota(const char *app_id,
+			      const data_usage_quota *quota);
+
+/**
+ * @desc Remove datausage quota by quota rule
+ */
+resourced_ret_c remove_datausage_quota(
+	const struct datausage_quota_reset_rule *rule);
+
+/**
+ * @deprecated
+ */
+resourced_ret_c remove_datausage_quota_by_iftype(
+	const char *app_id, const resourced_iface_type iftype);
+
 
 /**
  * @desc Description of the boolean option for enabling/disabling
