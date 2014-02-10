@@ -8,6 +8,7 @@ Source0:    %{name}-%{version}.tar.gz
 Source1:    resourced.service
 
 %define powertop_state ON
+%define cpu_module ON
 %define exclude_list_opt_full_path /opt/usr/etc/_exclude_list_file_name_
 
 
@@ -68,7 +69,8 @@ echo "\
 
 cmake . -DCMAKE_INSTALL_PREFIX=/usr -DFULLVER=%{version} -DMAJORVER=${MAJORVER} -DCMAKE_BUILD_TYPE=Release \
 	-DEXCLUDE_LIST_OPT_FULL_PATH=%{exclude_list_opt_full_path} \
-	-DPOWERTOP_MODULE=%{powertop_state}
+	-DPOWERTOP_MODULE=%{powertop_state} \
+	-DCPU_MODULE=%{cpu_module}
 
 make %{?jobs:-j%jobs}
 
@@ -128,6 +130,11 @@ fi
 /usr/share/powertop-wrapper/header.html
 /usr/share/license/%{name}-powertop-wrapper
 %endif
+
+#memps
+%attr(-,root, root) %{_bindir}/memps
+
+%config  /etc/resourced/cpu.conf
 
 %files devel
 %{_libdir}/pkgconfig/*.pc

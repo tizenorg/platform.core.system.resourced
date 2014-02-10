@@ -64,6 +64,12 @@ ELSEIF("${MEMORY_MODULE}" STREQUAL "OFF")
     )
 ENDIF()
 
+IF("${CPU_MODULE}" STREQUAL "ON")
+  SET(SOURCES ${SOURCES}
+    ${CPU_SOURCE_DIR}/cpu.c
+    )
+ENDIF()
+
 SET (REQUIRES_LIST ${REQUIRES_LIST}
 	ecore
 	dlog
@@ -103,6 +109,13 @@ IF("${MEMORY_ENG}" STREQUAL "ON")
 ELSE()
   INSTALL(FILES ${MEMORY_SOURCE_DIR}/memory_user.conf
     DESTINATION /etc/resourced RENAME memory.conf)
+ENDIF()
+
+IF("${CPU_MODULE}" STREQUAL "ON")
+  INSTALL(FILES ${CPU_SOURCE_DIR}/cpu.conf
+    DESTINATION /etc/resourced RENAME cpu.conf)
+ELSE()
+  INSTALL(PROGRAMS ${CMAKE_BINARY_DIR}/scripts/resourced-cpucgroup.sh DESTINATION bin)
 ENDIF()
 
 INSTALL(FILES ${MEMORY_SOURCE_DIR}/memory.conf DESTINATION /etc/resourced)
