@@ -17,33 +17,24 @@
  *
  */
 
-/**
- * @file init.h
- * @desc Resourced initialization
- * Copyright (c) 2013 Samsung Electronics Co., Ltd. All rights reserved.
+/*
  *
- **/
+ * @file settings.h
+ *
+ * Copyright (c) 2012 Samsung Electronics Co., Ltd. All rights reserved.
+ *
+ */
 
-#ifndef _RESOURCED_INIT_H
-#define _RESOURCED_INIT_H
+#ifndef TRESOURCED_LIBS_SETTINGS_H_
+#define TRESOURCED_LIBS_SETTINGS_H_
 
 #include "resourced.h"
 
-#include "transmission.h"
+#define RESOURCED_WIFI_STATISTICS_PATH "db/private/resourced/wifi_statistics"
+#define RESOURCED_DATACALL_PATH "db/private/resourced/datacall"
+#define RESOURCED_DATAUSAGE_TIMER_PATH "db/private/resourced/datausage_timer"
+#define RESOURCED_DATACALL_LOGGING_PATH "db/private/resourced/datacall_logging"
 
-struct daemon_arg {
-	int argc;
-	char **argv;
-	struct daemon_opts *opts;
-};
+int load_options(resourced_options *options);
 
-int resourced_init(struct daemon_arg *darg);
-
-int resourced_deinit(struct daemon_arg *darg);
-
-struct counter_arg;
-
-void set_daemon_net_block_state(const enum traffic_restriction_type rst_type,
-	const struct counter_arg* carg);
-
-#endif /* _RESOURCED_INIT_H */
+#endif /*TRESOURCED_LIBS_SETTINGS_H_*/

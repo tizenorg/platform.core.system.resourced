@@ -14,36 +14,28 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ */
+
+/*
+ *  @file: daemon-options.c
+ *
+ *  @desc Entity for working with daemon options
  *
  */
 
-/**
- * @file init.h
- * @desc Resourced initialization
- * Copyright (c) 2013 Samsung Electronics Co., Ltd. All rights reserved.
- *
- **/
-
-#ifndef _RESOURCED_INIT_H
-#define _RESOURCED_INIT_H
-
+#include "daemon-options.h"
+#include "macro.h"
 #include "resourced.h"
+#include "settings.h"
+#include "trace.h"
 
-#include "transmission.h"
+void load_daemon_opts(struct daemon_opts *daemon_options)
+{
+	resourced_options options = { 0 };
 
-struct daemon_arg {
-	int argc;
-	char **argv;
-	struct daemon_opts *opts;
-};
-
-int resourced_init(struct daemon_arg *darg);
-
-int resourced_deinit(struct daemon_arg *darg);
-
-struct counter_arg;
-
-void set_daemon_net_block_state(const enum traffic_restriction_type rst_type,
-	const struct counter_arg* carg);
-
-#endif /* _RESOURCED_INIT_H */
+	ret_value_msg_if(daemon_options == NULL, ,
+			 "Invalid daemon options argument\n");
+	load_options(&options);
+	daemon_options->datacall_logging = options.datacall_logging;
+	daemon_options->update_period = options.datausage_timer;
+}

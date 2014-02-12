@@ -40,6 +40,7 @@
 #include "proc_stat.h"
 #include "trace.h"
 #include "proc-noti.h"
+#include "const.h"
 
 #define PROC_STAT_PATH "/proc/%d/stat"
 #define PROC_STATM_PATH "/proc/%d/statm"

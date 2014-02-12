@@ -1,6 +1,6 @@
 CMAKE_MINIMUM_REQUIRED (VERSION 2.6)
 
-PROJECT(resourced)
+PROJECT(resource_d)
 
 SET(CMAKE_EXTRA_INCLUDE_FILES unistd.h)
 
@@ -17,12 +17,18 @@ SET (HEADERS
   ${INCLUDE_COMMON_DIR}/config-parser.h
   ${INCLUDE_COMMON_DIR}/macro.h
   ${INCLUDE_COMMON_DIR}/module.h
-)
+  ${INCLUDE_COMMON_DIR}/daemon-options.h
+  ${INCLUDE_COMMON_DIR}/settings.h
+  ${INCLUDE_COMMON_DIR}/const.h
+  ${INCLUDE_COMMON_DIR}/module-data.h
+  ${INCLUDE_COMMON_DIR}/transmission.h
+  ${COMMON_SOURCE_DIR}/counter.h)
 
 SET (SOURCES
   ${COMMON_SOURCE_DIR}/config-parser.c
   ${COMMON_SOURCE_DIR}/edbus-handler.c
   ${COMMON_SOURCE_DIR}/file-helper.c
+  ${COMMON_SOURCE_DIR}/module-data.c
   ${COMMON_SOURCE_DIR}/module.c
   ${PROC-STAT_SOURCE_DIR}/proc-handler.c
   ${PROC-STAT_SOURCE_DIR}/proc-main.c
@@ -30,6 +36,8 @@ SET (SOURCES
   ${PROC-STAT_SOURCE_DIR}/proc-noti.c
   ${PROC-STAT_SOURCE_DIR}/proc-winstate.c
   ${RESOURCED_SOURCE_DIR}/init.c
+  ${RESOURCED_SOURCE_DIR}/daemon-options.c
+  ${RESOURCED_SOURCE_DIR}/settings.c
   ${RESOURCED_SOURCE_DIR}/main.c
   )
 
@@ -40,10 +48,6 @@ IF("${MEMORY_MODULE}" STREQUAL "ON")
     ${MEMORY_SOURCE_DIR}/lowmem-process.c
     ${MEMORY_SOURCE_DIR}/vmpressure-lowmem-handler.c
     ${MODULES_SOURCE_DIR}/memory.c
-    )
-ELSEIF("${MEMORY_MODULE}" STREQUAL "OFF")
-  SET(SOURCES ${SOURCES}
-    ${MEMORY_SOURCE_DIR}/stub-memory.c
     )
 ENDIF()
 
@@ -78,5 +82,7 @@ SET_TARGET_PROPERTIES(${PROJECT_NAME} PROPERTIES SKIP_BUILD_RPATH true)
 INSTALL(FILES ${PROJECT_NAME}
   DESTINATION ${MAKE_INSTALL_PREFIX}/usr/bin RENAME resourced
   PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE WORLD_EXECUTE)
+
 INSTALL(FILES ${MEMORY_SOURCE_DIR}/memory.conf DESTINATION /etc/resourced)
+
 INSTALL(FILES ${INCLUDE_PUBLIC_DIR}/resourced.h DESTINATION include/system)

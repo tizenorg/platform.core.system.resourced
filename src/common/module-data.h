@@ -1,7 +1,7 @@
 /*
  * resourced
  *
- * Copyright (c) 2000 - 2013 Samsung Electronics Co., Ltd. All rights reserved.
+ * Copyright (c) 2013 Samsung Electronics Co., Ltd. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,32 +18,26 @@
  */
 
 /**
- * @file init.h
- * @desc Resourced initialization
- * Copyright (c) 2013 Samsung Electronics Co., Ltd. All rights reserved.
- *
+ * @file module-data.h
+ * @desc Module data features
  **/
 
-#ifndef _RESOURCED_INIT_H
-#define _RESOURCED_INIT_H
+#ifndef __MODULE_DATA_HANDLE_H__
+#define __MODULE_DATA_HANDLE_H__
 
-#include "resourced.h"
+#include "init.h"
+#include "proc-main.h"
 
-#include "transmission.h"
-
-struct daemon_arg {
-	int argc;
-	char **argv;
+struct modules_arg {
 	struct daemon_opts *opts;
 };
 
-int resourced_init(struct daemon_arg *darg);
+struct shared_modules_data {
+	struct counter_arg *carg;
+};
 
-int resourced_deinit(struct daemon_arg *darg);
+struct shared_modules_data *get_shared_modules_data(void);
 
-struct counter_arg;
+void init_modules_arg(struct modules_arg *marg, struct daemon_arg *darg);
 
-void set_daemon_net_block_state(const enum traffic_restriction_type rst_type,
-	const struct counter_arg* carg);
-
-#endif /* _RESOURCED_INIT_H */
+#endif /* __MODULE_DATA_HANDLE_H__ */

@@ -1300,11 +1300,11 @@ void lowmem_move_memcgroup(int pid, int oom_score_adj)
 {
 	char buf[LOWMEM_PATH_MAX] = {0,};
 	FILE *f;
-	int size, background = 0;
+	int size;
 
 	if (oom_score_adj >= OOMADJ_BACKGRD_LOCKED) {
 		sprintf(buf, "%s/memory/background/cgroup.procs", MEMCG_PATH);
-		background = 1;
+
 	} else if (oom_score_adj >= OOMADJ_FOREGRD_LOCKED &&
 					oom_score_adj < OOMADJ_BACKGRD_LOCKED) {
 		int ret;
@@ -1354,7 +1354,7 @@ void lowmem_cgroup_foregrd_manage(int currentpid)
 static int oom_thread_create(void)
 {
 	int ret = RESOURCED_ERROR_NONE;
-	pthread_t oom_thread;
+
 
 	if ( oom_thread ) {
 		_I("oom thread %u already created", (unsigned)oom_thread);

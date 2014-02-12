@@ -48,7 +48,7 @@ static int lowmem_backgrd_manage(int currentpid)
 	char buf[sizeof(PROC_OOM_SCORE_ADJ_PATH) + MAX_DEC_SIZE(int)] = {0};
 	char appname[PROC_NAME_MAX];
 	int count = 0;
-	int candidatepid[16] = {0,};
+
 	int cur_oom = -1, prev_oom=OOMADJ_BACKGRD_UNLOCKED, select_pid=0;
 	static int checkprevpid = 0;
 
@@ -83,7 +83,7 @@ static int lowmem_backgrd_manage(int currentpid)
 		if (select_pid != pid && select_pid == pgid && count < 16)
 		{
 			_D("found candidate child pid = %d, pgid = %d", pid, pgid);
-			candidatepid[count++] = pid;
+		
 			continue;
 		}
 		snprintf(buf, sizeof(buf), PROC_OOM_SCORE_ADJ_PATH, pid);
@@ -97,7 +97,7 @@ static int lowmem_backgrd_manage(int currentpid)
 		cur_oom = atoi(buf);
 		if (cur_oom > OOMADJ_BACKGRD_UNLOCKED && cur_oom > prev_oom) {
 			count = 0;
-			candidatepid[count++] = pid;
+			
 			select_pid = pid;
 			prev_oom = cur_oom;
 		}

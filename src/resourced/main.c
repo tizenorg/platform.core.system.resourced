@@ -26,6 +26,7 @@
 
 #include "init.h"
 #include "macro.h"
+#include "module-data.h"
 #include "module.h"
 #include "proc-main.h"
 #include "proc-monitor.h"
@@ -38,7 +39,8 @@
 int main(int argc, char **argv)
 {
 	int ret_code = 0;
-	struct daemon_arg darg = { argc, argv };
+	struct daemon_arg darg = { argc, argv, NULL };
+	struct modules_arg marg;
 
 #ifdef DEBUG_ENABLED
 	mtrace();
@@ -47,12 +49,13 @@ int main(int argc, char **argv)
 	ret_code = resourced_init(&darg);
 	ret_value_msg_if(ret_code < 0, ret_code,
 			 "Resourced initialization failed\n");
-	modules_init(NULL);
+	init_modules_arg(&marg, &darg);
+	modules_init(&marg);
 	ret_code = resourced_proc_init();
 	if (ret_code < 0)
 		_E("Proc init failed");
 	ecore_main_loop_begin();
-	modules_exit(NULL);
+	modules_exit(&marg);
 	resourced_deinit(&darg);
 	return ret_code;
 }
