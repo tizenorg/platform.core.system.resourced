@@ -6,9 +6,11 @@ Group:      System/Management
 License:    Apache-2.0
 Source0:    %{name}-%{version}.tar.gz
 Source1:    resourced.service
+Source2:    resourced-cpucgroup.service
 
 %define powertop_state ON
 %define cpu_module ON
+%define memory_eng ON
 %define exclude_list_opt_full_path /opt/usr/etc/_exclude_list_file_name_
 
 
@@ -70,7 +72,8 @@ echo "\
 cmake . -DCMAKE_INSTALL_PREFIX=/usr -DFULLVER=%{version} -DMAJORVER=${MAJORVER} -DCMAKE_BUILD_TYPE=Release \
 	-DEXCLUDE_LIST_OPT_FULL_PATH=%{exclude_list_opt_full_path} \
 	-DPOWERTOP_MODULE=%{powertop_state} \
-	-DCPU_MODULE=%{cpu_module}
+	-DCPU_MODULE=%{cpu_module} \
+	-DMEMORY_ENG=%{memory_eng}
 
 make %{?jobs:-j%jobs}
 
@@ -88,6 +91,12 @@ cp -f LICENSE %{buildroot}/usr/share/license/%{name}-powertop-wrapper
 mkdir -p %{buildroot}%{_libdir}/systemd/system/multi-user.target.wants
 install -m 0644 %SOURCE1 %{buildroot}%{_libdir}/systemd/system/resourced.service
 ln -s ../resourced.service %{buildroot}%{_libdir}/systemd/system/multi-user.target.wants/resourced.service
+
+%if %{?cpu_module} == OFF
+mkdir -p %{buildroot}%{_libdir}/systemd/system/graphical.target.wants
+install -m 0644 %SOURCE2 %{buildroot}%{_libdir}/systemd/system/resourced-cpucgroup.service
+ln -s ../resourced-cpucgroup.service %{buildroot}%{_libdir}/systemd/system/graphical.target.wants/resourced-cpucgroup.service
+%endif
 
 #powertop-wrapper part
 %if %{?powertop_state} == ON
