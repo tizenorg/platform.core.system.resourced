@@ -48,7 +48,7 @@ resourced_ret_c fwrite_str(const char *path, const char *str)
 	ret_value_errno_msg_if(ret == EOF, RESOURCED_ERROR_FAIL,
 			       "Fail to write file\n");
 
-	return RESOURCED_ERROR_OK;
+	return RESOURCED_ERROR_NONE;
 }
 
 resourced_ret_c fwrite_int(const char *path, const int number)
@@ -89,7 +89,7 @@ resourced_ret_c fread_int(const char *path, u_int32_t *number)
 	ret_value_errno_msg_if(ret == EOF, RESOURCED_ERROR_FAIL,
 			       "Fail to read file\n");
 
-	return RESOURCED_ERROR_OK;
+	return RESOURCED_ERROR_NONE;
 }
 
 resourced_ret_c fwrite_array(const char *path, const void *array,
@@ -112,5 +112,5 @@ resourced_ret_c fwrite_array(const char *path, const void *array,
 	ret_value_errno_msg_if(ret != numb_of_elem, RESOURCED_ERROR_FAIL,
 			       "Failed write array into %s file\n");
 
-	return RESOURCED_ERROR_OK;
+	return RESOURCED_ERROR_NONE;
 }
