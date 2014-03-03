@@ -40,6 +40,8 @@ struct edbus_list{
 
 static struct edbus_object edbus_objects[] = {
 	{ RESOURCED_PATH_OOM, RESOURCED_INTERFACE_OOM, NULL, NULL },
+	{ RESOURCED_PATH_PROCESS, RESOURCED_INTERFACE_PROCESS, NULL, NULL },
+	{ RESOURCED_PATH_NETWORK, RESOURCED_INTERFACE_NETWORK, NULL, NULL },
 	/* Add new object & interface here*/
 };
 
@@ -159,6 +161,44 @@ DBusMessage *dbus_method_sync(const char *dest, const char *path,
 	return reply;
 }
 
+int dbus_method_async(const char *dest, const char *path,
+		const char *interface, const char *method,
+		const char *sig, char *param[])
+{
+	DBusConnection *conn;
+	DBusMessage *msg;
+	DBusMessageIter iter;
+	int ret;
+
+	conn = dbus_bus_get(DBUS_BUS_SYSTEM, NULL);
+	if (!conn) {
+		_E("dbus_bus_get error");
+		return -EPERM;
+	}
+
+	msg = dbus_message_new_method_call(dest, path, interface, method);
+	if (!msg) {
+		_E("dbus_message_new_method_call(%s:%s-%s)", path, interface, method);
+		return -EBADMSG;
+	}
+
+	dbus_message_iter_init_append(msg, &iter);
+	ret = append_variant(&iter, sig, param);
+	if (ret < 0) {
+		_E("append_variant error(%d)", ret);
+		dbus_message_unref(msg);
+		return ret;
+	}
+
+	ret = dbus_connection_send(conn, msg, NULL);
+	dbus_message_unref(msg);
+	if (ret != TRUE) {
+		_E("dbus_connection_send error");
+		return -ECOMM;
+	}
+
+	return 0;
+}
 
 int register_edbus_interface(struct edbus_object *object)
 {
@@ -363,7 +403,7 @@ int broadcast_edbus_signal(const char *path, const char *interface,
 	e_dbus_message_send(edbus_conn, signal, NULL, -1, NULL);
 
 	dbus_message_unref(signal);
-	return RESOURCED_ERROR_OK;
+	return RESOURCED_ERROR_NONE;
 }
 
 resourced_ret_c edbus_add_methods(const char *path,
@@ -399,7 +439,7 @@ resourced_ret_c edbus_add_methods(const char *path,
 
 void edbus_init(void)
 {
-	int retry = RESOURCED_ERROR_OK;
+	int retry = RESOURCED_ERROR_NONE;
 	int i;
 retry_init:
 	edbus_init_val = e_dbus_init();

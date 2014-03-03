@@ -48,9 +48,23 @@ struct edbus_object {
 #define OBJECT_PATH		"/Org/Tizen/ResourceD"
 #define INTERFACE_NAME		BUS_NAME
 
+/*
+ * The EDbus method to update the resourced counters
+ * Signal is generated after the database update
+ * and store new values of the counters
+ */
+#define RESOURCED_NETWORK_UPDATE		"Update"
+#define RESOURCED_NETWORK_UPDATE_FINISH	"UpdateFinish"
+#define RESOURCED_NETWORK_PROCESS_RESTRICTION	"ProcessRestriction"
+
+/*
+ * Core service
+ */
 #define RESOURCED_PATH_OOM				OBJECT_PATH"/Oom"
 #define RESOURCED_INTERFACE_OOM		INTERFACE_NAME".oom"
 
+#define RESOURCED_PATH_NETWORK		OBJECT_PATH"/Network"
+#define RESOURCED_INTERFACE_NETWORK		INTERFACE_NAME".network"
 #define RESOURCED_PATH_PROCESS			OBJECT_PATH"/Process"
 #define RESOURCED_INTERFACE_PROCESS		INTERFACE_NAME".process"
 
@@ -79,6 +93,10 @@ struct dbus_byte {
 #define RETRY_MAX 5
 
 DBusMessage *dbus_method_sync(const char *dest, const char *path,
+		const char *interface, const char *method,
+		const char *sig, char *param[]);
+
+int dbus_method_async(const char *dest, const char *path,
 		const char *interface, const char *method,
 		const char *sig, char *param[]);
 

@@ -17,13 +17,13 @@ CONFIGURE_FILE(${INCLUDE_COMMON_DIR}/config.h.in
 SET (HEADERS
   ${INCLUDE_COMMON_DIR}/config.h
   ${INCLUDE_COMMON_DIR}/config-parser.h
+  ${INCLUDE_COMMON_DIR}/const.h
   ${INCLUDE_COMMON_DIR}/macro.h
   ${INCLUDE_COMMON_DIR}/lowmem-common.h
+  ${INCLUDE_COMMON_DIR}/module-data.h
   ${INCLUDE_COMMON_DIR}/module.h
   ${INCLUDE_COMMON_DIR}/daemon-options.h
   ${INCLUDE_COMMON_DIR}/settings.h
-  ${INCLUDE_COMMON_DIR}/const.h
-  ${INCLUDE_COMMON_DIR}/module-data.h
   ${INCLUDE_COMMON_DIR}/transmission.h
   ${COMMON_SOURCE_DIR}/counter.h
   ${INCLUDE_COMMON_DIR}/cpu-common.h
@@ -37,6 +37,7 @@ SET (SOURCES
   ${COMMON_SOURCE_DIR}/file-helper.c
   ${COMMON_SOURCE_DIR}/module-data.c
   ${COMMON_SOURCE_DIR}/module.c
+  ${RESOURCED_SOURCE_DIR}/daemon-options.c
   ${COMMON_SOURCE_DIR}/lowmem-common.c
   ${COMMON_SOURCE_DIR}/cpu-common.c
   ${PROC-STAT_SOURCE_DIR}/proc-handler.c
@@ -46,9 +47,8 @@ SET (SOURCES
   ${PROC-STAT_SOURCE_DIR}/proc-process.c
   ${PROC-STAT_SOURCE_DIR}/proc-winstate.c
   ${RESOURCED_SOURCE_DIR}/init.c
-  ${RESOURCED_SOURCE_DIR}/daemon-options.c
-  ${RESOURCED_SOURCE_DIR}/settings.c
   ${RESOURCED_SOURCE_DIR}/main.c
+  ${RESOURCED_SOURCE_DIR}/settings.c
   )
 
 #memory module
