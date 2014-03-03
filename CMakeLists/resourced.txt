@@ -93,6 +93,16 @@ ENDFOREACH(flag)
 
 SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${EXTRA_CFLAGS}")
 
+ADD_EXECUTABLE(hashtest ${UTILS_SOURCE_DIR}/hashtest.c)
+TARGET_LINK_LIBRARIES(hashtest ${daemon_pkgs_LDFLAGS})
+
+ADD_EXECUTABLE(cgroup-test ${UTILS_SOURCE_DIR}/cgroup-test.c
+	${CGROUP_SOURCE_DIR}/cgroup.c
+	${COMMON_SOURCE_DIR}/file-helper.c
+	${COMMON_SOURCE_DIR}/appid-helper.c
+	)
+TARGET_LINK_LIBRARIES(cgroup-test ${daemon_pkgs_LDFLAGS} "-L/lib/ -lrt")
+
 ADD_EXECUTABLE (${PROJECT_NAME} ${HEADERS} ${SOURCES})
 TARGET_LINK_LIBRARIES(${PROJECT_NAME}
   ${daemon_pkgs_LDFLAGS}
