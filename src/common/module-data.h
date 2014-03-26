@@ -32,8 +32,13 @@ struct modules_arg {
 	struct daemon_opts *opts;
 };
 
+struct swap_module_data {
+	int swaptype;			/* swap */
+};
+
 struct shared_modules_data {
 	struct counter_arg *carg;
+	struct swap_module_data swap_data;
 };
 
 struct shared_modules_data *get_shared_modules_data(void);

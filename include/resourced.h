@@ -46,6 +46,7 @@ struct daemon_opts {
 	sig_atomic_t update_period;
 	sig_atomic_t flush_period;
 	sig_atomic_t state;
+	sig_atomic_t enable_swap;
 };
 
 /**

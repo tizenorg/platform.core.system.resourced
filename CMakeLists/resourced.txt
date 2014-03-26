@@ -26,6 +26,7 @@ SET (HEADERS
   ${INCLUDE_COMMON_DIR}/settings.h
   ${INCLUDE_COMMON_DIR}/transmission.h
   ${COMMON_SOURCE_DIR}/counter.h
+  ${INCLUDE_COMMON_DIR}/swap-common.h
   ${INCLUDE_COMMON_DIR}/cpu-common.h
   )
 
@@ -39,6 +40,7 @@ SET (SOURCES
   ${COMMON_SOURCE_DIR}/module.c
   ${RESOURCED_SOURCE_DIR}/daemon-options.c
   ${COMMON_SOURCE_DIR}/lowmem-common.c
+  ${COMMON_SOURCE_DIR}/swap-common.c
   ${COMMON_SOURCE_DIR}/cpu-common.c
   ${PROC-STAT_SOURCE_DIR}/proc-handler.c
   ${PROC-STAT_SOURCE_DIR}/proc-main.c
@@ -55,12 +57,14 @@ SET (SOURCES
 IF("${MEMORY_MODULE}" STREQUAL "ON")
   SET(SOURCES ${SOURCES}
     ${MEMORY_SOURCE_DIR}/lowmem-dbus.c
-    ${MEMORY_SOURCE_DIR}/lowmem-process.c
     ${MEMORY_SOURCE_DIR}/vmpressure-lowmem-handler.c
     )
-ELSEIF("${MEMORY_MODULE}" STREQUAL "OFF")
+ENDIF()
+
+#swap module
+IF("${SWAP_MODULE}" STREQUAL "ON")
   SET(SOURCES ${SOURCES}
-    ${MEMORY_SOURCE_DIR}/stub-memory.c
+    ${SWAP_SOURCE_DIR}/swap.c
     )
 ENDIF()
 
@@ -127,8 +131,6 @@ IF("${CPU_MODULE}" STREQUAL "ON")
 ELSE()
   INSTALL(PROGRAMS ${CMAKE_BINARY_DIR}/scripts/resourced-cpucgroup.sh DESTINATION bin)
 ENDIF()
-
-INSTALL(FILES ${MEMORY_SOURCE_DIR}/memory.conf DESTINATION /etc/resourced)
 
 INSTALL(FILES ${INCLUDE_PUBLIC_DIR}/resourced.h DESTINATION ${CMAKE_INSTALL_PREFIX}/include/system)
 

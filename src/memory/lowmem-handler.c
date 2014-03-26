@@ -47,6 +47,7 @@
 #include "proc-main.h"
 #include "lowmem-handler.h"
 #include "proc-process.h"
+#include "swap-common.h"
 #include "lowmem-common.h"
 #include "resourced.h"
 #include "macro.h"
@@ -54,6 +55,7 @@
 
 enum {
 	MEMGC_OOM_NORMAL,
+	MEMGC_OOM_SOFTSWAP,
 	MEMGC_OOM_WARNING,
 	MEMGC_OOM_HIGH,
 	MEMGC_OOM_CRITICAL,
@@ -64,7 +66,14 @@ enum {
 	MEMGC_GROUP_BACKGROUND,
 };
 
+enum {
+	MEM_SWAP_OFF,
+	MEM_SWAP_ENABLE,
+	MEM_SWAP_DECREASE,
+	MEM_SWAP_INCREASE,
+};
 
+#define MEM_SOFTSWAP_ENABLE 1
 #define MEMCG_GROUP_MAX		2
 
 #define MEMINFO_PATH	"/proc/meminfo"
@@ -92,6 +101,7 @@ enum {
 #define MEMCG_FOREGROUND_MIN_LIMIT	MBtoB(400)
 #define MEMCG_BACKGROUND_MIN_LIMIT	UINT_MAX
 
+/* threshold lv 1 : wakeup softswapd */
 #define MEMCG_TRHES_SOFTSWAP_RATIO		0.75
 
 /* threshold lv 2 : lowmem warning */
@@ -491,6 +501,7 @@ static int lowmem_set_threshold(void)
 	f = fopen(SET_THRESHOLD_RECLAIM, "w");
 
 	if (!f) {
+		_E("Fail to file open : current kernel can't support swap cgroup");
 		return RESOURCED_ERROR_FAIL;
 	}
 
@@ -716,6 +727,36 @@ static void print_lowmem_state(unsigned int mem_state)
 		convert_to_str(mem_state));
 }
 
+static void lowmem_swap_memory(void)
+{
+	pid_t pid;
+	int swap_type;
+	unsigned long swap_args[1] = {0,};
+
+	if (cur_mem_state == MEMNOTIFY_NORMAL) {
+		if (swap_status(SWAP_CHECK_CGROUP, NULL) == SWAP_TRUE)
+			swap_control(SWAP_START, NULL);
+		return;
+	}
+
+	swap_type = swap_status(SWAP_GET_TYPE, NULL);
+
+	if (swap_type == SWAP_ON) {
+		while (1)
+		{
+			pid = (pid_t)swap_status(SWAP_GET_CANDIDATE_PID, NULL);
+			if (!pid)
+				break;
+			_I("swap cgroup entered : pid : %d", (int)pid);
+			swap_args[0] = (unsigned long)pid;
+			swap_control(SWAP_MOVE_CGROUP, swap_args);
+			swap_args[0] = 0;
+		}
+		if (swap_status(SWAP_GET_STATUS, NULL) == SWAP_OFF)
+			swap_control(SWAP_RESTART, NULL);
+		swap_control(SWAP_START, NULL);
+	}
+}
 
 static int memory_reclaim_act(void *data)
 {
@@ -729,6 +770,9 @@ static int memory_reclaim_act(void *data)
 	if (status != VCONFKEY_SYSMAN_LOW_MEMORY_NORMAL)
 		vconf_set_int(VCONFKEY_SYSMAN_LOW_MEMORY,
 				  VCONFKEY_SYSMAN_LOW_MEMORY_NORMAL);
+	else
+		lowmem_swap_memory();
+
 	return 0;
 }
 
@@ -859,6 +903,8 @@ static Eina_Bool lowmem_cb(void *data, Ecore_Fd_Handler *fd_handler)
 		memcg_class[i].oomlevel = currentoom;
 	}
 
+	/* check flashswap count and off flashswap if needed */
+	swap_status(SWAP_CHECK_SWAPOUT_COUNT, NULL);
 
 	return ECORE_CALLBACK_RENEW;
 }
@@ -905,7 +951,7 @@ static int setup_eventfd(void)
 			return RESOURCED_ERROR_FAIL;
 		}
 
-		/* threshold lv 1 */
+		/* threshold lv 1 : wakeup softswapd */
 		/* write event fd about threshold lv1 */
 		thres = memcg_class[i].thres_lv1;
 		sz = sprintf(buf, "%d %d %d", evfd, mcgfd, thres);
@@ -1046,10 +1092,12 @@ static void lowmem_move_memcgroup(int pid, int oom_score_adj)
 {
 	char buf[LOWMEM_PATH_MAX] = {0,};
 	FILE *f;
-	int size;
+	int size, background = 0;
+	unsigned long swap_args[1] = {0,};
 
 	if (oom_score_adj > OOMADJ_BACKGRD_LOCKED) {
 		sprintf(buf, "%s/background/cgroup.procs", MEMCG_PATH);
+		background = 1;
 	}
 	else if (oom_score_adj >= OOMADJ_FOREGRD_LOCKED &&
 					oom_score_adj < OOMADJ_BACKGRD_LOCKED)
@@ -1057,16 +1105,21 @@ static void lowmem_move_memcgroup(int pid, int oom_score_adj)
 	else
 		return;
 
-	_I("buf : %s, pid : %d, oom : %d", buf, pid, oom_score_adj);
-	f = fopen(buf, "w");
-	if (!f) {
-		_E("%s open failed", buf);
-		return;
+	swap_args[0] = (unsigned long)pid;
+	if (!swap_status(SWAP_CHECK_PID, swap_args)) {
+		_I("buf : %s, pid : %d, oom : %d", buf, pid, oom_score_adj);
+		f = fopen(buf, "w");
+		if (!f) {
+			_E("%s open failed", buf);
+			return;
+		}
+		size = sprintf(buf, "%d", pid);
+		if (fwrite(buf, size, 1, f) != 1)
+			_E("fwrite cgroup tasks : %d\n", pid);
+		fclose(f);
 	}
-	size = sprintf(buf, "%d", pid);
-	if (fwrite(buf, size, 1, f) != 1)
-		_E("fwrite cgroup tasks : %d\n", pid);
-	fclose(f);
+	if (background)
+		lowmem_swap_memory();
 }
 
 static void lowmem_cgroup_foregrd_manage(int currentpid)
@@ -1185,6 +1238,8 @@ int lowmem_init(void)
 
 	ecore_main_fd_handler_add(lowmem_fd, ECORE_FD_READ,
 				  (Ecore_Fd_Cb)lowmem_cb, NULL, NULL, NULL);
+
+	_I("lowmem_swaptype : %d", swap_status(SWAP_GET_TYPE, NULL));
 
 	lowmem_dbus_init();
 

@@ -1,0 +1,9 @@
+[Unit]
+Description=flashout enable
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/dbus-send --type=signal --system --dest=org.tizen.resourced /Org/Tizen/ResourceD/Swap org.tizen.resourced.swap.SwapFlash int32:1
+
+[Install]
+WantedBy=resourcedperday.timer

@@ -10,8 +10,7 @@ Environment="CGROUP_MEMORY_SWAP=/sys/fs/cgroup/memory/swap"
 Environment="SWAPFILE=/opt/usr/swapfile"
 ExecStartPre=-/bin/mkdir -pm 755 $CGROUP_MEMORY_SWAP
 ExecStartPre=-/bin/sh -c "/bin/echo 3 > $CGROUP_MEMORY_SWAP/memory.move_charge_at_immigrate"
-ExecStart=/usr/bin/resourced -s 1 -u 60 -c swapon
-ExecStopPost=-/sbin/swapoff $SWAPFILE
+ExecStart=/usr/bin/resourced -s 1 -u 60
 Restart=always
 RestartSec=0
 

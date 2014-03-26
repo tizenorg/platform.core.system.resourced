@@ -1,0 +1,15 @@
+[Unit]
+Description=make swapfile
+After=default.target
+ConditionPathExists=!/opt/usr/swapfile
+
+[Service]
+Type=oneshot
+ExecStart=/bin/touch /opt/usr/swapfile
+ExecStart=/bin/dd if=/dev/zero of=/opt/usr/swapfile bs=4096 count=32768
+ExecStart=/bin/chown root:root /opt/usr/swapfile
+ExecStart=/bin/chmod 0600 /opt/usr/swapfile
+ExecStart=/sbin/mkswap /opt/usr/swapfile
+
+[Install]
+WantedBy=graphical.target

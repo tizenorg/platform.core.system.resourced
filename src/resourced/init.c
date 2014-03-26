@@ -32,6 +32,7 @@
 #include "module-data.h"
 #include "proc-main.h"
 #include "proc-monitor.h"
+#include "swap-common.h"
 #include "trace.h"
 #include "version.h"
 #include "resourced.h"
@@ -49,6 +50,11 @@ static struct daemon_opts opts = { 1,
 				   FLUSH_PERIOD,
 				   RESOURCED_DEFAULT_STATE
 				   };
+
+#define SWAP_MAX_ARG_SIZE 16
+
+static char swap_arg[SWAP_ARG_END][SWAP_MAX_ARG_SIZE] = { "swapoff",
+				    "swapon",};
 
 static void print_root_usage()
 {
@@ -69,6 +75,9 @@ static void print_usage()
 	       opts.start_daemon);
 	puts("-v [--version] - program version");
 	puts("-h [--help] - application help");
+	printf("-c string [--swapcontrol=string] - control swap policy and "
+	       "select sting %s, %s by default\n",
+	       swap_arg[SWAP_OFF], swap_arg[SWAP_ON]);
 }
 
 static void print_version()
@@ -79,17 +88,18 @@ static void print_version()
 
 static int parse_cmd(int argc, char **argv)
 {
-	const char *optstring = ":hvu:s:f:w";
+	const char *optstring = ":hvu:s:f:c:w";
 	const struct option options[] = {
 		{"help", no_argument, 0, 'h'},
 		{"version", no_argument, 0, 'v'},
 		{"update-period", required_argument, 0, 'u'},
 		{"flush-period", required_argument, 0, 'f'},
 		{"start-daemon", required_argument, 0, 's'},
+		{"swapcontrol", required_argument, 0, 'c'},
 		{"enable-watchodg", no_argument, 0, 'w'},
 		{0, 0, 0, 0}
 	};
-	int longindex, retval;
+	int longindex, retval, i;
 
 	while ((retval =
 		getopt_long(argc, argv, optstring, options, &longindex)) != -1)
@@ -109,6 +119,16 @@ static int parse_cmd(int argc, char **argv)
 			break;
 		case 's':
 			opts.start_daemon = atoi(optarg);
+			break;
+		case 'c':
+			for (i = 0; i < SWAP_ARG_END; i++)
+				if (optarg && !strncmp(optarg, swap_arg[i],
+						       SWAP_MAX_ARG_SIZE)) {
+					opts.enable_swap = i;
+					_D("argment swaptype = %s",
+					   swap_arg[i]);
+					break;
+				}
 			break;
 		case 'w':
 			proc_set_watchdog_state(PROC_WATCHDOG_ENABLE);
@@ -175,6 +195,7 @@ int resourced_init(struct daemon_arg *darg)
 	ret_code = parse_cmd(darg->argc, darg->argv);
 	ret_value_msg_if(ret_code < 0, RESOURCED_ERROR_FAIL,
 			 "Error parse cmd arguments\n");
+	_D("argment swaptype = %s", swap_arg[opts.enable_swap]);
 	add_signal_handler();
 	edbus_init();
 	return RESOURCED_ERROR_NONE;

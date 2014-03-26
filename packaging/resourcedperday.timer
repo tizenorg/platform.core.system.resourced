@@ -1,0 +1,10 @@
+[Unit]
+Description=resourced timer for service per a day
+
+[Timer]
+OnBootSec=1d
+OnUnitActiveSec=1d
+Unit=resourcedperday.service
+
+[Install]
+WantedBy=multi-user.target

@@ -45,9 +45,11 @@
 #include <Ecore.h>
 
 #include "trace.h"
+#include "cgroup.h"
 #include "proc-main.h"
 #include "lowmem-handler.h"
 #include "proc-process.h"
+#include "swap-common.h"
 #include "lowmem-common.h"
 #include "resourced.h"
 #include "macro.h"
@@ -99,32 +101,38 @@
 #define MEM_SIZE_2048			2048 /* MB */
 
 /* thresholds for 64M RAM*/
+#define MEMCG_MEMORY_64_THRES_SWAP		15 /* MB */
 #define MEMCG_MEMORY_64_THRES_LOW		8 /* MB */
 #define MEMCG_MEMORY_64_THRES_MEDIUM		5 /* MB */
 #define MEMCG_MEMORY_64_THRES_LEAVE		8 /* MB */
 
 /* thresholds for 256M RAM */
+#define MEMCG_MEMORY_256_THRES_SWAP		40 /* MB */
 #define MEMCG_MEMORY_256_THRES_LOW		20 /* MB */
 #define MEMCG_MEMORY_256_THRES_MEDIUM		10 /* MB */
 #define MEMCG_MEMORY_256_THRES_LEAVE		20 /* MB */
 
 /* threshold for 512M RAM */
+#define MEMCG_MEMORY_512_THRES_SWAP		100 /* MB */
 #define MEMCG_MEMORY_512_THRES_LOW		50 /* MB */
 #define MEMCG_MEMORY_512_THRES_MEDIUM		40 /* MB */
 #define MEMCG_MEMORY_512_THRES_LEAVE		60 /* MB */
 
 /* threshold for more than 1024M RAM */
+#define MEMCG_MEMORY_1024_THRES_SWAP		300 /* MB */
 #define MEMCG_MEMORY_1024_THRES_LOW		200 /* MB */
 #define MEMCG_MEMORY_1024_THRES_MEDIUM		100 /* MB */
 #define MEMCG_MEMORY_1024_THRES_LEAVE		150 /* MB */
 
 /* threshold for more than 2048M RAM */
+#define MEMCG_MEMORY_2048_THRES_SWAP		300 /* MB */
 #define MEMCG_MEMORY_2048_THRES_LOW		200 /* MB */
 #define MEMCG_MEMORY_2048_THRES_MEDIUM		160 /* MB */
 #define MEMCG_MEMORY_2048_THRES_LEAVE		300 /* MB */
 
 enum {
 	MEMNOTIFY_NORMAL,
+	MEMNOTIFY_SWAP,
 	MEMNOTIFY_LOW,
 	MEMNOTIFY_MEDIUM,
 	MEMNOTIFY_MAX_LEVELS,
@@ -172,6 +180,7 @@ static int compare_bg_victims(const struct task_info *ta, const struct task_info
 static int compare_fg_victims(const struct task_info *ta, const struct task_info *tb);
 /* low memory action function */
 static void normal_act(void);
+static void swap_act(void);
 static void low_act(void);
 static void medium_act(void);
 
@@ -181,10 +190,16 @@ static Eina_Bool medium_cb(void *data);
 	{ MEMNOTIFY_##c, MEMNOTIFY_##n, act}
 
 static struct lowmem_process_entry lpe[] = {
+	LOWMEM_ENTRY(NORMAL,	SWAP,		swap_act),
 	LOWMEM_ENTRY(NORMAL,	LOW,		low_act),
 	LOWMEM_ENTRY(NORMAL,	MEDIUM,		medium_act),
+	LOWMEM_ENTRY(SWAP, 	NORMAL,		normal_act),
+	LOWMEM_ENTRY(SWAP, 	LOW,		low_act),
+	LOWMEM_ENTRY(SWAP, 	MEDIUM,		medium_act),
+	LOWMEM_ENTRY(LOW, 	SWAP, 		swap_act),
 	LOWMEM_ENTRY(LOW, 	NORMAL, 	normal_act),
 	LOWMEM_ENTRY(LOW, 	MEDIUM, 	medium_act),
+	LOWMEM_ENTRY(MEDIUM,	SWAP, 		swap_act),
 	LOWMEM_ENTRY(MEDIUM,	NORMAL, 	normal_act),
 	LOWMEM_ENTRY(MEDIUM,	LOW, 		low_act),
 };
@@ -509,25 +524,17 @@ static int lowmem_get_cgroup_victims(int idx, int nsel, int max_victims, struct 
 	if (victim_candidates == NULL)
 		return sel;
 
-	if (idx == MEMCG_MEMORY) {
-		sprintf(buf, "%s/%s/system.slice/cgroup.procs",
-				MEMCG_PATH, memcg_class[idx].cgroup_name);
-		f = fopen(buf, "r");
-	}
-
-	if (!f) {
-		sprintf(buf, "%s/%s/cgroup.procs",
+	sprintf(buf, "%s/%s/cgroup.procs",
 			MEMCG_PATH, memcg_class[idx].cgroup_name);
 
-		f = fopen(buf, "r");
-		if (!f) {
-			_E("%s open failed, %d", buf, f);
-			/*
-			 * if task read in this cgroup fails,
-			 * return the current number of victims
-			 */
-			return sel;
-		}
+	f = fopen(buf, "r");
+	if (!f) {
+		_E("%s open failed, %d", buf, f);
+		/*
+		 * if task read in this cgroup fails,
+		 * return the current number of victims
+		 */
+		return sel;
 	}
 
 	while (fgets(buf, 32, f) != NULL) {
@@ -614,16 +621,87 @@ static int lowmem_get_cgroup_victims(int idx, int nsel, int max_victims, struct 
 
 }
 
-/* Find victims: BACKGROUND */
+static int lowmem_swap_cgroup_oom_killer(int force)
+{
+	int ret;
+	char appname[PATH_MAX];
+	int count = 0;
+	char buf[LOWMEM_PATH_MAX] = {0, };
+	FILE *f;
+	unsigned int tsize = 0;
+
+	sprintf(buf, "%s/memory/swap/cgroup.procs",
+			MEMCG_PATH);
+
+	f = fopen(buf, "r");
+	if (!f) {
+		_E("%s open failed, %d", buf, f);
+		return RESOURCED_ERROR_FAIL;
+	}
+
+	while (fgets(buf, 32, f) != NULL) {
+		pid_t tpid = 0;
+		int toom = 0;
+
+		tpid = atoi(buf);
+
+		if (proc_get_oom_score_adj(tpid, &toom) < 0) {
+			_D("pid(%d) was already terminated", tpid);
+			continue;
+		}
+
+		if (!get_mem_usage_by_pid(tpid, &tsize)) {
+			_D("pid(%d) size is not available\n", tpid);
+			continue;
+		}
+
+		/* To Do: skip by checking pgid? */
+		if (toom <= 0)
+			continue;
+
+		ret = proc_get_cmdline(tpid, appname);
+		if (ret == RESOURCED_ERROR_FAIL)
+			continue;
+
+		/* make memps log for killing application firstly */
+		if (count == 0)
+			make_memps_log(MEMPS_LOG_FILE, tpid, appname);
+
+		count++;
+
+		if (force)
+			kill(tpid, SIGTERM);
+		else
+			kill(tpid, SIGKILL);
+		_E("we killed, lowmem lv2 = %d (%s) oom = %d, size = %u KB\n",
+				tpid, appname, toom, tsize);
+	}
+
+	fclose(f);
+
+	return count;
+}
+
+/* Find victims: (SWAP -> ) BACKGROUND */
 static int lowmem_get_memory_cgroup_victims(struct task_info *selected, int force)
 {
-	int i, count = 0;
+	int i, count = 0, swap_victims = 0;
+	int swap_type;
 	unsigned available, should_be_freed = 0, total_size = 0;
 	struct mem_info mi;
 
-	if (force ) {
+	swap_type = swap_status(SWAP_GET_TYPE, NULL);
+	if (swap_type > SWAP_OFF) {
+		swap_victims = lowmem_swap_cgroup_oom_killer(force);
+		_I("number of swap victims = %d\n", swap_victims);
+
+		if (swap_victims >= 5)
+			usleep(OOM_MULTIKILL_WAIT);
+	}
+
+	if (force && swap_victims < MAX_FD_VICTIMS) {
 		count = lowmem_get_cgroup_victims(MEMCG_BACKGROUND, count,
-				MAX_FD_VICTIMS, selected,
+				MAX_FD_VICTIMS - swap_victims, selected,
 				&total_size, 0, force);
 		return count;
 	}
@@ -779,6 +857,9 @@ static char *convert_to_str(int mem_state)
 	case MEMNOTIFY_NORMAL:
 		tmp = "mem normal";
 		break;
+	case MEMNOTIFY_SWAP:
+		tmp = "mem swap";
+		break;
 	case MEMNOTIFY_LOW:
 		tmp = "mem low";
 		break;
@@ -801,6 +882,37 @@ static void change_lowmem_state(unsigned int mem_state)
 	cur_mem_state = mem_state;
 }
 
+static void lowmem_swap_memory(void)
+{
+	pid_t pid;
+	int swap_type;
+	unsigned long swap_args[1] = {0,};
+
+	if (cur_mem_state == MEMNOTIFY_NORMAL) {
+		if (swap_status(SWAP_CHECK_CGROUP, NULL) == SWAP_TRUE)
+			swap_control(SWAP_START, NULL);
+		return;
+	}
+
+	swap_type = swap_status(SWAP_GET_TYPE, NULL);
+
+	if (swap_type == SWAP_ON) {
+		while (1)
+		{
+			pid = (pid_t)swap_status(SWAP_GET_CANDIDATE_PID, NULL);
+			if (!pid)
+				break;
+			_I("swap cgroup entered : pid : %d", (int)pid);
+			swap_args[0] = (unsigned long)pid;
+			swap_control(SWAP_MOVE_CGROUP, swap_args);
+		}
+		if (swap_status(SWAP_GET_STATUS, NULL) == SWAP_OFF)
+			swap_control(SWAP_RESTART, NULL);
+		swap_control(SWAP_START, NULL);
+	}
+}
+
+
 static void normal_act(void)
 {
 	int ret, status;
@@ -814,6 +926,21 @@ static void normal_act(void)
 
 	change_lowmem_state(MEMNOTIFY_NORMAL);
 }
+
+static void swap_act(void)
+{
+	int ret, status;
+
+	ret = vconf_get_int(VCONFKEY_SYSMAN_LOW_MEMORY, &status);
+	if (ret)
+		_E("vconf get failed %s", VCONFKEY_SYSMAN_LOW_MEMORY);
+
+	if (status != VCONFKEY_SYSMAN_LOW_MEMORY_NORMAL)
+		vconf_set_int(VCONFKEY_SYSMAN_LOW_MEMORY,
+				VCONFKEY_SYSMAN_LOW_MEMORY_NORMAL);
+	change_lowmem_state(MEMNOTIFY_SWAP);
+}
+
 
 static void low_act(void)
 {
@@ -1067,6 +1194,9 @@ static Eina_Bool lowmem_cb(void *data, Ecore_Fd_Handler *fd_handler)
 		}
 	}
 
+	/* check flashswap count and off flashswap if needed */
+	swap_status(SWAP_CHECK_SWAPOUT_COUNT, NULL);
+
 	return ECORE_CALLBACK_RENEW;
 }
 
@@ -1215,7 +1345,10 @@ static int set_thresholds(const char * section_name, const struct parse_result *
        if (strcmp(result->section, section_name))
                return RESOURCED_ERROR_NONE;
 
-       if (!strcmp(result->name, "ThresholdLow")) {
+       if (!strcmp(result->name, "ThresholdSwap")) {
+	       int value = atoi(result->value);
+               set_threshold(MEMNOTIFY_SWAP, value);
+       } else if (!strcmp(result->name, "ThresholdLow")) {
 	       int value = atoi(result->value);
 	       set_threshold(MEMNOTIFY_LOW, value);
        } else if (!strcmp(result->name, "ThresholdMedium")) {
@@ -1265,37 +1398,42 @@ static void init_thresholds(void)
 
 	if (total_ramsize <= MEM_SIZE_64) {
 		/* set thresholds for ram size 64M */
+		set_threshold(MEMNOTIFY_SWAP, MEMCG_MEMORY_64_THRES_SWAP);
 		set_threshold(MEMNOTIFY_LOW, MEMCG_MEMORY_64_THRES_LOW);
 		set_threshold(MEMNOTIFY_MEDIUM, MEMCG_MEMORY_64_THRES_MEDIUM);
 		set_leave_threshold(MEMCG_MEMORY_64_THRES_LEAVE);
 		config_parse(MEM_CONF_FILE, memory_load_64_config, NULL);
 	} else if (total_ramsize <= MEM_SIZE_256) {
 		/* set thresholds for ram size 256M */
+		set_threshold(MEMNOTIFY_SWAP, MEMCG_MEMORY_256_THRES_SWAP);
 		set_threshold(MEMNOTIFY_LOW, MEMCG_MEMORY_256_THRES_LOW);
 		set_threshold(MEMNOTIFY_MEDIUM, MEMCG_MEMORY_256_THRES_MEDIUM);
 		set_leave_threshold(MEMCG_MEMORY_256_THRES_LEAVE);
 		config_parse(MEM_CONF_FILE, memory_load_256_config, NULL);
 	} else if (total_ramsize <= MEM_SIZE_512) {
 		/* set thresholds for ram size 512M */
+		set_threshold(MEMNOTIFY_SWAP, MEMCG_MEMORY_512_THRES_SWAP);
 		set_threshold(MEMNOTIFY_LOW, MEMCG_MEMORY_512_THRES_LOW);
 		set_threshold(MEMNOTIFY_MEDIUM, MEMCG_MEMORY_512_THRES_MEDIUM);
 		set_leave_threshold(MEMCG_MEMORY_512_THRES_LEAVE);
 		config_parse(MEM_CONF_FILE, memory_load_512_config, NULL);
 	} else if (total_ramsize <= MEM_SIZE_1024) {
 		/* set thresholds for ram size more than 1G */
+		set_threshold(MEMNOTIFY_SWAP, MEMCG_MEMORY_1024_THRES_SWAP);
 		set_threshold(MEMNOTIFY_LOW, MEMCG_MEMORY_1024_THRES_LOW);
 		set_threshold(MEMNOTIFY_MEDIUM, MEMCG_MEMORY_1024_THRES_MEDIUM);
 		set_leave_threshold(MEMCG_MEMORY_1024_THRES_LEAVE);
 		config_parse(MEM_CONF_FILE, memory_load_1024_config, NULL);
 	} else {
 		/* set thresholds for ram size more than 2G */
+		set_threshold(MEMNOTIFY_SWAP, MEMCG_MEMORY_2048_THRES_SWAP);
 		set_threshold(MEMNOTIFY_LOW, MEMCG_MEMORY_2048_THRES_LOW);
 		set_threshold(MEMNOTIFY_MEDIUM, MEMCG_MEMORY_2048_THRES_MEDIUM);
 		set_leave_threshold(MEMCG_MEMORY_2048_THRES_LEAVE);
 		config_parse(MEM_CONF_FILE, memory_load_2048_config, NULL);
 	}
 
-	for (i = MEMNOTIFY_NORMAL; i < MEMNOTIFY_MAX_LEVELS; i++)
+	for (i = MEMNOTIFY_SWAP; i < MEMNOTIFY_MAX_LEVELS; i++)
 		_I("set threshold for %d to %u", i, thresholds[i]);
 
 	_I("set thres_leave to %u", memcg_class[MEMCG_MEMORY].thres_leave);
@@ -1364,11 +1502,32 @@ static int init_memcg(void)
 			(unsigned int)(limit * MEMCG_MEDIUM_RATIO);
 		memcg_class[i].oomleave =
 			limit - (memcg_class[i].thres_leave << 20);
+		_I("cgroup_name:%s limit:%d thres_low:%d thres_medium:%d oomleave:%d",
+				memcg_class[i].cgroup_name, limit,
+				memcg_class[i].thres_low,
+				memcg_class[i].thres_medium,
+				memcg_class[i].oomleave);
 	}
 
 	return ret;
 }
 
+static void lowmem_check(void)
+{
+	struct mem_info mi;
+	unsigned available;
+
+	get_mem_info(&mi);
+	available = mi.real_free + mi.reclaimable;
+	_D("available = %u", available);
+
+	if(cur_mem_state != MEMNOTIFY_SWAP &&
+		(available <= thresholds[MEMNOTIFY_SWAP] &&
+			available > thresholds[MEMNOTIFY_LOW])) {
+		swap_act();
+
+	}
+}
 
 static int find_foreground_cgroup(void) {
 	int fg, min_fg = -1;
@@ -1395,14 +1554,16 @@ static int find_foreground_cgroup(void) {
 	return min_fg;
 }
 
-void lowmem_move_memcgroup(int pid, int oom_score_adj)
+static void lowmem_move_memcgroup(int pid, int oom_score_adj)
 {
 	char buf[LOWMEM_PATH_MAX] = {0,};
 	FILE *f;
-	int size;
+	int size, background = 0;
+	unsigned long swap_args[1] = {0,};
 
 	if (oom_score_adj >= OOMADJ_BACKGRD_LOCKED) {
 		sprintf(buf, "%s/memory/background/cgroup.procs", MEMCG_PATH);
+		background = 1;
 	} else if (oom_score_adj >= OOMADJ_FOREGRD_LOCKED &&
 					oom_score_adj < OOMADJ_BACKGRD_LOCKED) {
 		int ret;
@@ -1415,7 +1576,8 @@ void lowmem_move_memcgroup(int pid, int oom_score_adj)
 	} else
 		return;
 
-
+	swap_args[0] = (unsigned long)pid;
+	if (!swap_status(SWAP_CHECK_PID, swap_args)) {
 		_D("buf : %s, pid : %d, oom : %d", buf, pid, oom_score_adj);
 		f = fopen(buf, "w");
 		if (!f) {
@@ -1426,10 +1588,14 @@ void lowmem_move_memcgroup(int pid, int oom_score_adj)
 		if (fwrite(buf, size, 1, f) != 1)
 			_E("fwrite cgroup tasks : %d\n", pid);
 		fclose(f);
-
+	}
+	if (background) {
+		lowmem_check();
+		lowmem_swap_memory();
+	}
 }
 
-void lowmem_cgroup_foregrd_manage(int currentpid)
+static void lowmem_cgroup_foregrd_manage(int currentpid)
 {
 	char buf[LOWMEM_PATH_MAX] = {0,};
 	int pid, pgid;

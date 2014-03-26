@@ -59,7 +59,12 @@ struct edbus_object {
 
 /*
  * Core service
+ *   get/set swap status
+ *   operations about swap
  */
+#define RESOURCED_PATH_SWAP				OBJECT_PATH"/Swap"
+#define RESOURCED_INTERFACE_SWAP		INTERFACE_NAME".swap"
+
 #define RESOURCED_PATH_OOM				OBJECT_PATH"/Oom"
 #define RESOURCED_INTERFACE_OOM		INTERFACE_NAME".oom"
 

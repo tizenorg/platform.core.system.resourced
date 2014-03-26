@@ -6,13 +6,17 @@ Group:      System/Management
 License:    Apache-2.0
 Source0:    %{name}-%{version}.tar.gz
 Source1:    resourced.service
-Source2:    resourced-cpucgroup.service
+Source2:    resourcedperday.service
+Source3:    resourcedperday.timer
+Source4:    resourcedswapfile.service
+Source5:    resourced_swapoff.service
+Source6:    resourced-cpucgroup.service
 
 %define powertop_state ON
 %define cpu_module ON
 %define memory_eng ON
+%define swap_state ON
 %define exclude_list_opt_full_path /opt/usr/etc/_exclude_list_file_name_
-
 
 BuildRequires:  cmake
 BuildRequires:  pkgconfig(glib-2.0)
@@ -70,7 +74,7 @@ echo "\
 %endif
 
 cmake . -DCMAKE_INSTALL_PREFIX=/usr -DFULLVER=%{version} -DMAJORVER=${MAJORVER} -DCMAKE_BUILD_TYPE=Release \
-	-DEXCLUDE_LIST_OPT_FULL_PATH=%{exclude_list_opt_full_path} \
+	-DEXCLUDE_LIST_OPT_FULL_PATH=%{exclude_list_opt_full_path} -DSWAP_MODULE=%{swap_state} \
 	-DPOWERTOP_MODULE=%{powertop_state} \
 	-DCPU_MODULE=%{cpu_module} \
 	-DMEMORY_ENG=%{memory_eng}
@@ -89,8 +93,23 @@ cp -f LICENSE %{buildroot}/usr/share/license/%{name}-powertop-wrapper
 %make_install
 
 mkdir -p %{buildroot}%{_libdir}/systemd/system/multi-user.target.wants
+
+%if %{?swap_state} == ON
 install -m 0644 %SOURCE1 %{buildroot}%{_libdir}/systemd/system/resourced.service
 ln -s ../resourced.service %{buildroot}%{_libdir}/systemd/system/multi-user.target.wants/resourced.service
+
+install -m 0644 %SOURCE2 %{buildroot}%{_libdir}/systemd/system/resourcedperday.service
+ln -s ../resourcedperday.service %{buildroot}%{_libdir}/systemd/system/multi-user.target.wants/resourcedperday.service
+install -m 0644 %SOURCE3 %{buildroot}%{_libdir}/systemd/system/resourcedperday.timer
+ln -s ../resourcedperday.timer %{buildroot}%{_libdir}/systemd/system/multi-user.target.wants/resourcedperday.timer
+
+mkdir -p %{buildroot}%{_libdir}/systemd/system/graphical.target.wants
+install -m 0644 %SOURCE4 %{buildroot}%{_libdir}/systemd/system/resourcedswapfile.service
+ln -s ../resourcedswapfile.service %{buildroot}%{_libdir}/systemd/system/graphical.target.wants/resourcedswapfile.service
+%else
+install -m 0644 %SOURCE5 %{buildroot}%{_libdir}/systemd/system/resourced.service
+ln -s ../resourced.service %{buildroot}%{_libdir}/systemd/system/multi-user.target.wants/resourced.service
+%endif
 
 %if %{?cpu_module} == OFF
 mkdir -p %{buildroot}%{_libdir}/systemd/system/graphical.target.wants
@@ -131,6 +150,15 @@ fi
 %{_libdir}/libresourced.so.*
 %{_libdir}/librd-network.so.*
 %{_bindir}/memps
+
+%if %{?swap_state} == ON
+%{_libdir}/systemd/system/resourcedperday.service
+%{_libdir}/systemd/system/multi-user.target.wants/resourcedperday.service
+%{_libdir}/systemd/system/resourcedperday.timer
+%{_libdir}/systemd/system/multi-user.target.wants/resourcedperday.timer
+%{_libdir}/systemd/system/resourcedswapfile.service
+%{_libdir}/systemd/system/graphical.target.wants/resourcedswapfile.service
+%endif
 
 %if %{?powertop_state} == ON
 %files powertop-wrapper

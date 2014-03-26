@@ -34,6 +34,7 @@
 #include "proc-process.h"
 #include "lowmem-common.h"
 #include "macro.h"
+#include "swap-common.h"
 #include "cpu-common.h"
 #include "proc-noti.h"
 #include "proc-winstate.h"
@@ -48,8 +49,14 @@ static int proc_backgrd_manage(int currentpid)
 	int pid = -1, pgid, ret;
 	DIR *dp;
 	struct dirent *dentry;
+	FILE *fp;
+	char buf[sizeof(PROC_OOM_SCORE_ADJ_PATH) + MAX_DEC_SIZE(int)] = {0};
 	char appname[PROC_NAME_MAX];
+	int count = 0;
+	int candidatepid[16] = {0,};
+	int cur_oom = -1, prev_oom=OOMADJ_BACKGRD_UNLOCKED, select_pid=0;
 	static int checkprevpid = 0;
+	unsigned long swap_args[2] = {0,};
 	unsigned long lowmem_args[2] = {0,};
 
 	ret = proc_get_cmdline(currentpid, appname);
@@ -82,6 +89,47 @@ static int proc_backgrd_manage(int currentpid)
 			lowmem_control(LOWMEM_MOVE_CGROUP, lowmem_args);
 			continue;
 		}
+
+		if (select_pid != pid && select_pid == pgid && count < 16)
+		{
+			_D("found candidate child pid = %d, pgid = %d", pid, pgid);
+			candidatepid[count++] = pid;
+			continue;
+		}
+		snprintf(buf, sizeof(buf), PROC_OOM_SCORE_ADJ_PATH, pid);
+		fp = fopen(buf, "r+");
+		if (fp == NULL)
+			continue;
+		if (fgets(buf, sizeof(buf), fp) == NULL) {
+			fclose(fp);
+			continue;
+		}
+		cur_oom = atoi(buf);
+
+		swap_args[0] = (unsigned long)pid;
+		if (cur_oom > OOMADJ_BACKGRD_UNLOCKED && cur_oom > prev_oom
+				&& !swap_status(SWAP_CHECK_PID, swap_args)) {
+			count = 0;
+			candidatepid[count++] = pid;
+			select_pid = pid;
+			prev_oom = cur_oom;
+		}
+
+		if (cur_oom >= OOMADJ_APP_MAX) {
+			fclose(fp);
+			continue;
+		} else if (cur_oom >= OOMADJ_BACKGRD_UNLOCKED) {
+			_D("BACKGRD : process %d set oom_score_adj %d (before %d)",
+					pid, cur_oom+OOMADJ_APP_INCREASE, cur_oom);
+			fprintf(fp, "%d", cur_oom+OOMADJ_APP_INCREASE);
+		}
+		fclose(fp);
+	}
+	if (select_pid) {
+		_D("found candidate pid = %d, count = %d", candidatepid, count);
+		swap_args[0] = (unsigned long)candidatepid;
+		swap_args[1] = (unsigned long)count;
+		swap_status(SWAP_SET_CANDIDATE_PID, swap_args);
 	}
 	checkprevpid = currentpid;
 	closedir(dp);
