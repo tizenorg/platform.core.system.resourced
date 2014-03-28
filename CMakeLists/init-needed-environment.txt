@@ -1,6 +1,4 @@
 SET(fw_name "resourced")
-SET(RESOURCED resourced)
-
 
 SET(RESOURCED resourced)
 SET(LIBRESOURCED lib${RESOURCED})
@@ -105,3 +103,4 @@ SET(CPU_SOURCE_DIR              ${SOURCE_DIR}/cpu)
 IF("${POWERTOP_MODULE}" STREQUAL "ON")
 SET(POWERTOP-WRAPPER_SOURCE_DIR           ${SOURCE_DIR}/powertop-wrapper)
 ENDIF()
+SET(SETTINGS_SOURCE_DIR         ${SOURCE_DIR}/settings)

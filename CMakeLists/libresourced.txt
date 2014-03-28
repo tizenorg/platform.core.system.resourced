@@ -10,11 +10,31 @@ SET(${PROJECT}_HEADERS
   ${INCLUDE_COMMON_DIR}/trace.h
   )
 
+IF("${DATAUSAGE_MODULE}" STREQUAL "ON")
   SET(${PROJECT}_SOURCES
     ${CGROUP_SOURCE_DIR}/cgroup.c
     ${COMMON_SOURCE_DIR}/appid-helper.c
+    ${COMMON_SOURCE_DIR}/file-helper.c
+    ${DATAUSAGE_SOURCE_DIR}/foreach.c
+    ${DATAUSAGE_SOURCE_DIR}/join.c
+    ${DATAUSAGE_SOURCE_DIR}/net-activity.c
+    ${DATAUSAGE_SOURCE_DIR}/options.c
+    ${DATAUSAGE_SOURCE_DIR}/reset.c
+    ${DATAUSAGE_SOURCE_DIR}/restriction.c
+    ${DATAUSAGE_SOURCE_DIR}/update.c
+    ${DATAUSAGE_SOURCE_DIR}/datausage-quota.c
+    ${LIBRESOURCED_SOURCE_DIR}/main.c
+    ${NETWORK_SOURCE_DIR}/generic-netlink.c
+    ${NETWORK_SOURCE_DIR}/net-restriction.c
+    ${NETWORK_SOURCE_DIR}/nl-helper.c
+    ${NETWORK_SOURCE_DIR}/restriction-helper.c
+    ${NETWORK_SOURCE_DIR}/tethering-restriction.c
+    )
+ELSE()
+  SET(${PROJECT}_SOURCES
     ${DATAUSAGE_SOURCE_DIR}/stub-datausage-API.c
     )
+ENDIF()
 
 INCLUDE(FindPkgConfig)
 pkg_check_modules(shared_pkgs REQUIRED dlog
@@ -32,6 +52,7 @@ SET(EXTRA_CFLAGS "${EXTRA_CFLAGS} -fPIC")
 
 INCLUDE_DIRECTORIES(${RESOURCED_INCLUDEDIR}
 		    ${APP-STAT_SOURCE_DIR}/include
+		    ${DATAUSAGE_SOURCE_DIR}/include
 		    ${NETWORK_SOURCE_DIR}/include
 		    ${RESOURCED_SOURCE_DIR})
 
@@ -41,7 +62,12 @@ ADD_LIBRARY(${PROJECT} SHARED
   ${${PROJECT}_HEADERS}
   ${${PROJECT}_SOURCES})
 
+IF("${DATAUSAGE_MODULE}" STREQUAL "ON")
+  TARGET_LINK_LIBRARIES(${PROJECT} classid datausage-quota net-iface settings
+    ${shared_pkgs_LDFLAGS})
+ELSE()
   TARGET_LINK_LIBRARIES(${PROJECT} ${shared_pkgs_LDFLAGS})
+ENDIF()
 
 SET_TARGET_PROPERTIES(${PROJECT}
      PROPERTIES
@@ -50,6 +76,12 @@ SET_TARGET_PROPERTIES(${PROJECT}
      CLEAN_DIRECT_OUTPUT 1
 )
 
+IF("${DATAUSAGE_MODULE}" STREQUAL "ON")
+  ADD_EXECUTABLE(datausagetool ${UTILS_SOURCE_DIR}/datausage-tool.c)
+  TARGET_LINK_LIBRARIES(datausagetool ${PROJECT})
+  INSTALL(TARGETS datausagetool
+    DESTINATION /usr/bin)
+ENDIF()
 
 INSTALL(TARGETS ${PROJECT} DESTINATION lib)
 INSTALL(FILES ${INCLUDE_PUBLIC_DIR}/resourced.h DESTINATION ${CMAKE_INSTALL_PREFIX}/include/system)

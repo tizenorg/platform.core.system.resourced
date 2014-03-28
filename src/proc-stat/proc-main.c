@@ -28,9 +28,11 @@
 #include <Ecore_File.h>
 
 #include "classid-helper.h"
+#include "datausage-common.h"
 #include "proc-process.h"
 #include "proc-main.h"
 
+#include "cgroup.h"
 #include "proc-noti.h"
 #include "trace.h"
 #include "proc-winstate.h"
@@ -220,7 +222,14 @@ int resourced_proc_status_change(int type, pid_t pid, char* app_name)
 		}
 		_SD("launch request %s, %d", app_name, pid);
 
-		raise_update_classid();
+		/* init oom score adj value for preventing killing application during launching */
+		ret = join_net_cls(app_name, pid);
+		if (ret != RESOURCED_ERROR_NONE)
+			_E("Failed to start network counting.");
+		else
+			/* update_classid function is called
+			   only in datausage modules */
+			raise_update_classid();
 
 		break;
 	case PROC_CGROUP_SET_RESUME_REQUEST:
@@ -247,6 +256,7 @@ int resourced_proc_status_change(int type, pid_t pid, char* app_name)
 		if (ret != 0)
 			break;
 
+		proc_add_visibiliry(pid);
 		break;
 	case PROC_CGROUP_SET_INACTIVE:
 		ret = proc_set_inactive(pid, oom_score_adj);

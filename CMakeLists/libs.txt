@@ -1,6 +1,9 @@
 INCLUDE_DIRECTORIES(${RESOURCED_INCLUDEDIR}
+		    ${DATAUSAGE_SOURCE_DIR}/include
 		    ${APP-STAT_SOURCE_DIR}/include
-		    ${RESOURCED_SOURCE_DIR})
+		    ${RESOURCED_SOURCE_DIR}
+		    ${NETWORK_SOURCE_DIR}/include
+            )
 
 INCLUDE(FindPkgConfig)
 
@@ -9,6 +12,10 @@ SET (REQUIRES_LIST
 	vconf
 	edbus
 )
+IF("${DATAUSAGE_MODULE}" STREQUAL "ON")
+	SET(REQUIRES_LIST ${REQUIRES_LIST}
+		capi-telephony-network-info)
+ENDIF()
 
 pkg_check_modules(pkgs REQUIRED ${REQUIRES_LIST})
 
@@ -27,6 +34,69 @@ SET(settings_SOURCES
 
 ADD_LIBRARY(settings STATIC
   ${settings_SOURCES})
+
+IF("${DATAUSAGE_MODULE}" STREQUAL "ON")
+  SET(storage_HEADERS
+    ${DATAUSAGE_SOURCE_DIR}/include/storage.h)
+
+  SET(storage_SOURCES
+    ${DATAUSAGE_SOURCE_DIR}/datausage-quota-processing.c #storage uses it
+    ${DATAUSAGE_SOURCE_DIR}/storage.c)
+
+  SET(protocol-info_HEADERS
+    ${NETWORK_SOURCE_DIR}/include/protocol-info.h)
+
+  SET(protocol-info_SOURCES
+    ${NETWORK_SOURCE_DIR}/protocol-info.c)
+
+  SET(quota_HEADERS
+    ${DATAUSAGE_SOURCE_DIR}/include/datausage-quota-processing.h)
+
+  SET(quota_SOURCES
+    ${COMMON_SOURCE_DIR}/edbus-handler.c
+    ${DATAUSAGE_SOURCE_DIR}/datausage-quota.c
+    ${DATAUSAGE_SOURCE_DIR}/notification.c
+    )
+
+  SET(app-stat_HEADERS
+    ${INCLUDE_COMMON_DIR}/app-stat.h)
+
+  SET(app-stat_SOURCES
+    ${APP-STAT_SOURCE_DIR}/app-stat.c)
+
+  SET(net-iface_HEADERS
+    ${NETWORK_SOURCE_DIR}/include/iface.h)
+
+  SET(net-iface_SOURCES
+    ${NETWORK_SOURCE_DIR}/iface.c)
+
+  SET(roaming_HEADERS
+    ${NETWORK_SOURCE_DIR}/include/roaming.h)
+
+  SET(roaming_SOURCES
+    ${NETWORK_SOURCE_DIR}/roaming.c)
+
+  ADD_LIBRARY(datausage-quota STATIC
+    ${quota_SOURCES} ${quota_HEADERS})
+
+  ADD_LIBRARY(protocol-info STATIC
+    ${protocol-info_SOURCES} ${protocol-info_HEADERS})
+
+  ADD_LIBRARY(storage STATIC
+    ${storage_SOURCES} ${storage_HEADERS})
+  TARGET_LINK_LIBRARIES(storage datausage-quota protocol-info roaming ${pkgs_LDFLAGS})
+
+  ADD_LIBRARY(app-stat STATIC
+    ${app-stat_SOURCES} ${app-stat_HEADERS})
+  TARGET_LINK_LIBRARIES(app-stat net-iface roaming classid)
+
+  ADD_LIBRARY(net-iface STATIC
+    ${net-iface_SOURCES})
+
+  ADD_LIBRARY(roaming STATIC
+    ${roaming_SOURCES})
+  TARGET_LINK_LIBRARIES(roaming ${pkgs_LDFLAGS})
+ENDIF()
 
 SET(classid_HEADERS
   ${APP-STAT_SOURCE_DIR}/include/classid-helper.h)

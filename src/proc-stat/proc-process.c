@@ -31,6 +31,7 @@
 #include "trace.h"
 #include "proc-main.h"
 
+#include "cgroup.h"
 #include "proc-process.h"
 #include "lowmem-common.h"
 #include "macro.h"

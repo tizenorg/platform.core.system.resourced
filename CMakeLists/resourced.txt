@@ -9,12 +9,15 @@ INCLUDE_DIRECTORIES(${RESOURCED_INCLUDEDIR}
   ${MEMORY_SOURCE_DIR}
   ${PROC-STAT_SOURCE_DIR}/include
   ${APP-STAT_SOURCE_DIR}/include
+  ${DATAUSAGE_SOURCE_DIR}/include
   ${NETWORK_SOURCE_DIR}/include)
 
 CONFIGURE_FILE(${INCLUDE_COMMON_DIR}/config.h.in
   ${INCLUDE_COMMON_DIR}/config.h)
 
 SET (HEADERS
+  ${DATAUSAGE_SOURCE_DIR}/include/daemon-options.h
+  ${DATAUSAGE_SOURCE_DIR}/include/datausage-vconf-callbacks.h
   ${INCLUDE_COMMON_DIR}/config.h
   ${INCLUDE_COMMON_DIR}/config-parser.h
   ${INCLUDE_COMMON_DIR}/const.h
@@ -38,7 +41,9 @@ SET (SOURCES
   ${COMMON_SOURCE_DIR}/file-helper.c
   ${COMMON_SOURCE_DIR}/module-data.c
   ${COMMON_SOURCE_DIR}/module.c
-  ${RESOURCED_SOURCE_DIR}/daemon-options.c
+  ${DATAUSAGE_SOURCE_DIR}/counter.c
+  ${DATAUSAGE_SOURCE_DIR}/daemon-options.c
+  ${DATAUSAGE_SOURCE_DIR}/join-local.c
   ${COMMON_SOURCE_DIR}/lowmem-common.c
   ${COMMON_SOURCE_DIR}/swap-common.c
   ${COMMON_SOURCE_DIR}/cpu-common.c
@@ -52,6 +57,30 @@ SET (SOURCES
   ${RESOURCED_SOURCE_DIR}/main.c
   ${RESOURCED_SOURCE_DIR}/settings.c
   )
+
+#datausage module
+IF("${DATAUSAGE_MODULE}" STREQUAL "ON")
+
+  SET(REQUIRES_LIST
+	capi-telephony-network-info
+	network)
+
+  SET(SOURCES ${SOURCES}
+    ${DATAUSAGE_SOURCE_DIR}/counter-process.c
+    ${DATAUSAGE_SOURCE_DIR}/datausage-quota-processing.c
+    ${DATAUSAGE_SOURCE_DIR}/datausage-vconf-callbacks.c
+    ${DATAUSAGE_SOURCE_DIR}/specific-trace.c
+    ${DATAUSAGE_SOURCE_DIR}/datausage-common.c
+    ${NETWORK_SOURCE_DIR}/generic-netlink.c
+    ${NETWORK_SOURCE_DIR}/iface-cb.c
+    ${NETWORK_SOURCE_DIR}/net-restriction.c
+    ${NETWORK_SOURCE_DIR}/restriction-handler.c
+    ${NETWORK_SOURCE_DIR}/restriction-helper.c
+    ${NETWORK_SOURCE_DIR}/restriction-local.c
+    ${NETWORK_SOURCE_DIR}/tethering-restriction.c
+    ${NETWORK_SOURCE_DIR}/tethering.c
+    )
+ENDIF()
 
 #memory module
 IF("${MEMORY_MODULE}" STREQUAL "ON")
@@ -111,6 +140,25 @@ ADD_EXECUTABLE (${PROJECT_NAME} ${HEADERS} ${SOURCES})
 TARGET_LINK_LIBRARIES(${PROJECT_NAME}
   ${daemon_pkgs_LDFLAGS}
   classid)
+
+IF("${DATAUSAGE_MODULE}" STREQUAL "ON")
+  TARGET_LINK_LIBRARIES(${PROJECT_NAME}
+    resourced
+    app-stat
+    storage
+    )
+
+  IF("${CMAKE_BUILD_TYPE}" STREQUAL  "DEBUG")
+	ADD_EXECUTABLE(test-udp-server ${UTILS_SOURCE_DIR}/udp-server.c ${UTILS_SOURCE_DIR}/udp-common.c)
+	ADD_EXECUTABLE(test-udp-client ${UTILS_SOURCE_DIR}/udp-client.c ${UTILS_SOURCE_DIR}/udp-common.c)
+  ADD_EXECUTABLE(iface-test ${UTILS_SOURCE_DIR}/iface-test.c)
+  TARGET_LINK_LIBRARIES(iface-test net-iface ${daemon_pkgs_LDFLAGS})
+
+  ENDIF()
+
+  INSTALL(FILES ${DATA_DIR}/traffic_db.sql
+    DESTINATION /usr/share)
+ENDIF()
 
 SET_TARGET_PROPERTIES(${PROJECT_NAME} PROPERTIES SKIP_BUILD_RPATH true)
 INSTALL(FILES ${PROJECT_NAME}
