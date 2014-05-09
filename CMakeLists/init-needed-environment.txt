@@ -1,5 +1,4 @@
 SET(fw_name "resourced")
-SET(RESOURCED resourced)
 
 
 SET(RESOURCED resourced)

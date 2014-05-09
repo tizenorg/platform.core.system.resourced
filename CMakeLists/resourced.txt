@@ -9,12 +9,15 @@ INCLUDE_DIRECTORIES(${RESOURCED_INCLUDEDIR}
   ${MEMORY_SOURCE_DIR}
   ${PROC-STAT_SOURCE_DIR}/include
   ${APP-STAT_SOURCE_DIR}/include
+  ${DATAUSAGE_SOURCE_DIR}/include
   ${NETWORK_SOURCE_DIR}/include)
 
 CONFIGURE_FILE(${INCLUDE_COMMON_DIR}/config.h.in
   ${INCLUDE_COMMON_DIR}/config.h)
 
 SET (HEADERS
+  ${DATAUSAGE_SOURCE_DIR}/include/daemon-options.h
+  ${DATAUSAGE_SOURCE_DIR}/include/datausage-vconf-callbacks.h
   ${INCLUDE_COMMON_DIR}/config.h
   ${INCLUDE_COMMON_DIR}/config-parser.h
   ${INCLUDE_COMMON_DIR}/const.h
@@ -38,7 +41,9 @@ SET (SOURCES
   ${COMMON_SOURCE_DIR}/file-helper.c
   ${COMMON_SOURCE_DIR}/module-data.c
   ${COMMON_SOURCE_DIR}/module.c
-  ${RESOURCED_SOURCE_DIR}/daemon-options.c
+  ${DATAUSAGE_SOURCE_DIR}/counter.c
+  ${DATAUSAGE_SOURCE_DIR}/daemon-options.c
+  ${DATAUSAGE_SOURCE_DIR}/join-local.c
   ${COMMON_SOURCE_DIR}/lowmem-common.c
   ${COMMON_SOURCE_DIR}/swap-common.c
   ${COMMON_SOURCE_DIR}/cpu-common.c

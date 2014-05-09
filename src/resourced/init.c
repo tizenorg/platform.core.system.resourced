@@ -150,11 +150,6 @@ static int assert_root(void)
 	return RESOURCED_ERROR_NONE;
 }
 
-void reschedule_count_timer(const struct counter_arg *carg, const double delay)
-{
-            ecore_timer_delay(carg->ecore_timer,
-                                  delay - ecore_timer_pending_get(carg->ecore_timer));
-}
 
 static void sig_term_handler(int sig)
 {

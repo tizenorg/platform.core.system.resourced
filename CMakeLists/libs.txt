@@ -1,6 +1,9 @@
 INCLUDE_DIRECTORIES(${RESOURCED_INCLUDEDIR}
+		    ${DATAUSAGE_SOURCE_DIR}/include
 		    ${APP-STAT_SOURCE_DIR}/include
-		    ${RESOURCED_SOURCE_DIR})
+		    ${RESOURCED_SOURCE_DIR}
+		    ${NETWORK_SOURCE_DIR}/include
+            )
 
 INCLUDE(FindPkgConfig)
 
