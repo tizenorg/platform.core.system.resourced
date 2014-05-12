@@ -12,6 +12,10 @@ SET (REQUIRES_LIST
 	vconf
 	edbus
 )
+IF("${DATAUSAGE_MODULE}" STREQUAL "ON")
+	SET(REQUIRES_LIST ${REQUIRES_LIST}
+		capi-telephony-network-info)
+ENDIF()
 
 pkg_check_modules(pkgs REQUIRED ${REQUIRES_LIST})
 
@@ -30,6 +34,47 @@ SET(settings_SOURCES
 
 ADD_LIBRARY(settings STATIC
   ${settings_SOURCES})
+
+IF("${DATAUSAGE_MODULE}" STREQUAL "ON")
+
+  SET(protocol-info_HEADERS
+    ${NETWORK_SOURCE_DIR}/include/protocol-info.h)
+
+  SET(protocol-info_SOURCES
+    ${NETWORK_SOURCE_DIR}/protocol-info.c)
+
+  SET(app-stat_HEADERS
+    ${INCLUDE_COMMON_DIR}/app-stat.h)
+
+  SET(app-stat_SOURCES
+    ${APP-STAT_SOURCE_DIR}/app-stat.c)
+
+  SET(net-iface_HEADERS
+    ${NETWORK_SOURCE_DIR}/include/iface.h)
+
+  SET(net-iface_SOURCES
+    ${NETWORK_SOURCE_DIR}/iface.c)
+
+  SET(roaming_HEADERS
+    ${NETWORK_SOURCE_DIR}/include/roaming.h)
+
+  SET(roaming_SOURCES
+    ${NETWORK_SOURCE_DIR}/roaming.c)
+
+  ADD_LIBRARY(protocol-info STATIC
+    ${protocol-info_SOURCES} ${protocol-info_HEADERS})
+
+  ADD_LIBRARY(app-stat STATIC
+    ${app-stat_SOURCES} ${app-stat_HEADERS})
+  TARGET_LINK_LIBRARIES(app-stat net-iface roaming classid)
+
+  ADD_LIBRARY(net-iface STATIC
+    ${net-iface_SOURCES})
+
+  ADD_LIBRARY(roaming STATIC
+    ${roaming_SOURCES})
+  TARGET_LINK_LIBRARIES(roaming ${pkgs_LDFLAGS})
+ENDIF()
 
 SET(classid_HEADERS
   ${APP-STAT_SOURCE_DIR}/include/classid-helper.h)

@@ -17,6 +17,8 @@ Source6:    resourced-cpucgroup.service
 %define memory_eng ON
 %define swap_state ON
 %define exclude_list_opt_full_path /opt/usr/etc/_exclude_list_file_name_
+%define datausage_state ON
+%define database_full_path /opt/usr/dbspace/.resourced-datausage.db
 
 BuildRequires:  cmake
 BuildRequires:  pkgconfig(glib-2.0)
@@ -24,6 +26,10 @@ BuildRequires:  pkgconfig(dlog)
 BuildRequires:  pkgconfig(sqlite3)
 BuildRequires:  pkgconfig(vconf)
 BuildRequires:  pkgconfig(vconf-internal-keys)
+%if %{?datausage_state} == ON
+BuildRequires:  pkgconfig(capi-telephony-network-info)
+BuildRequires:  pkgconfig(network)
+%endif
 BuildRequires:  pkgconfig(ecore)
 BuildRequires:  pkgconfig(x11)
 BuildRequires:  pkgconfig(ecore-x)
@@ -31,6 +37,10 @@ BuildRequires:  pkgconfig(utilX)
 BuildRequires:  pkgconfig(ecore-input)
 BuildRequires:  pkgconfig(ecore-file)
 BuildRequires:  pkgconfig(edbus)
+BuildRequires:  pkgconfig(appcore-common)
+BuildRequires:  pkgconfig(appcore-efl)
+BuildRequires:  pkgconfig(elementary)
+BuildRequires:  pkgconfig(vconf)
 
 Requires(post): /sbin/ldconfig
 Requires(postun): /sbin/ldconfig
@@ -77,7 +87,9 @@ cmake . -DCMAKE_INSTALL_PREFIX=/usr -DFULLVER=%{version} -DMAJORVER=${MAJORVER} 
 	-DEXCLUDE_LIST_OPT_FULL_PATH=%{exclude_list_opt_full_path} -DSWAP_MODULE=%{swap_state} \
 	-DPOWERTOP_MODULE=%{powertop_state} \
 	-DCPU_MODULE=%{cpu_module} \
-	-DMEMORY_ENG=%{memory_eng}
+	-DMEMORY_ENG=%{memory_eng}\
+    -DDATAUSAGE_MODULE=%{datausage_state} \
+    -DDATABASE_FULL_PATH=%{database_full_path} 
 
 make %{?jobs:-j%jobs}
 
@@ -91,6 +103,12 @@ cp -f LICENSE %{buildroot}/usr/share/license/%{name}-powertop-wrapper
 %endif
 
 %make_install
+
+%if %{?datausage_state} == ON
+	mkdir -p %{buildroot}/opt/usr/dbspace
+	sqlite3 %{buildroot}%{database_full_path} < %{buildroot}/usr/share/traffic_db.sql
+	rm %{buildroot}/usr/share/traffic_db.sql
+%endif
 
 mkdir -p %{buildroot}%{_libdir}/systemd/system/multi-user.target.wants
 
@@ -150,6 +168,10 @@ fi
 %{_libdir}/libresourced.so.*
 %{_libdir}/librd-network.so.*
 %{_bindir}/memps
+%if %{?datausage_state} == ON
+    %config(noreplace) %attr(660,root,app) %{database_full_path}
+    %config(noreplace) %attr(660,root,app) %{database_full_path}-journal
+%endif
 
 %if %{?swap_state} == ON
 %{_libdir}/systemd/system/resourcedperday.service
