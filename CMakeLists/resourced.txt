@@ -18,6 +18,8 @@ CONFIGURE_FILE(${INCLUDE_COMMON_DIR}/config.h.in
 SET (HEADERS
   ${DATAUSAGE_SOURCE_DIR}/include/daemon-options.h
   ${DATAUSAGE_SOURCE_DIR}/include/datausage-vconf-callbacks.h
+  ${DATAUSAGE_SOURCE_DIR}/include/settings.h
+  ${DATAUSAGE_SOURCE_DIR}/include/counter.h
   ${INCLUDE_COMMON_DIR}/config.h
   ${INCLUDE_COMMON_DIR}/config-parser.h
   ${INCLUDE_COMMON_DIR}/const.h
@@ -25,10 +27,7 @@ SET (HEADERS
   ${INCLUDE_COMMON_DIR}/lowmem-common.h
   ${INCLUDE_COMMON_DIR}/module-data.h
   ${INCLUDE_COMMON_DIR}/module.h
-  ${INCLUDE_COMMON_DIR}/daemon-options.h
-  ${INCLUDE_COMMON_DIR}/settings.h
   ${INCLUDE_COMMON_DIR}/transmission.h
-  ${COMMON_SOURCE_DIR}/counter.h
   ${INCLUDE_COMMON_DIR}/swap-common.h
   ${INCLUDE_COMMON_DIR}/cpu-common.h
   )
@@ -55,9 +54,20 @@ SET (SOURCES
   ${PROC-STAT_SOURCE_DIR}/proc-winstate.c
   ${RESOURCED_SOURCE_DIR}/init.c
   ${RESOURCED_SOURCE_DIR}/main.c
-  ${RESOURCED_SOURCE_DIR}/settings.c
   )
 
+#datausage module
+IF("${DATAUSAGE_MODULE}" STREQUAL "ON")
+
+  SET(REQUIRES_LIST
+	capi-telephony-network-info
+	network)
+
+  SET(SOURCES ${SOURCES}
+    ${DATAUSAGE_SOURCE_DIR}/stub-datausage-API-min.c
+    ${DATAUSAGE_SOURCE_DIR}/datausage-common.c
+    )
+ENDIF()
 #memory module
 IF("${MEMORY_MODULE}" STREQUAL "ON")
   SET(SOURCES ${SOURCES}
@@ -115,7 +125,26 @@ TARGET_LINK_LIBRARIES(cgroup-test ${daemon_pkgs_LDFLAGS} "-L/lib/ -lrt")
 ADD_EXECUTABLE (${PROJECT_NAME} ${HEADERS} ${SOURCES})
 TARGET_LINK_LIBRARIES(${PROJECT_NAME}
   ${daemon_pkgs_LDFLAGS}
+  settings
   classid)
+
+IF("${DATAUSAGE_MODULE}" STREQUAL "ON")
+  TARGET_LINK_LIBRARIES(${PROJECT_NAME}
+    resourced
+    app-stat
+    )
+
+  IF("${CMAKE_BUILD_TYPE}" STREQUAL  "DEBUG")
+	ADD_EXECUTABLE(test-udp-server ${UTILS_SOURCE_DIR}/udp-server.c ${UTILS_SOURCE_DIR}/udp-common.c)
+	ADD_EXECUTABLE(test-udp-client ${UTILS_SOURCE_DIR}/udp-client.c ${UTILS_SOURCE_DIR}/udp-common.c)
+  ADD_EXECUTABLE(iface-test ${UTILS_SOURCE_DIR}/iface-test.c)
+  TARGET_LINK_LIBRARIES(iface-test net-iface ${daemon_pkgs_LDFLAGS})
+
+  ENDIF()
+
+  INSTALL(FILES ${DATA_DIR}/traffic_db.sql
+    DESTINATION /usr/share)
+ENDIF()
 
 SET_TARGET_PROPERTIES(${PROJECT_NAME} PROPERTIES SKIP_BUILD_RPATH true)
 INSTALL(FILES ${PROJECT_NAME}
