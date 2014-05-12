@@ -17,24 +17,25 @@
  *
  */
 
-/*
- *
- * @file settings.h
- *
- * Copyright (c) 2012 Samsung Electronics Co., Ltd. All rights reserved.
- *
+/**
+ * @file join.c
+ * @desc Implement Performance API. Joining performance control.
+ *    Entity for creation cgroup
  */
 
-#ifndef TRESOURCED_LIBS_SETTINGS_H_
-#define TRESOURCED_LIBS_SETTINGS_H_
+#include <resourced.h>
 
-#include "resourced.h"
+#include "appid-helper.h"
+#include "cgroup.h"
+#include "const.h"
+#include "trace.h"
 
-#define RESOURCED_WIFI_STATISTICS_PATH "db/private/resourced/wifi_statistics"
-#define RESOURCED_DATACALL_PATH "db/private/resourced/datacall"
-#define RESOURCED_DATAUSAGE_TIMER_PATH "db/private/resourced/datausage_timer"
-#define RESOURCED_DATACALL_LOGGING_PATH "db/private/resourced/datacall_logging"
+API resourced_ret_c join_app_performance(const char *app_id, const pid_t pid)
+{
+	char pkgname[MAX_PATH_LENGTH];
+	if (!app_id)
+		return RESOURCED_ERROR_INVALID_PARAMETER;
 
-int load_options(resourced_options *options);
-
-#endif /*TRESOURCED_LIBS_SETTINGS_H_*/
+	extract_pkgname(app_id, pkgname, sizeof(pkgname));
+	return make_net_cls_cgroup_with_pid(pid, pkgname);
+}
