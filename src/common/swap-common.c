@@ -69,11 +69,8 @@ int swap_status(enum swap_status_type type, unsigned long *args)
 
 	if (!swap) {
 		swap_find_module();
-		if (!swap) {
-			if (type == SWAP_CHECK_PID)
-				ret = RESOURCED_ERROR_FAIL;
+		if (!swap)
 			return ret;
-		}
 	}
 
 	s_data.data_type.status_type = type;
