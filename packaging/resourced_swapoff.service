@@ -13,6 +13,7 @@ ExecStartPre=-/bin/sh -c "/bin/echo 3 > $CGROUP_MEMORY_SWAP/memory.move_charge_a
 ExecStart=/usr/bin/resourced -s 1 -u 60
 Restart=always
 RestartSec=0
+MemoryLimit=10M
 
 [Install]
 WantedBy=multi-user.target
