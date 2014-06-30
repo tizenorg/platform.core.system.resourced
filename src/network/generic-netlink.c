@@ -388,46 +388,15 @@ static resourced_ret_c send_common_cmd(int sock, const pid_t pid,
 	return RESOURCED_ERROR_NONE;
 }
 
-static resourced_ret_c run_net_activity(const __u8 cmd)
-{
-	int sock;
-	uint32_t family_id;
-	resourced_ret_c ret;
-	pid_t pid;
-	sock = create_netlink(NETLINK_GENERIC, 0);
-
-	ret_value_msg_if(sock < 0, RESOURCED_ERROR_FAIL,
-		"Failed to create netlink socket");
-	pid = getpid();
-	family_id = get_family_id(sock, pid, "NET_ACTIVITY");
-	if (!family_id) {
-		_E("Invalid family id number");
-		close(sock);
-		return RESOURCED_ERROR_FAIL;
-	}
-	/* send without handling response */
-	ret = send_command(sock, pid, family_id, cmd);
-
-	if (ret != RESOURCED_ERROR_NONE) {
-		ETRACE_ERRNO_MSG("Failed to send \
-			net_activity command %u", cmd);
-		/* send_command return errno */
-		ret = RESOURCED_ERROR_FAIL;
-	}
-
-	close(sock);
-
-	return ret;
-}
 
 resourced_ret_c start_net_activity(void)
 {
-	return run_net_activity(NET_ACTIVITY_C_START);
+	return 0;
 }
 
 resourced_ret_c stop_net_activity(void)
 {
-	return run_net_activity(NET_ACTIVITY_C_STOP);
+	return 0;
 }
 
 

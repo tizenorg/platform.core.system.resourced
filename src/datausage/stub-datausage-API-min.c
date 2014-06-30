@@ -83,16 +83,6 @@ API resourced_ret_c data_usage_details_foreach(
 	return no_datausage();
 }
 
-API resourced_ret_c set_resourced_options(const resourced_options *options)
-{
-	return no_datausage();
-}
-
-API resourced_ret_c get_resourced_options(resourced_options *options)
-{
-	return no_datausage();
-}
-
 API resourced_ret_c set_net_restriction(const char *app_id,
 					const resourced_net_restrictions *rst)
 {
