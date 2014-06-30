@@ -17,9 +17,11 @@ CONFIGURE_FILE(${INCLUDE_COMMON_DIR}/config.h.in
 
 SET (HEADERS
   ${DATAUSAGE_SOURCE_DIR}/include/daemon-options.h
-  ${DATAUSAGE_SOURCE_DIR}/include/datausage-vconf-callbacks.h
+#  ${DATAUSAGE_SOURCE_DIR}/include/datausage-vconf-callbacks.h
   ${DATAUSAGE_SOURCE_DIR}/include/settings.h
   ${DATAUSAGE_SOURCE_DIR}/include/counter.h
+  ${DATAUSAGE_SOURCE_DIR}/include/counter-process.h
+  ${DATAUSAGE_SOURCE_DIR}/include/iptables_helper.h
   ${INCLUDE_COMMON_DIR}/config.h
   ${INCLUDE_COMMON_DIR}/config-parser.h
   ${INCLUDE_COMMON_DIR}/const.h
@@ -29,6 +31,7 @@ SET (HEADERS
   ${INCLUDE_COMMON_DIR}/module.h
   ${INCLUDE_COMMON_DIR}/transmission.h
   ${INCLUDE_COMMON_DIR}/swap-common.h
+  ${NETWORK_SOURCE_DIR}/include/iface-cb.h
   ${INCLUDE_COMMON_DIR}/cpu-common.h
   )
 
@@ -64,8 +67,19 @@ IF("${DATAUSAGE_MODULE}" STREQUAL "ON")
 	network)
 
   SET(SOURCES ${SOURCES}
-    ${DATAUSAGE_SOURCE_DIR}/stub-datausage-API-min.c
+    ${DATAUSAGE_SOURCE_DIR}/counter-process.c
+#    ${DATAUSAGE_SOURCE_DIR}/datausage-vconf-callbacks.c
+    ${DATAUSAGE_SOURCE_DIR}/specific-trace.c
     ${DATAUSAGE_SOURCE_DIR}/datausage-common.c
+    ${DATAUSAGE_SOURCE_DIR}/iptables_helper.c
+    ${NETWORK_SOURCE_DIR}/generic-netlink.c
+    ${NETWORK_SOURCE_DIR}/iface-cb.c
+    ${NETWORK_SOURCE_DIR}/net-restriction.c
+    ${NETWORK_SOURCE_DIR}/restriction-handler.c
+    ${NETWORK_SOURCE_DIR}/restriction-helper.c
+    ${NETWORK_SOURCE_DIR}/restriction-local.c
+    ${NETWORK_SOURCE_DIR}/tethering-restriction.c
+    ${NETWORK_SOURCE_DIR}/tethering.c
     )
 ENDIF()
 #memory module
@@ -132,6 +146,7 @@ IF("${DATAUSAGE_MODULE}" STREQUAL "ON")
   TARGET_LINK_LIBRARIES(${PROJECT_NAME}
     resourced
     app-stat
+    storage
     )
 
   IF("${CMAKE_BUILD_TYPE}" STREQUAL  "DEBUG")

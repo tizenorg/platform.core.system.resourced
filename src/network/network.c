@@ -94,7 +94,7 @@ API network_error_e network_exclude_restriction_by_iftype(
 
 API network_error_e network_register_activity_cb(network_activity_cb activity_cb)
 {
-	return (network_error_e)register_net_activity_cb((net_activity_cb)activity_cb);
+    return RESOURCED_ERROR_NOTIMPL;
 }
 
 API network_error_e network_join_app_performance(const char *app_id, const pid_t pid)
@@ -132,26 +132,7 @@ API network_error_e network_reset(const network_reset_rule_s *rule)
 	return (network_error_e)reset_data_usage((const data_usage_reset_rule*)rule);
 }
 
-API network_error_e network_remove_quota(
-	const network_quota_reset_rule_s *rule)
-{
-	return (network_error_e)remove_datausage_quota(
-			(const struct datausage_quota_reset_rule*)rule);
-}
 
-API network_error_e network_remove_quota_by_iftype(
-	const char *app_id, const network_iface_e iftype)
-{
-	return (network_error_e)remove_datausage_quota_by_iftype(app_id,
-			(const resourced_iface_type)iftype);
-}
-
-API network_error_e network_set_quota(const char *app_id,
-			      const network_quota_s *quota)
-{
-	return (network_error_e)set_datausage_quota(app_id,
-			(const data_usage_quota*)quota);
-}
 
 API network_error_e network_get_restriction_state(const char *pkg_id,
 	network_iface_e iftype, network_restriction_state *state)

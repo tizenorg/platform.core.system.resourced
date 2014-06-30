@@ -16,6 +16,7 @@ IF("${DATAUSAGE_MODULE}" STREQUAL "ON")
     ${COMMON_SOURCE_DIR}/appid-helper.c
     ${COMMON_SOURCE_DIR}/file-helper.c
     ${DATAUSAGE_SOURCE_DIR}/join.c
+    ${DATAUSAGE_SOURCE_DIR}/options.c
     ${DATAUSAGE_SOURCE_DIR}/stub-datausage-API-min.c
     ${LIBRESOURCED_SOURCE_DIR}/main.c
     )
