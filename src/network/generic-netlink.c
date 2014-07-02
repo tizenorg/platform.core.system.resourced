@@ -388,6 +388,7 @@ static resourced_ret_c send_common_cmd(int sock, const pid_t pid,
 	return RESOURCED_ERROR_NONE;
 }
 
+#if 0
 static resourced_ret_c run_net_activity(const __u8 cmd)
 {
 	int sock;
@@ -419,15 +420,16 @@ static resourced_ret_c run_net_activity(const __u8 cmd)
 
 	return ret;
 }
+#endif
 
 resourced_ret_c start_net_activity(void)
 {
-	return run_net_activity(NET_ACTIVITY_C_START);
+	return 0;
 }
 
 resourced_ret_c stop_net_activity(void)
 {
-	return run_net_activity(NET_ACTIVITY_C_STOP);
+	return 0;
 }
 
 
