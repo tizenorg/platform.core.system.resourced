@@ -184,7 +184,7 @@ static int __find_win(Display *d, pid_t pid)
 		p = __get_win_pid(d, w->winid);
 		if (p == pid) {
 			found++;
-			_D("__find_win : pid %d, win %x", pid, w->winid);
+			_D("__find_win : pid %d, win %x", pid, (int)(w->winid));
 			ecore_x_window_client_sniff(w->winid);
 		}
 		w = w->next;
