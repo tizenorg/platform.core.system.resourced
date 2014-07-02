@@ -36,6 +36,11 @@ ADD_LIBRARY(settings STATIC
   ${settings_SOURCES})
 
 IF("${DATAUSAGE_MODULE}" STREQUAL "ON")
+  SET(storage_HEADERS
+    ${DATAUSAGE_SOURCE_DIR}/include/storage.h)
+
+  SET(storage_SOURCES
+    ${DATAUSAGE_SOURCE_DIR}/storage.c)
 
   SET(protocol-info_HEADERS
     ${NETWORK_SOURCE_DIR}/include/protocol-info.h)
@@ -63,6 +68,9 @@ IF("${DATAUSAGE_MODULE}" STREQUAL "ON")
 
   ADD_LIBRARY(protocol-info STATIC
     ${protocol-info_SOURCES} ${protocol-info_HEADERS})
+  ADD_LIBRARY(storage STATIC
+    ${storage_SOURCES} ${storage_HEADERS})
+  TARGET_LINK_LIBRARIES(storage protocol-info roaming ${pkgs_LDFLAGS})
 
   ADD_LIBRARY(app-stat STATIC
     ${app-stat_SOURCES} ${app-stat_HEADERS})

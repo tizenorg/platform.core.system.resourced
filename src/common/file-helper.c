@@ -110,7 +110,7 @@ resourced_ret_c fwrite_array(const char *path, const void *array,
 	ret = fwrite(array, size_of_elem, numb_of_elem, f);
 	fclose(f);
 	ret_value_errno_msg_if(ret != numb_of_elem, RESOURCED_ERROR_FAIL,
-			       "Failed write array into %s file\n");
+			       "Failed write array into %s file\n", path);
 
 	return RESOURCED_ERROR_NONE;
 }

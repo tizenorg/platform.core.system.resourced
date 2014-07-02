@@ -94,7 +94,7 @@ API network_error_e network_exclude_restriction_by_iftype(
 
 API network_error_e network_register_activity_cb(network_activity_cb activity_cb)
 {
-	return (network_error_e)register_net_activity_cb((net_activity_cb)activity_cb);
+	return RESOURCED_ERROR_NOTIMPL;
 }
 
 API network_error_e network_join_app_performance(const char *app_id, const pid_t pid)

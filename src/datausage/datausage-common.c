@@ -20,15 +20,11 @@
  * @file datausage.c
  *
  * @desc Datausage module
- *
- * Copyright (c) 2013 Samsung Electronics Co., Ltd. All rights reserved.
- *
  */
 
 #include "counter-process.h"
 #include "counter.h"
 #include "datausage-common.h"
-#include "datausage-quota.h"
 #include "datausage-vconf-callbacks.h"
 #include "iface-cb.h"
 #include "macro.h"
@@ -41,14 +37,34 @@
 #include "storage.h"
 #include "trace.h"
 
-
 static int resourced_datausage_init(void *data)
 {
+	struct modules_arg *marg = (struct modules_arg *)data;
+	struct shared_modules_data *m_data = get_shared_modules_data();
+	int ret_code;
+
+	_D("Initialize network counter function\n");
+	ret_value_msg_if(marg == NULL, RESOURCED_ERROR_INVALID_PARAMETER,
+			 "Invalid modules argument\n");
+	ret_value_msg_if(m_data == NULL, RESOURCED_ERROR_FAIL,
+			 "Invalid shared modules data\n");
+	m_data->carg = init_counter_arg(marg->opts);
+
+	ret_code = resourced_init_counter_func(m_data->carg);
+	ret_value_msg_if(ret_code < 0, ret_code, "Error init counter func\n");
+
 	return RESOURCED_ERROR_NONE;
 }
 
 static int resourced_datausage_finalize(void *data)
 {
+	struct shared_modules_data *m_data = get_shared_modules_data();
+
+	_D("Finalize network counter function\n");
+
+	resourced_finalize_counter_func(m_data->carg);
+	finalize_carg(m_data->carg);
+	finalize_storage_stm();
 	return RESOURCED_ERROR_NONE;
 }
 
