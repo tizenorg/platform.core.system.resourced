@@ -37,7 +37,6 @@ ENDIF()
 SET(PREFIX ${CMAKE_INSTALL_PREFIX})
 
 #following section is needed for pkg-config *.in file
-SET(LIBDIR ${PREFIX}/lib)
 SET(INCLUDEDIR ${PREFIX}/include)
 SET(PC_NAME lib${RESOURCED})
 SET(PC_NAME_DEPRECATED ${fw_name})
@@ -99,8 +98,8 @@ SET(CPU_SOURCE_DIR              ${SOURCE_DIR}/cpu)
 SET(VIP_SOURCE_DIR              ${SOURCE_DIR}/vip-agent)
 SET(TIMER_SOURCE_DIR              ${SOURCE_DIR}/timer-slack)
 
-INSTALL(FILES ${CMAKE_SOURCE_DIR}/lib${RESOURCED}.pc DESTINATION lib/pkgconfig)
-INSTALL(FILES ${CMAKE_SOURCE_DIR}/${fw_name}.pc DESTINATION lib/pkgconfig)
+INSTALL(FILES ${CMAKE_SOURCE_DIR}/lib${RESOURCED}.pc DESTINATION ${LIB_INSTALL_DIR}/pkgconfig)
+INSTALL(FILES ${CMAKE_SOURCE_DIR}/${fw_name}.pc DESTINATION ${LIB_INSTALL_DIR}/pkgconfig)
 INSTALL(FILES ${CMAKE_SOURCE_DIR}/resourced.conf DESTINATION /etc/dbus-1/system.d)
 
 FILE(MAKE_DIRECTORY ${RESOURCED}-cmake)
