@@ -28,7 +28,7 @@
 #include <errno.h>
 #include <ctype.h>
 #include <sys/types.h>
-#include "cpu-common.h"
+#include "notifier.h"
 #include "proc-main.h"
 #include "proc-process.h"
 #include "macro.h"
@@ -41,40 +41,13 @@
 #include "config-parser.h"
 #include "const.h"
 
-#include <fcntl.h>               /*mkdirat */
-#include <sys/stat.h>            /*mkdirat */
-#include <stdlib.h>
-
 #define CPU_DEFAULT_CGROUP "/sys/fs/cgroup/cpu"
 #define CPU_CONTROL_GROUP "/sys/fs/cgroup/cpu/background"
+#define CPU_CONTROL_SERVICE_GROUP "/sys/fs/cgroup/cpu/service"
 #define CPU_CONF_FILE                  "/etc/resourced/cpu.conf"
 #define CPU_CONF_SECTION	"CONTROL"
 #define CPU_CONF_PREDEFINE	"PREDEFINE"
 #define CPU_SHARE	"/cpu.shares"
-
-static int make_cpu_cgroup(char* path)
-{
-	DIR *dir = 0;
-	int fd;
-	dir = opendir(CPU_DEFAULT_CGROUP);
-	if (!dir) {
-		_E("cpu cgroup doesn't exit : %d", errno);
-		return RESOURCED_ERROR_UNINITIALIZED;
-	}
-	fd = dirfd(dir);
-	if (fd < 0) {
-		_E("fail to get fd about cpu cgroup : %d", errno);
-		closedir(dir);
-		return RESOURCED_ERROR_UNINITIALIZED;
-	}
-	if (mkdirat(fd, path, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IXOTH) < 0) {
-		_E("fail to get fd about cpu cgroup : %d", errno);
-		closedir(dir);
-		return RESOURCED_ERROR_UNINITIALIZED;
-	}
-	closedir(dir);
-	return RESOURCED_ERROR_NONE;
-}
 
 static int cpu_move_cgroup(pid_t pid, char *path)
 {
@@ -93,34 +66,40 @@ static int load_cpu_config(struct parse_result *result, void *user_data)
 		pid = find_pid_from_cmdline(result->value);
 		if (pid > 0)
 			cpu_move_cgroup(pid, CPU_CONTROL_GROUP);
-	} else if (!strcmp(result->name, "CPU_SHARE")) {
+	} else if (!strcmp(result->name, "BACKGROUND_CPU_SHARE")) {
 		value = atoi(result->value);
 		if (value)
 			cgroup_write_node(CPU_CONTROL_GROUP, CPU_SHARE, value);
+       } else if (!strcmp(result->name, "SERVICE_CPU_SHARE")) {
+		value = atoi(result->value);
+		if (value)
+			cgroup_write_node(CPU_CONTROL_SERVICE_GROUP, CPU_SHARE, value);
        }
        return RESOURCED_ERROR_NONE;
 }
 
-static int resourced_cpu_control(void *data)
+static int cpu_service_launch(void *data)
 {
-	struct cpu_data_type *c_data;
-	int ret = RESOURCED_ERROR_NONE;
-	pid_t pid;
-	c_data = (struct cpu_data_type *)data;
-	if (!c_data)
-		return RESOURCED_ERROR_NO_DATA;
-	pid = c_data->pid;
-	_D("resourced_cpu_control : type = %d, pid = %d", c_data->control_type, pid);
-	switch(c_data->control_type) {
-	case CPU_SET_LAUNCH:
-	case CPU_SET_FOREGROUND:
-		ret = cpu_move_cgroup(pid, CPU_DEFAULT_CGROUP);
-		break;
-	case CPU_SET_BACKGROUND:
-		ret = cpu_move_cgroup(pid, CPU_CONTROL_GROUP);
-		break;
-	}
-	return ret;
+	struct proc_status *p_data = (struct proc_status*)data;
+	_D("cpu_service_launch : pid = %d, appname = %s", p_data->pid, p_data->appid);
+	cpu_move_cgroup(p_data->pid, CPU_CONTROL_SERVICE_GROUP);
+	return RESOURCED_ERROR_NONE;
+}
+
+static int cpu_foreground_state(void *data)
+{
+	struct proc_status *p_data = (struct proc_status*)data;
+	_D("cpu_foreground_state : pid = %d, appname = %s", p_data->pid, p_data->appid);
+	cpu_move_cgroup(p_data->pid, CPU_DEFAULT_CGROUP);
+	return RESOURCED_ERROR_NONE;
+}
+
+static int cpu_background_state(void *data)
+{
+	struct proc_status *p_data = (struct proc_status*)data;
+	_D("cpu_background_state : pid = %d, appname = %s", p_data->pid, p_data->appid);
+	cpu_move_cgroup(p_data->pid, CPU_CONTROL_SERVICE_GROUP);
+	return RESOURCED_ERROR_NONE;
 }
 
 static int resourced_cpu_init(void *data)
@@ -128,14 +107,25 @@ static int resourced_cpu_init(void *data)
 	int ret_code;
 
 	_D("resourced_cpu_init");
-	ret_code = make_cpu_cgroup(CPU_CONTROL_GROUP);
+	ret_code = make_cgroup_subdir(CPU_DEFAULT_CGROUP, "background", NULL);
 	ret_value_msg_if(ret_code < 0, ret_code, "cpu init failed\n");
+	ret_code = make_cgroup_subdir(CPU_DEFAULT_CGROUP, "service", NULL);
+	ret_value_msg_if(ret_code < 0, ret_code, "create service cgroup failed\n");
 	config_parse(CPU_CONF_FILE, load_cpu_config, NULL);
+
+	register_notifier(RESOURCED_NOTIFIER_SERVICE_LAUNCH, cpu_service_launch);
+	register_notifier(RESOURCED_NOTIFIER_APP_RESUME, cpu_foreground_state);
+	register_notifier(RESOURCED_NOTIFIER_APP_FOREGRD, cpu_foreground_state);
+	register_notifier(RESOURCED_NOTIFIER_APP_BACKGRD, cpu_background_state);
 	return RESOURCED_ERROR_NONE;
 }
 
 static int resourced_cpu_finalize(void *data)
 {
+	unregister_notifier(RESOURCED_NOTIFIER_SERVICE_LAUNCH, cpu_service_launch);
+	unregister_notifier(RESOURCED_NOTIFIER_APP_RESUME, cpu_foreground_state);
+	unregister_notifier(RESOURCED_NOTIFIER_APP_FOREGRD, cpu_foreground_state);
+	unregister_notifier(RESOURCED_NOTIFIER_APP_BACKGRD, cpu_background_state);
 	return RESOURCED_ERROR_NONE;
 }
 
@@ -144,7 +134,6 @@ static struct module_ops cpu_modules_ops = {
 	.name = "cpu",
 	.init = resourced_cpu_init,
 	.exit = resourced_cpu_finalize,
-	.control = resourced_cpu_control,
 };
 
 MODULE_REGISTER(&cpu_modules_ops)

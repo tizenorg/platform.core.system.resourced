@@ -46,7 +46,7 @@ void extract_pkgname(const char *appid, char *pkgname,
 		pkgname_res_size = pkgname_res_size > pkgname_size ?
 			pkgname_size : pkgname_res_size;
 	} else
-		pkgname_res_size = pkgname_size;
+		pkgname_res_size = pkgname_size -1;
 
 	strncpy(pkgname, appid, pkgname_res_size);
 	pkgname[pkgname_res_size] = '\0';

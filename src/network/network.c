@@ -28,12 +28,12 @@
 
 #include <stdio.h>
 
-#include "resourced.h"
 #include "data_usage.h"
 #include "datausage-restriction.h"
-#include "cgroup.h"
-#include "const.h"
+#include "macro.h"
+#include "net-cls-cgroup.h"
 #include "rd-network.h"
+#include "resourced.h"
 
 API network_error_e network_set_option(const network_option_s *options)
 {

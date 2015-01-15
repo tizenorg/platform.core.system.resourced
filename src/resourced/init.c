@@ -1,7 +1,7 @@
 /*
  * resourced
  *
- * Copyright (c) 2000 - 2013 Samsung Electronics Co., Ltd. All rights reserved.
+ * Copyright (c) 2014 Samsung Electronics Co., Ltd. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,13 +20,13 @@
 /**
  * @file init.c
  * @desc Resourced initialization
- * Copyright (c) 2013 Samsung Electronics Co., Ltd. All rights reserved.
  *
  **/
 
 #include "const.h"
+#include "counter.h"
 #include "edbus-handler.h"
-
+#include "cgroup.h"
 #include "init.h"
 #include "macro.h"
 #include "module-data.h"
@@ -35,9 +35,6 @@
 #include "swap-common.h"
 #include "trace.h"
 #include "version.h"
-#include "resourced.h"
-#include "daemon-options.h"
-#include "counter.h"
 
 #include <Ecore.h>
 #include <getopt.h>
@@ -48,8 +45,8 @@ static struct daemon_opts opts = { 1,
 				   1,
 				   COUNTER_UPDATE_PERIOD,
 				   FLUSH_PERIOD,
-				   RESOURCED_DEFAULT_STATE
-				   };
+				   RESOURCED_DEFAULT_STATE,
+				   0};
 
 #define SWAP_MAX_ARG_SIZE 16
 
@@ -63,7 +60,7 @@ static void print_root_usage()
 
 static void print_usage()
 {
-	puts("resmand [Options]");
+	puts("resourced [Options]");
 	puts("       Application options:");
 	printf
 	    ("-u [--update-period] - time interval for updating,"
@@ -88,7 +85,7 @@ static void print_version()
 
 static int parse_cmd(int argc, char **argv)
 {
-	const char *optstring = ":hvu:s:f:c:w";
+	const char *optstring = ":hvu:s:f:cw";
 	const struct option options[] = {
 		{"help", no_argument, 0, 'h'},
 		{"version", no_argument, 0, 'v'},
@@ -130,6 +127,8 @@ static int parse_cmd(int argc, char **argv)
 					break;
 				}
 			break;
+		case 'o':
+			break;
 		case 'w':
 			proc_set_watchdog_state(PROC_WATCHDOG_ENABLE);
 			break;
@@ -149,7 +148,6 @@ static int assert_root(void)
 	}
 	return RESOURCED_ERROR_NONE;
 }
-
 
 static void sig_term_handler(int sig)
 {
@@ -185,7 +183,6 @@ int resourced_init(struct daemon_arg *darg)
 	ret_code = assert_root();
 	ret_value_if(ret_code < 0, RESOURCED_ERROR_FAIL);
 	ecore_init();
-	load_daemon_opts(&opts);
 	darg->opts = &opts;
 	ret_code = parse_cmd(darg->argc, darg->argv);
 	ret_value_msg_if(ret_code < 0, RESOURCED_ERROR_FAIL,
@@ -208,7 +205,7 @@ int resourced_deinit(struct daemon_arg *darg)
 void set_daemon_net_block_state(const enum traffic_restriction_type rst_type,
 	const struct counter_arg *carg)
 {
-	ret_value_msg_if(carg == NULL, ,
+	ret_msg_if(carg == NULL,
 		"Please provide valid counter arg!");
 
 	if (rst_type == RST_SET)

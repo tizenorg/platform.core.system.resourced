@@ -1,7 +1,7 @@
 /*
  * resourced
  *
- * Copyright (c) 2013 Samsung Electronics Co., Ltd. All rights reserved.
+ * Copyright (c) 2014 Samsung Electronics Co., Ltd. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,7 +35,7 @@ struct shared_modules_data *get_shared_modules_data(void)
 
 void init_modules_arg(struct modules_arg *marg, struct daemon_arg *darg)
 {
-	ret_value_msg_if(marg == NULL || darg == NULL, ,
+	ret_msg_if(marg == NULL || darg == NULL,
 			 "Init modules argument failed\n");
 	marg->opts = darg->opts;
 }

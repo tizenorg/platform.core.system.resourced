@@ -149,6 +149,7 @@ static enum run_rsml_cmd parse_cmd(int argc, char **argv,
 		{"data-usage", no_argument, 0, 'u'},
 		{"from", required_argument, 0, 'f'},
 		{"to", required_argument, 0, 't'},
+		{"interface", required_argument, 0, 'i'},
 		{"data-usage-details", optional_argument, 0, 'd'},
 		{"granularity", required_argument, 0, 'G'},
 		{"restrictions", required_argument, 0, 'R'},
@@ -176,10 +177,18 @@ static enum run_rsml_cmd parse_cmd(int argc, char **argv,
 			print_version();
 			exit(EXIT_SUCCESS);
 		case 'a':
+			if (!optarg) {
+				printf("apply-rst option requeres an argument.");
+				exit(EXIT_FAILURE);
+			}
 			cmd = RESOURCED_APPLY;
 			param->app_id = strdup(optarg);
 			break;
 		case 'e':
+			if (!optarg) {
+				printf("exclude-rst option requeres an argument.");
+				exit(EXIT_FAILURE);
+			}
 			cmd = RESOURCED_EXCLUDE;
 			param->app_id = strdup(optarg);
 			break;
@@ -190,6 +199,10 @@ static enum run_rsml_cmd parse_cmd(int argc, char **argv,
 			cmd = RESOURCED_DATA_USAGE;
 			break;
 		case 'f':
+			if (!optarg) {
+				printf("from option requeres an argument.");
+				exit(EXIT_FAILURE);
+			}
 			if (sscanf(optarg, "%ld", &param->du_rule.from) != 1) {
 				printf("Failed to parse 'from' timestamp: %s\n",
 				       optarg);
@@ -197,6 +210,10 @@ static enum run_rsml_cmd parse_cmd(int argc, char **argv,
 			}
 			break;
 		case 't':
+			if (!optarg) {
+				printf("to option requeres an argument.");
+				exit(EXIT_FAILURE);
+			}
 			if (sscanf(optarg, "%ld", &param->du_rule.to) != 1) {
 				printf("Failed to parse 'to' timestamp: %s\n",
 				       optarg);
@@ -204,6 +221,10 @@ static enum run_rsml_cmd parse_cmd(int argc, char **argv,
 			}
 			break;
 		case 'i':
+			if (!optarg) {
+				printf("interface option requeres an argument.");
+				exit(EXIT_FAILURE);
+			}
 			iftype = convert_iftype(optarg);
 			if (iftype == RESOURCED_IFACE_UNKNOWN) {
 				printf("Unknown network interface!\n");
@@ -214,7 +235,10 @@ static enum run_rsml_cmd parse_cmd(int argc, char **argv,
 			param->du_rule.iftype =	iftype;
 			break;
 		case 'M':
-		{
+			if (!optarg) {
+				printf("roaming option requeres an argument.");
+				exit(EXIT_FAILURE);
+			}
 			resourced_ret_c ret_code = convert_roaming(optarg,
 				&param->roaming_type);
 
@@ -224,13 +248,16 @@ static enum run_rsml_cmd parse_cmd(int argc, char **argv,
 				exit(EXIT_FAILURE);
 			}
 			break;
-		}
 		case 'd':
+			cmd = RESOURCED_DATA_USAGE_DETAILS;
 			if (optarg)
 				param->app_id = strdup(optarg);
-			cmd = RESOURCED_DATA_USAGE_DETAILS;
 			break;
 		case 'G':
+			if (!optarg) {
+				printf("granularity option requeres an argument.");
+				exit(EXIT_FAILURE);
+			}
 			if (sscanf(optarg, "%d", &param->du_rule.granularity) !=
 			    1) {
 				printf("Failed to parse granularity: %s\n",
@@ -239,6 +266,10 @@ static enum run_rsml_cmd parse_cmd(int argc, char **argv,
 			}
 			break;
 		case 'r':
+			if (!optarg) {
+				printf("revert-rst option requeres an argument.");
+				exit(EXIT_FAILURE);
+			}
 			cmd = RESOURCED_REVERT;
 			param->app_id = strdup(optarg);
 			break;
@@ -246,6 +277,10 @@ static enum run_rsml_cmd parse_cmd(int argc, char **argv,
 			cmd = RESOURCED_GET_RESTRICTIONS;
 			break;
 		case 'R':
+			if (!optarg) {
+				printf("restrictions option requeres an argument.");
+				exit(EXIT_FAILURE);
+			}
 			if (sscanf
 			    (optarg, "%jd,%jd",
 			     &param->rcv_limit,
@@ -257,6 +292,10 @@ static enum run_rsml_cmd parse_cmd(int argc, char **argv,
 			}
 			break;
 		case 'O':
+			if (!optarg) {
+				printf("options option requeres an argument.");
+				exit(EXIT_FAILURE);
+			}
 			if (optarg && strcmp(optarg, "set") == 0)
 				cmd = RESOURCED_SET_OPTIONS;
 			else if (optarg && strcmp(optarg, "get") == 0)
@@ -315,11 +354,12 @@ resourced_cb_ret data_usage_callback(const data_usage_info *info, void *user_dat
 	} else
 		printf("<entire interval>\t");
 
-	printf("%ld/%ld\t%ld/%ld/%u/%u\n", info->foreground.cnt.incoming_bytes,
+	printf("%ld/%ld\t%ld/%ld/%u/%u/%s\n", info->foreground.cnt.incoming_bytes,
 	       info->background.cnt.incoming_bytes,
 	       info->foreground.cnt.outgoing_bytes,
 	       info->background.cnt.outgoing_bytes,
-	       info->roaming, info->hw_net_protocol_type);
+	       info->roaming, info->hw_net_protocol_type,
+	       info->ifname);
 	return RESOURCED_CONTINUE;
 }
 
@@ -473,14 +513,15 @@ int main(int argc, char **argv)
 	case RESOURCED_SET_QUOTA:
 	{
 		data_usage_quota quota = { 0 };
-		if (!param.du_rule.from || !param.du_rule.to ||
-		    !param.roaming_type) {
+		if (!param.du_rule.from || !param.du_rule.to) {
 			fprintf(stderr, "Quota command requires all of this options: "
 			       "--from, --to and --roaming\n");
 			break;
 		}
 
 		/* TODO in case of refactoring, use internal command line structure instead of public structure for holding param */
+		time_t quota_start_time = time(NULL);
+		quota.start_time = &quota_start_time;
 		quota.snd_quota = param.send_limit;
 		quota.rcv_quota = param.rcv_limit;
 		quota.iftype = param.du_rule.iftype;

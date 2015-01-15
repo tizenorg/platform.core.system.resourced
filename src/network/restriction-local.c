@@ -26,12 +26,12 @@
 #include <stdbool.h>
 #include <resourced.h>
 
-#include "cgroup.h"
 #include "const.h"
 #include "database.h"
 #include "macro.h"
 #include "module-data.h"
-#include "net-restriction.h"
+#include "net-cls-cgroup.h"
+#include "netlink-restriction.h"
 #include "init.h"
 #include "restriction-helper.h"
 #include "datausage-restriction.h"
@@ -218,36 +218,6 @@ static bool check_roaming(const resourced_net_restrictions *rst)
 	return rst->roaming != roaming;
 }
 
-static int _process_restriction(const u_int32_t app_classid,
-				const enum traffic_restriction_type rst_type,
-				const resourced_net_restrictions *rst)
-{
-	int error_code = RESOURCED_ERROR_NONE;
-
-	if (rst_type == RST_EXCLUDE && check_roaming(rst)) {
-		_D("Restriction not applied: rst->roaming %d", rst->roaming);
-		return RESOURCED_ERROR_NONE;
-	}
-
-	if (app_classid == RESOURCED_ALL_APP_CLASSID ||
-	    app_classid == RESOURCED_TETHERING_APP_CLASSID)
-		error_code = apply_tethering_restriction(rst_type);
-	if (app_classid != RESOURCED_TETHERING_APP_CLASSID &&
-	    error_code == RESOURCED_ERROR_NONE)
-		error_code = send_net_restriction(rst_type, app_classid,
-						  rst->iftype,
-						  rst->send_limit,
-						  rst->rcv_limit,
-						  rst->snd_warning_limit,
-						  rst->rcv_warning_limit);
-	/* error_code is negative errno */
-	ret_value_msg_if(error_code < 0, RESOURCED_ERROR_FAIL,
-			 "Restriction, type %d falied, error_code %d\n",
-			 rst_type, error_code);
-
-	return RESOURCED_ERROR_NONE;
-}
-
 static void process_net_block_state(const enum
 	traffic_restriction_type rst_type)
 {
@@ -259,31 +229,61 @@ static void process_net_block_state(const enum
 		_E("shared modules data is empty");
 }
 
-resourced_ret_c process_restriction_local(
+resourced_ret_c process_kernel_restriction(
+	const u_int32_t classid,
+	const resourced_net_restrictions *rst,
+	const enum traffic_restriction_type rst_type)
+{
+	int ret = RESOURCED_ERROR_NONE;
+
+	ret_value_secure_msg_if(!classid, RESOURCED_ERROR_INVALID_PARAMETER,
+			 "Can not determine classid for package %u.\n"
+			 "Probably package was not joined to performance "
+			 "monitoring\n", classid);
+
+	if (rst_type == RST_EXCLUDE && check_roaming(rst)) {
+		_D("Restriction not applied: rst->roaming %d", rst->roaming);
+		return RESOURCED_ERROR_NONE;
+	}
+
+	/* TODO check, and think how to implement it
+	 * in unified way, maybe also block FORWARD chain in
+	 * send_net_restriction */
+	if (classid == RESOURCED_ALL_APP_CLASSID ||
+	    classid == RESOURCED_TETHERING_APP_CLASSID)
+		ret = apply_tethering_restriction(rst_type);
+	if (classid != RESOURCED_TETHERING_APP_CLASSID &&
+	    ret == RESOURCED_ERROR_NONE)
+		ret = send_net_restriction(rst_type, classid,
+						  rst->iftype,
+						  rst->send_limit,
+						  rst->rcv_limit,
+						  rst->snd_warning_limit,
+						  rst->rcv_warning_limit);
+	ret_value_msg_if(ret < 0, RESOURCED_ERROR_FAIL,
+			 "Restriction, type %d falied, return code %d\n",
+			 rst_type, ret);
+
+	return RESOURCED_ERROR_NONE;
+}
+
+resourced_ret_c proc_keep_restriction(
 	const char *app_id, const int quota_id,
 	const resourced_net_restrictions *rst,
 	const enum traffic_restriction_type rst_type)
 {
-	int ret;
 	u_int32_t app_classid = 0;
-	int error_code = 0;
 	resourced_iface_type store_iftype;
 	resourced_restriction_state rst_state;
-
-	ret = check_restriction_arguments(app_id, rst, rst_type);
+	int ret = check_restriction_arguments(app_id, rst, rst_type);
 	ret_value_msg_if(ret != RESOURCED_ERROR_NONE,
 			 RESOURCED_ERROR_INVALID_PARAMETER,
 			 "Invalid restriction arguments\n");
 
 	app_classid = get_classid_by_app_id(app_id, rst_type != RST_UNSET);
-	ret_value_secure_msg_if(!app_classid, RESOURCED_ERROR_INVALID_PARAMETER,
-			 "Can not determine classid for package %s.\n"
-			 "Probably package was not joined to performance "
-			 "monitoring\n", app_id);
-
-	error_code = _process_restriction(app_classid, rst_type, rst);
-	if (error_code != RESOURCED_ERROR_NONE)
-		return RESOURCED_ERROR_FAIL;
+	ret = process_kernel_restriction(app_classid, rst, rst_type);
+	ret_value_msg_if(ret != RESOURCED_ERROR_NONE, ret,
+		"Can't keep restriction.");
 
 	store_iftype = get_store_iftype(app_classid, rst->iftype);
 	rst_state = convert_to_restriction_state(rst_type);
@@ -294,11 +294,9 @@ resourced_ret_c process_restriction_local(
 		rst->iftype == RESOURCED_IFACE_ALL)
 		process_net_block_state(rst_type);
 
-	error_code = update_restriction_db(app_id, store_iftype,
+	return update_restriction_db(app_id, store_iftype,
 					   rst->rcv_limit, rst->send_limit,
 					   rst_state, quota_id, rst->roaming);
-
-	return error_code;
 }
 
 resourced_ret_c remove_restriction_local(const char *app_id,
@@ -307,7 +305,7 @@ resourced_ret_c remove_restriction_local(const char *app_id,
 	resourced_net_restrictions rst = { 0 };
 
 	rst.iftype = iftype;
-	return process_restriction_local(app_id, NONE_QUOTA_ID, &rst,
+	return proc_keep_restriction(app_id, NONE_QUOTA_ID, &rst,
 					 RST_UNSET);
 }
 
@@ -318,5 +316,5 @@ resourced_ret_c exclude_restriction_local(const char *app_id,
 	resourced_net_restrictions rst = { 0 };
 
 	rst.iftype = iftype;
-	return process_restriction_local(app_id, quota_id, &rst, RST_EXCLUDE);
+	return proc_keep_restriction(app_id, quota_id, &rst, RST_EXCLUDE);
 }

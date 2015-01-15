@@ -52,6 +52,7 @@
 #include "resourced.h"
 #include "macro.h"
 #include "module.h"
+#include "notifier.h"
 
 enum {
 	MEMGC_OOM_NORMAL,
@@ -94,6 +95,7 @@ enum {
 #define _SYS_RES_CLEANUP	"RES_CLEANUP"
 
 #define BtoMB(x)		((x) / 1024 / 1024)
+#define MBtoB(x)		(x<<20)
 
 #define MEMCG_FOREGROUND_LIMIT_RATIO	0.6
 #define MEMCG_BACKGROUND_LIMIT_RATIO	0.7
@@ -199,6 +201,86 @@ static struct memcg_class memcg_class[MEMCG_GROUP_MAX] = {
 	{0, MEMCG_BACKGROUND_MIN_LIMIT, MEMCG_BACKGROUND_LIMIT_RATIO, 0, 0, 0, "background",
 		0, 0, 0, 0, 0},
 };
+
+static const struct module_ops memory_modules_ops;
+static const struct module_ops *lowmem_ops;
+
+unsigned int get_available(void)
+{
+	char buf[PATH_MAX];
+	FILE *fp;
+	char *idx;
+	unsigned int free = 0, cached = 0;
+	unsigned int available = 0;
+
+	fp = fopen(MEMINFO_PATH, "r");
+	if (!fp) {
+		_E("%s open failed, %d", buf, fp);
+		return available;
+	}
+
+	while (fgets(buf, PATH_MAX, fp) != NULL) {
+		if ((idx = strstr(buf, "MemFree:"))) {
+			idx += strlen("MemFree:");
+			while (*idx < '0' || *idx > '9')
+				idx++;
+			free = atoi(idx);
+		} else if ((idx = strstr(buf, "MemAvailable:"))) {
+			idx += strlen("MemAvailable:");
+			while (*idx < '0' || *idx > '9')
+				idx++;
+			available = atoi(idx);
+			break;
+		} else if((idx = strstr(buf, "Cached:"))) {
+			idx += strlen("Cached:");
+			while (*idx < '0' || *idx > '9')
+				idx++;
+			cached = atoi(idx);
+			break;
+		}
+	}
+
+	if (available == 0)
+		available = free + cached;
+	available >>= 10;
+	fclose(fp);
+
+	return available;
+}
+
+void lowmem_dynamic_process_killer(int type)
+{
+	/* This function is not supported */
+}
+
+void change_memory_state(int state, int force)
+{
+	int mem_state;
+
+	if (force) {
+		mem_state = state;
+	} else {
+		mem_state = cur_mem_state;
+		_D("mem_state = %d", mem_state);
+	}
+
+	switch (mem_state) {
+	case MEMNOTIFY_NORMAL:
+		memory_normal_act(NULL);
+		break;
+	case MEMNOTIFY_RECLAIM:
+		memory_reclaim_act(NULL);
+		break;
+	case MEMNOTIFY_LOW:
+		memory_low_act(NULL);
+		break;
+	case MEMNOTIFY_CRITICAL:
+		memory_oom_act(NULL);
+		break;
+	default:
+		assert(0);
+	}
+}
 
 static unsigned int _get_total_memory(void)
 {
@@ -604,6 +686,7 @@ void *_lowmem_oom_killer_cb(void *data)
 		if (BtoMB(total_size) > MEM_LEAVE_THRESHOLD && oom_score_adj < OOMADJ_BACKGRD_UNLOCKED)
 			continue;
 
+		proc_remove_process_list(pid);
 		kill(pid, SIGKILL);
 
 		total_size += pid_size[i];
@@ -630,10 +713,11 @@ void *_lowmem_oom_killer_cb(void *data)
 	return NULL;
 }
 
-void lowmem_oom_killer_cb(int memcg_idx)
+int lowmem_oom_killer_cb(int memcg_idx, int flags)
 {
 	int memcg_index = memcg_idx;
 	_lowmem_oom_killer_cb((void *)&memcg_index);
+	return 0;
 }
 
 static void lowmem_cgroup_oom_killer(int memcg_index)
@@ -687,6 +771,7 @@ static void lowmem_cgroup_oom_killer(int memcg_index)
 		if (i==0)
 			make_memps_log(MEMPS_LOG_FILE, pid, appname);
 
+		proc_remove_process_list(pid);
 		kill(pid, SIGTERM);
 
 		total_size += pid_size[i];
@@ -731,13 +816,9 @@ static void lowmem_swap_memory(void)
 {
 	pid_t pid;
 	int swap_type;
-	unsigned long swap_args[1] = {0,};
 
-	if (cur_mem_state == MEMNOTIFY_NORMAL) {
-		if (swap_status(SWAP_CHECK_CGROUP, NULL) == SWAP_TRUE)
-			swap_control(SWAP_START, NULL);
+	if (cur_mem_state == MEMNOTIFY_NORMAL)
 		return;
-	}
 
 	swap_type = swap_status(SWAP_GET_TYPE, NULL);
 
@@ -748,13 +829,11 @@ static void lowmem_swap_memory(void)
 			if (!pid)
 				break;
 			_I("swap cgroup entered : pid : %d", (int)pid);
-			swap_args[0] = (unsigned long)pid;
-			swap_control(SWAP_MOVE_CGROUP, swap_args);
-			swap_args[0] = 0;
+			resourced_notify(RESOURCED_NOTIFIER_SWAP_MOVE_CGROUP, (void*)&pid);
 		}
 		if (swap_status(SWAP_GET_STATUS, NULL) == SWAP_OFF)
-			swap_control(SWAP_RESTART, NULL);
-		swap_control(SWAP_START, NULL);
+			resourced_notify(RESOURCED_NOTIFIER_SWAP_RESTART, NULL);
+		resourced_notify(RESOURCED_NOTIFIER_SWAP_START, NULL);
 	}
 }
 
@@ -781,7 +860,6 @@ static int memory_low_act(void *data)
 	_I("[LOW MEM STATE] memory low state");
 	print_mem_state();
 	remove_shm();
-
 
 	vconf_set_int(VCONFKEY_SYSMAN_LOW_MEMORY,
 		      VCONFKEY_SYSMAN_LOW_MEMORY_SOFT_WARNING);
@@ -902,9 +980,6 @@ static Eina_Bool lowmem_cb(void *data, Ecore_Fd_Handler *fd_handler)
 		}
 		memcg_class[i].oomlevel = currentoom;
 	}
-
-	/* check flashswap count and off flashswap if needed */
-	swap_status(SWAP_CHECK_SWAPOUT_COUNT, NULL);
 
 	return ECORE_CALLBACK_RENEW;
 }
@@ -1106,7 +1181,7 @@ static void lowmem_move_memcgroup(int pid, int oom_score_adj)
 		return;
 
 	swap_args[0] = (unsigned long)pid;
-	if (!swap_status(SWAP_CHECK_PID, swap_args)) {
+	if (!swap_status(SWAP_CHECK_PID, swap_args) || !background) {
 		_I("buf : %s, pid : %d, oom : %d", buf, pid, oom_score_adj);
 		f = fopen(buf, "w");
 		if (!f) {
@@ -1207,7 +1282,7 @@ static int lowmem_fd_start(void)
 
 int lowmem_init(void)
 {
-	int ret;
+	int ret = RESOURCED_ERROR_NONE;
 
 	/* set default memcg value */
 	ret = init_memcg();
@@ -1281,6 +1356,8 @@ static int resourced_memory_control(void *data)
 
 static int resourced_memory_init(void *data)
 {
+	lowmem_ops = &memory_modules_ops;
+
 	return lowmem_init();
 }
 
@@ -1289,7 +1366,20 @@ static int resourced_memory_finalize(void *data)
 	return RESOURCED_ERROR_NONE;
 }
 
-static struct module_ops memory_modules_ops = {
+int lowmem_control(enum lowmem_control_type type, unsigned long *args)
+{
+	struct lowmem_data_type l_data;
+
+	if (lowmem_ops) {
+		l_data.control_type = type;
+		l_data.args = args;
+		return lowmem_ops->control(&l_data);
+	}
+
+	return RESOURCED_ERROR_NONE;
+}
+
+static const struct module_ops memory_modules_ops = {
 	.priority	= MODULE_PRIORITY_NORMAL,
 	.name		= "lowmem",
 	.init		= resourced_memory_init,

@@ -25,6 +25,8 @@
 #ifndef __MODULE_DATA_HANDLE_H__
 #define __MODULE_DATA_HANDLE_H__
 
+#include "counter.h"
+#include "daemon-options.h"
 #include "init.h"
 #include "proc-main.h"
 

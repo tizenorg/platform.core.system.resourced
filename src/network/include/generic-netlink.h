@@ -24,32 +24,13 @@
 #ifndef _GRABBER_CONTROL_KERNEL_GENERIC_NETLINK_H_
 #define _GRABBER_CONTROL_KERNEL_GENERIC_NETLINK_H_
 
-#include "app-stat.h"
 #include "counter.h"
 #include "genl.h"
+#include "nl-helper.h"
 
 #include <unistd.h>
-#include <linux/netlink.h>
 #include <linux/genetlink.h>
-
-#define NETLINK_BUF_SIZE 16536
-
-struct genl {
-        struct nlmsghdr n;
-        struct genlmsghdr g;
-        char buf[NETLINK_BUF_SIZE];
-};
-
-struct netlink_serialization_params {
-	traffic_stat_tree *stat_tree;
-	struct genl *ans;
-};
-
-typedef struct {
-	void (*deserialize_answer)(struct netlink_serialization_params *params);
-	void (*finalize)(struct netlink_serialization_params *params);
-	struct netlink_serialization_params params;
-} netlink_serialization_command;
+#include <linux/rtnetlink.h>
 
 enum net_activity_recv {
 	RESOURCED_NET_ACTIVITY_OK,
@@ -57,10 +38,8 @@ enum net_activity_recv {
 	RESOURCED_NET_ACTIVITY_CONTINUE,
 };
 
-netlink_serialization_command *netlink_create_command(struct genl *ans,
-	struct counter_arg *carg);
-
-int create_netlink(int protocol, uint32_t groups);
+netlink_serialization_command *netlink_create_command(
+	struct netlink_serialization_params *params);
 
 uint32_t get_family_id(int sock, pid_t pid, char *family_name);
 
@@ -111,8 +90,6 @@ uint32_t netlink_get_family(struct genl *nl_ans);
 void send_start(int sock, const pid_t pid, const int family_id);
 
 int send_command(int sock, const pid_t pid, const int family_id, uint8_t cmd);
-
-struct genl *netlink_read(int sock);
 
 int send_restriction(int sock, const pid_t pid, const int family_id,
 		     const u_int32_t classid, const int ifindex,

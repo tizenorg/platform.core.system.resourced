@@ -27,32 +27,107 @@
 #include "nl-helper.h"
 #include "trace.h"
 
+#include <unistd.h>
 #include <linux/rtnetlink.h>
+#include <stdlib.h>
 #include <string.h>
 
-void put_attr(rt_param *arg, int type, const void *data, int data_len)
+/**
+ * create_netlink(): Create netlink socket and returns it.
+ * Returns: Created socket on success and -1 on failure.
+ */
+int create_netlink(int protocol, uint32_t groups)
 {
-	struct rtattr *rta = 0;
-	size_t rta_len = 0, align_len = 0, align_nlmsg_len = 0;
+	/**
+	* TODO it's one socket, in future make set of sockets
+	* unique for protocol and groups
+	*/
+	int sock;
+	sock = socket(PF_NETLINK, SOCK_RAW, protocol);
+	if (sock < 0)
+		return -EINVAL;
 
-	if (!arg) {
-		_D("Please, provide valid arg");
-		return;
+	struct sockaddr_nl src_addr = { 0, };
+
+	src_addr.nl_family = AF_NETLINK;
+	src_addr.nl_groups = groups;
+
+	if (bind(sock, (struct sockaddr *)&src_addr, sizeof(src_addr)) < 0) {
+		close(sock);
+		return -1;
 	}
 
-	rta_len = RTA_LENGTH(data_len);
-	align_len = RTA_ALIGN(data_len);
-	align_nlmsg_len = NLMSG_ALIGN(arg->n.nlmsg_len);
-	if (align_nlmsg_len + align_len > sizeof(rt_param)) {
-		_E("Not enough buffer size to store %d bytes in %d", data_len,
-		   sizeof(rt_param));
-		return;
-	}
-
-	rta = NLMSG_TAIL(&arg->n);
-	rta->rta_type = type;
-	rta->rta_len = rta_len;
-
-	memcpy(RTA_DATA(rta), data, data_len);
-	arg->n.nlmsg_len = align_nlmsg_len + align_len;
+	return sock;
 }
+
+void fill_attribute_list(struct rtattr **atb, const int max_len,
+	struct rtattr *rt_na, int rt_len)
+{
+	int i = 0;
+	while (RTA_OK(rt_na, rt_len)) {
+		if (rt_na->rta_type <= max_len)
+			atb[rt_na->rta_type] = rt_na;
+
+		rt_na = RTA_NEXT(rt_na, rt_len);
+		++i;
+		if (i >= max_len)
+			break;
+	}
+}
+
+/* read netlink message from socket
+ * return opaque pointer to genl structure */
+
+#ifdef CONFIG_DATAUSAGE_NFACCT
+int read_netlink(int sock, void *buf, size_t len)
+{
+	ssize_t ret;
+	struct sockaddr_nl addr;
+	struct iovec iov = {
+		.iov_base	= buf,
+		.iov_len	= len,
+	};
+	struct msghdr msg = {
+		.msg_name	= &addr,
+		.msg_namelen	= sizeof(struct sockaddr_nl),
+		.msg_iov	= &iov,
+		.msg_iovlen	= 1,
+		.msg_control	= NULL,
+		.msg_controllen	= 0,
+		.msg_flags	= 0,
+	};
+	ret = recvmsg(sock, &msg, 0);
+	if (ret == -1)
+		return ret;
+
+	if (msg.msg_flags & MSG_TRUNC) {
+		errno = ENOSPC;
+		return -1;
+	}
+
+	if (msg.msg_namelen != sizeof(struct sockaddr_nl)) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	return ret;
+}
+#else
+int read_netlink(int sock, void *buf, size_t len)
+{
+	int ans_len;
+	struct genl *ans = buf;
+
+	ans_len = recv(sock, ans, len, MSG_DONTWAIT);
+	if (ans_len < 0)
+		return 0;
+
+	if (ans->n.nlmsg_type == NLMSG_ERROR)
+		return 0;
+
+	if (!NLMSG_OK((&ans->n), ans_len))
+		return 0;
+
+	return ans_len;
+}
+#endif

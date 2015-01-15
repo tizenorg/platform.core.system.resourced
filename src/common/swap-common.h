@@ -25,28 +25,12 @@
 #ifndef __SWAP_COMMON_H__
 #define __SWAP_COMMON_H__
 
-enum swap_control_type {
-	SWAP_START,
-	SWAP_RESTART,
-	SWAP_MOVE_CGROUP,
-};
-
 enum swap_status_type {
 	SWAP_GET_TYPE,
 	SWAP_GET_CANDIDATE_PID,
-	SWAP_SET_CANDIDATE_PID,
 	SWAP_GET_STATUS,
 	SWAP_CHECK_PID,
 	SWAP_CHECK_CGROUP,
-	SWAP_CHECK_SWAPOUT_COUNT,
-};
-
-struct swap_data_type {
-	union {
-		enum swap_control_type	control_type;
-		enum swap_status_type	status_type;
-	} data_type;
-	unsigned long *args;
 };
 
 enum {
@@ -60,12 +44,13 @@ enum {
 	SWAP_TRUE,
 };
 
-#define GBtoB(x)		(x<<30)
-#define MBtoB(x)		(x<<20)
-
-#define MBtoPage(x)		(x<<8)
-
-int swap_control(enum swap_control_type type, unsigned long *args);
-int swap_status(enum swap_status_type type, unsigned long *args);
+#ifdef SWAP_SUPPORT
+extern int swap_status(enum swap_status_type type, unsigned long *args);
+#else
+static inline int swap_status(enum swap_status_type type, unsigned long *args)
+{
+	return RESOURCED_ERROR_NONE;
+}
+#endif /* SWAP_SUPPORT */
 
 #endif /* __SWAP_COMMON_H__ */

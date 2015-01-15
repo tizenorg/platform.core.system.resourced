@@ -57,8 +57,6 @@ do { \
 } while (0)
 #endif
 
-#define NOTI_MAXARGLEN	512
-
 API bool proc_stat_get_cpu_time_by_pid(pid_t pid, unsigned long *utime,
 				       unsigned long *stime)
 {
@@ -762,7 +760,7 @@ static inline int send_str(int fd, char *str)
 	return ret;
 }
 
-static int send_socket(struct resman_noti *msg, bool sync)
+static int send_socket(struct resourced_noti *msg, bool sync)
 {
 	int client_len;
 	int client_sockfd;
@@ -779,7 +777,7 @@ static int send_socket(struct resman_noti *msg, bool sync)
 
 	bzero(&clientaddr, sizeof(clientaddr));
 	clientaddr.sun_family = AF_UNIX;
-	strncpy(clientaddr.sun_path, RESMAN_SOCKET_PATH, sizeof(clientaddr.sun_path) - 1);
+	strncpy(clientaddr.sun_path, RESOURCED_SOCKET_PATH, sizeof(clientaddr.sun_path) - 1);
 	client_len = sizeof(clientaddr);
 
 	if (connect(client_sockfd, (struct sockaddr *)&clientaddr, client_len) <
@@ -811,7 +809,7 @@ static int send_socket(struct resman_noti *msg, bool sync)
 
 static resourced_ret_c proc_cgroup_send_status(const int type, int num, ...)
 {
-	struct resman_noti *msg;
+	struct resourced_noti *msg;
 	resourced_ret_c ret = RESOURCED_ERROR_NONE;
 	va_list argptr;
 
@@ -819,7 +817,7 @@ static resourced_ret_c proc_cgroup_send_status(const int type, int num, ...)
 	char *args = NULL;
 	bool sync = SYNC_OPERATION(type);
 
-	msg = malloc(sizeof(struct resman_noti));
+	msg = malloc(sizeof(struct resourced_noti));
 
 	if (msg == NULL)
 		return RESOURCED_ERROR_OUT_OF_MEMORY;
@@ -888,5 +886,16 @@ API resourced_ret_c proc_cgroup_sweep_memory(void)
 	char buf[MAX_DEC_SIZE(int)];
 	snprintf(buf, sizeof(buf), "%d", getpid());
 	return proc_cgroup_send_status(PROC_CGROUP_GET_MEMSWEEP, 1, buf);
+}
+
+API resourced_ret_c proc_cgroup_launch(int type, pid_t pid, char* app_id, char* pkg_id)
+{
+	char pid_buf[MAX_DEC_SIZE(int)];
+	char appid_buf[NOTI_MAXARGLEN];
+	char pkgid_buf[NOTI_MAXARGLEN];
+	snprintf(pid_buf, sizeof(pid_buf), "%d", pid);
+	snprintf(appid_buf, sizeof(appid_buf)-1, "%s", app_id);
+	snprintf(pkgid_buf, sizeof(pkgid_buf)-1, "%s", pkg_id);
+	return proc_cgroup_send_status(type, 3, pid_buf, appid_buf, pkgid_buf);
 }
 

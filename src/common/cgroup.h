@@ -27,33 +27,17 @@
 #ifndef _CGROUP_LIBRARY_CGROUP_H_
 #define _CGROUP_LIBRARY_CGROUP_H_
 
-/**
- * @desc Make net_cls cgroup and put in it the given pid and
- * generated classid.
- * If cgroup alreay exists function just put pid in it.
- * @param pid - process, that will be added to cgroup pkg_name,
- * @param pkg_name - package name.
- */
-resourced_ret_c make_net_cls_cgroup_with_pid(const int pid,
-	const char *pkg_name);
+#define DEFAULT_CGROUP	  	"/sys/fs/cgroup"
 
 /**
- * @desc take classid from net_cls cgroup by appid
- *	This function converts appid to pkgname.
- * @param pkg_name - name of the cgroup
- * @param create - in case of true - create cgroup if it's not exists
- * @return classid
- */
-u_int32_t get_classid_by_app_id(const char *app_id, int create);
-
-
-/**
- * @desc take classid from net_cls cgroup with name pkg_name
- * @param pkg_name - name of the cgroup
- * @param create - in case of true - create cgroup if it's not exists
- * @return classid
- */
-u_int32_t get_classid_by_pkg_name(const char *pkg_name, int create);
+ * @desc Get one unsigned int value from cgroup
+ * @param cgroup_name - cgroup path
+ * @param file_name - cgroup content to write
+ * @param value - out parameter, value to fill
+ * @return negative value if error
+*/
+int cgroup_read_node(const char *cgroup_name,
+		const char *file_name, unsigned int *value);
 
 /**
  * @desc Put value to cgroup,
@@ -64,5 +48,46 @@ u_int32_t get_classid_by_pkg_name(const char *pkg_name, int create);
  */
 int cgroup_write_node(const char *cgroup_name,  const char *file_name, unsigned int value);
 
+/**
+ * @desc Put value to cgroup,
+ * @param cgroup_name - cgroup path
+ * @param file_name - cgroup content to write
+ * @param string -string to write
+ * @return negative value if error
+ */
+int cgroup_write_node_str(const char *cgroup_name,
+		const char *file_name, char* string);
+
+/**
+ * @desc make cgroup,
+ * @param parentdir - parent cgroup path
+ * @param cgroup_name - cgroup subdirectory to write
+ * @param cgroup_exists - 1 if subdir already exists, NULL pointer is possible
+ * as formal argument, in this case it will not be filled
+ * @return negative value if error
+ */
+int make_cgroup_subdir(char* parentdir, char* cgroup_name, int *cgroup_exists);
+
+/**
+ * @desc mount cgroup,
+ * @param source -cgroup name
+ * @param mount_point - cgroup path
+ * @param opts - mount options
+ * @return negative value if error
+ */
+int mount_cgroup_subsystem(char* source, char* mount_point, char* opts);
+
+/**
+ * @desc mount cgroup,
+ * @param source -cgroup name
+ * @param mount_point - cgroup path
+ * @param opts - mount options
+ * @return negative value if error
+ */
+resourced_ret_c place_pid_to_cgroup(const char *cgroup_subsystem,
+	const char *cgroup_name, const int pid);
+
+resourced_ret_c place_pid_to_cgroup_by_fullpath(const char *cgroup_full_path,
+	const int pid);
 
 #endif /*_CGROUP_LIBRARY_CGROUP_H_*/

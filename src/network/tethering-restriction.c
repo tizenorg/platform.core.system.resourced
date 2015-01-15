@@ -31,11 +31,11 @@
 #include "tethering-restriction.h"
 #include "file-helper.h"
 
-static int tethering_exclude;
-
 resourced_ret_c apply_tethering_restriction(
 	const enum traffic_restriction_type type)
 {
+#ifdef TETHERING_FEATURE
+	static int tethering_exclude;
 	switch (type) {
 	case RST_SET:
 		if (!tethering_exclude)
@@ -51,4 +51,7 @@ resourced_ret_c apply_tethering_restriction(
 		return RESOURCED_ERROR_INVALID_PARAMETER;
 
 	}
+#else
+	return RESOURCED_ERROR_NONE;
+#endif /* TETHERING_FEATURE */
 }

@@ -41,7 +41,7 @@
 #include <string.h>
 #include <Ecore.h>
 
-#include "classid-helper.h"
+#include "net-cls-cgroup.h"
 #include "const.h"
 #include "generic-netlink.h"
 #include "genl.h"
@@ -52,15 +52,6 @@
 
 #define NESTED_MCAST_MAX       256
 #define MAX_PAYLOAD 1024	/* maximum payload size */
-
-/*
- * Generic macros for dealing with netlink sockets. Might be duplicated
- * elsewhere. It is recommended that commercial grade applications use
- * libnl or libnetlink and use the interfaces provided by the library
- */
-#define GENLMSG_DATA(glh) ((void *)(NLMSG_DATA(glh) + GENL_HDRLEN))
-#define GENLMSG_PAYLOAD(glh) (NLMSG_PAYLOAD(glh, 0) - GENL_HDRLEN)
-#define NLA_DATA(na) ((void *)((char*)(na) + NLA_HDRLEN))
 
 /**
  * @desc accepts opaque pointer
@@ -110,34 +101,6 @@ static void fill_traf_stat_list(char *buffer, __u16 count,
 	}
 }
 
-/**
- * create_netlink(): Create netlink socket and returns it.
- * Returns: Created socket on success and -1 on failure.
- */
-int create_netlink(int protocol, uint32_t groups)
-{
-	/**
-	* TODO it's one socket, in future make set of sockets
-	* unique for protocol and groups
-	*/
-	int sock;
-	sock = socket(PF_NETLINK, SOCK_RAW, protocol);
-	if (sock < 0)
-		return -EINVAL;
-
-	struct sockaddr_nl src_addr = { 0, };
-
-	src_addr.nl_family = AF_NETLINK;
-	src_addr.nl_groups = groups;
-
-	if (bind(sock, (struct sockaddr *)&src_addr, sizeof(src_addr)) < 0) {
-		close(sock);
-		return -1;
-	}
-
-	return sock;
-}
-
 /*
  * Send netlink message to kernel
  */
@@ -175,21 +138,6 @@ uint32_t get_family_id(int sock, pid_t pid,
 	uint32_t UNUSED group_id = get_family_group_id(sock, pid, family_name, NULL,
 		&family_id);
 	return family_id;
-}
-
-static void fill_attribute_list(struct rtattr **atb, const int max_len,
-	struct rtattr *rt_na, int rt_len)
-{
-	int i = 0;
-	while (RTA_OK(rt_na, rt_len)) {
-		if (rt_na->rta_type <= max_len)
-			atb[rt_na->rta_type] = rt_na;
-
-		rt_na = RTA_NEXT(rt_na, rt_len);
-		++i;
-		if (i >= max_len)
-			break;
-	}
 }
 
 static int extract_group_id(const struct rtattr *rt_na, const char *group_name,
@@ -436,73 +384,6 @@ void send_start(int sock, const pid_t pid, const int family_id)
 	send_common_cmd(sock, pid, family_id, TRAF_STAT_C_START);
 }
 
-/* read netlink message from socket
- * return opaque pointer to genl structure */
-struct genl *netlink_read(int sock)
-{
-	struct genl *ans;
-	int ans_len;
-
-	ans = (typeof(ans)) malloc(sizeof(*ans));
-	if (ans == NULL)
-		return NULL;
-
-	ans_len = recv(sock, ans, sizeof(*ans), MSG_DONTWAIT);
-	if (ans_len < 0)
-		goto error;
-
-	if (ans->n.nlmsg_type == NLMSG_ERROR)
-		goto error;
-
-	if (!NLMSG_OK((&ans->n), ans_len))
-		goto error;
-
-	return ans;
-
-error:
-	free(ans);
-	return NULL;
-}
-
-void process_netlink_answer(struct genl *nl_ans, traffic_stat_tree *stats)
-{
-	ssize_t remains;
-	char *buffer;
-	struct nlattr *first_na, *second_na;
-	int first_len;
-	int count = 0;
-
-	remains = GENLMSG_PAYLOAD(&nl_ans->n);
-	if (remains <= 0)
-		return;
-
-	/* parse reply message */
-	first_na = (struct nlattr *)GENLMSG_DATA(nl_ans);
-
-	/* inline nla_next() */
-	first_len = NLA_ALIGN(first_na->nla_len);
-
-	second_na = (struct nlattr *) ((char *) first_na + first_len);
-	remains -= first_len;
-
-	/* but we need data_attr->nla_len */
-	buffer = (char *) malloc((size_t)remains);
-	if (buffer == NULL)
-		return;
-
-	if (first_na->nla_type == TRAF_STAT_COUNT) {
-		count = *(__u16 *) NLA_DATA(first_na);
-		memcpy(buffer, (char *) NLA_DATA(second_na),
-		       second_na->nla_len);
-	} else {
-		_D("Expected attribute %d got %d", TRAF_STAT_COUNT, first_na->nla_type);
-	}
-
-	if (count > 0)
-		fill_traf_stat_list(buffer, count, stats);
-	free(buffer);
-}
-
 int send_command(int sock, const pid_t pid, const int family_id, __u8 cmd)
 {
 	struct genl req;
@@ -594,27 +475,65 @@ int send_restriction(int sock, const pid_t pid, const int family_id,
 
 static void _process_answer(struct netlink_serialization_params *params)
 {
-	process_netlink_answer(params->ans, params->stat_tree);
+	struct genl *nl_ans = params->ans;
+	traffic_stat_tree *stats = params->stat_tree;
+	ssize_t remains;
+	char *buffer;
+	struct nlattr *first_na, *second_na;
+	int first_len;
+	int count = 0;
+
+	remains = GENLMSG_PAYLOAD(&nl_ans->n);
+	if (remains <= 0)
+		return;
+
+	/* parse reply message */
+	first_na = (struct nlattr *)GENLMSG_DATA(nl_ans);
+
+	/* inline nla_next() */
+	first_len = NLA_ALIGN(first_na->nla_len);
+
+	second_na = (struct nlattr *) ((char *) first_na + first_len);
+	remains -= first_len;
+
+	/* but we need data_attr->nla_len */
+	buffer = (char *) malloc((size_t)remains);
+	if (buffer == NULL)
+		return;
+
+	if (first_na->nla_type == TRAF_STAT_COUNT) {
+		count = *(__u16 *) NLA_DATA(first_na);
+		memcpy(buffer, (char *) NLA_DATA(second_na),
+		       second_na->nla_len);
+	} else {
+		_D("Expected attribute %d got %d", TRAF_STAT_COUNT, first_na->nla_type);
+	}
+
+	if (count > 0)
+		fill_traf_stat_list(buffer, count, stats);
+	free(buffer);
+
 }
 
-netlink_serialization_command *netlink_create_command(struct genl *ans,
-	struct counter_arg *carg)
+netlink_serialization_command *netlink_create_command(
+	struct netlink_serialization_params *params)
 {
 	static netlink_serialization_command command = {0,};
-	const int netlink_command = netlink_get_command(ans);
+	const int netlink_command = netlink_get_command(params->ans);
+
+	command.params = *params;
 
 	if (netlink_command == TRAF_STAT_C_GET_CONN_IN) {
 		command.deserialize_answer = _process_answer;
-		command.params.stat_tree = carg->in_tree;
+		command.params.stat_tree = params->carg->in_tree;
 	} else if (netlink_command == TRAF_STAT_C_GET_PID_OUT) {
 		command.deserialize_answer = _process_answer;
-		command.params.stat_tree = carg->out_tree;
+		command.params.stat_tree = params->carg->out_tree;
 	} else {
 		_E("Unknown command!");
 		return NULL;
 	}
 
-	command.params.ans = ans;
 	return &command;
 }
 

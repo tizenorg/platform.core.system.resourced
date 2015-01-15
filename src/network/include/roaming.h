@@ -28,7 +28,7 @@
 #ifndef _RSML_LIBS_ROAMING_H
 #define _RSML_LIBS_ROAMING_H
 
-#include "resourced.h"
+#include "data_usage.h"
 
 /**
  * @brief Just get roaming state.
