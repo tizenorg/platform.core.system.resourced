@@ -4,7 +4,7 @@
 # All rights reserved.
 #
 
-libdir=@LIBDIR@
+libdir=@LIB_INSTALL_DIR@
 includedir=@INCLUDEDIR@
 
 Name: @PC_NAME_DEPRECATED@

@@ -121,7 +121,7 @@ export CFLAGS="$CFLAGS -DTIZEN_DEBUG_ENABLE"
 export CXXFLAGS="$CXXFLAGS -DTIZEN_DEBUG_ENABLE"
 export FFLAGS="$FFLAGS -DTIZEN_DEBUG_ENABLE"
 
-cmake . -DCMAKE_INSTALL_PREFIX=/usr -DFULLVER=%{version} -DMAJORVER=${MAJORVER} -DCMAKE_BUILD_TYPE=Release \
+%cmake . -DFULLVER=%{version} -DMAJORVER=${MAJORVER} -DCMAKE_BUILD_TYPE=Release \
 	-DEXCLUDE_LIST_FILE_NAME=%{exclude_list_file_name} \
 	-DEXCLUDE_LIST_FULL_PATH=%{exclude_list_full_path} -DDATABASE_FULL_PATH=%{database_full_path} \
 	-DEXCLUDE_LIST_OPT_FULL_PATH=%{exclude_list_opt_full_path} -DNETWORK_MODULE=%{network_state} -DSWAP_MODULE=%{swap_module} \
