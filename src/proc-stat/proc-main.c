@@ -385,7 +385,7 @@ static void proc_free_exclude_key(gpointer data)
 
 static gboolean find_excluded(gpointer key, gpointer value, gpointer user_data)
 {
-	return (gboolean)strstr((char*)user_data, (char*)key);
+	return (gboolean)(strstr((char*)user_data, (char*)key) ? 1 : 0);
 }
 
 int resourced_proc_excluded(const char *app_name)
