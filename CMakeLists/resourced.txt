@@ -164,6 +164,7 @@ SET (REQUIRES_LIST ${REQUIRES_LIST}
 	ecore-file
 	edbus
 	libsystemd-daemon
+	eina
 )
 
 IF("${LOGGING_MODULE}" STREQUAL "ON")

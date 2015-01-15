@@ -63,6 +63,7 @@ BuildRequires:  pkgconfig(ecore-file)
 BuildRequires:  pkgconfig(edbus)
 BuildRequires:  pkgconfig(capi-network-connection)
 BuildRequires:  pkgconfig(libsystemd-daemon)
+BuildRequires:  pkgconfig(eina)
 
 Requires(post): /sbin/ldconfig
 Requires(postun): /sbin/ldconfig
