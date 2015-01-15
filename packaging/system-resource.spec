@@ -21,6 +21,10 @@ Source8:    resourced-logging.service
 %define logging_cpu OFF
 %define memory_module ON
 %define memory_cgroup OFF
+%define swap_module OFF
+%define network_state OFF
+%define telephony_feature OFF
+%define tethering_feature OFF
 
 %if "%{?tizen_profile_name}" == "mobile"
 	%define swap_module OFF
