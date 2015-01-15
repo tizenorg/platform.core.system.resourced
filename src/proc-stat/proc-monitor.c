@@ -39,7 +39,7 @@
 #include "lowmem-handler.h"
 #include "notifier.h"
 
-#include <journal/system.h>
+
 
 #define WATCHDOG_LAUNCHING_PARAM "WatchdogPopupLaunch"
 #define WATCHDOG_KEY1			"_SYSPOPUP_CONTENT_"
@@ -401,7 +401,7 @@ static void proc_dbus_watchdog_handler(void *data, DBusMessage *msg)
 	}
 
 	_E("Receive watchdog signal to pid: %d(%s)\n", pid, appname);
-	journal_system_anr(appname);
+	
 	if (watchdog_check_timer) {
 		_E("current killing watchdog process. so skipped kill %d(%s)\n", pid, appname);
 		return;
