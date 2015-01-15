@@ -1,7 +1,7 @@
 /*
  * resourced
  *
- * Copyright (c) 2000 - 2013 Samsung Electronics Co., Ltd. All rights reserved.
+ * Copyright (c) 2014 Samsung Electronics Co., Ltd. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,6 @@
 /*
  * @file swap.c
  * @desc swap process
- * Copyright (c) 2013 Samsung Electronics Co., Ltd. All rights reserved.
  */
 
 #include "macro.h"
@@ -28,6 +27,8 @@
 #include "module-data.h"
 #include "edbus-handler.h"
 #include "swap-common.h"
+#include "notifier.h"
+#include "proc-process.h"
 
 #include <resourced.h>
 #include <trace.h>
@@ -38,45 +39,67 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <pthread.h>
+#include <sys/sysinfo.h>
+#include <sys/time.h>
+#include <sys/resource.h>
 
-enum {
-	FLASH_OUT_OFF,
-	FLASH_OUT_ON,
-};
+#define MAX_SWAP_VICTIMS		16
 
-#define SWAP_PATH_MAX				100
-#define MAX_SWAP_VICTIMS			16
+#define MEMCG_PATH			"/sys/fs/cgroup/memory"
+#define SWAPCG_PATH			MEMCG_PATH"/swap"
+#define SWAPCG_PROCS			SWAPCG_PATH"/cgroup.procs"
+#define SWAPCG_USAGE			SWAPCG_PATH"/memory.usage_in_bytes"
+#define SWAPCG_RECLAIM			SWAPCG_PATH"/memory.force_reclaim"
 
-#define MEMCG_PATH				"/sys/fs/cgroup/memory"
 #define SWAP_ON_EXEC_PATH		"/sbin/swapon"
 #define SWAP_OFF_EXEC_PATH		"/sbin/swapoff"
 
-#define SWAP_FLASH_COUNT_PATH			"/sys/kernel/debug/zswap/written_back_pages"
+#define SIGNAL_NAME_SWAP_TYPE		"SwapType"
+#define SIGNAL_NAME_SWAP_START_PID	"SwapStartPid"
 
-#define SIGNAL_NAME_SWAP_TYPE			"SwapType"
-#define SIGNAL_NAME_SWAP_FLASH			"SwapFlash"
-#define SIGNAL_NAME_SWAP_START_PID		"SwapStartPid"
+#define SWAPFILE_NAME			"/dev/zram0"
 
-#define SWAPFILE_NAME		"/opt/usr/swapfile"
+#define SWAP_PATH_MAX			100
 
-#define BtoPAGE(x)		((x) >> 12)
+#define MBtoB(x)			(x<<20)
+#define MBtoPage(x)			(x<<8)
+
+#define BtoMB(x)			((x) >> 20)
+#define BtoPAGE(x)			((x) >> 12)
+
+#define SWAP_TIMER_INTERVAL		0.5
+#define SWAP_PRIORITY			20
+
+#define SWAP_COUNT_MAX                 5
+
+struct swap_data_type {
+	enum swap_status_type	 status_type;
+	unsigned long *args;
+};
 
 static int swapon;
-static int swap_flashout;
-static int last_swap_count;
 static pthread_mutex_t swap_mutex;
 static pthread_cond_t swap_cond;
+static Ecore_Timer *swap_timer = NULL;
+
+static const struct module_ops swap_modules_ops;
+static const struct module_ops *swap_ops;
 
 pid_t swap_victims[MAX_SWAP_VICTIMS];
 
-static void swap_set_candidate_pid(int *pid_array, int count)
+static int swap_set_candidate_pid(void *data)
 {
+	unsigned long *args = data;
 	int i;
+	int *pid_array = (int*)args[0];
+	int count = (int)args[1];
 
 	memset(swap_victims, 0, sizeof(int)*MAX_SWAP_VICTIMS);
 
 	for (i = 0; i < count; i++)
 		swap_victims[i] = pid_array[i];
+
+	return RESOURCED_ERROR_NONE;
 }
 
 static pid_t swap_get_candidate_pid(void)
@@ -106,7 +129,7 @@ static void swap_set_swap_type(int type)
 {
 	struct shared_modules_data *modules_data = get_shared_modules_data();
 
-	ret_value_msg_if(modules_data == NULL, ,
+	ret_msg_if(modules_data == NULL,
 			 "Invalid shared modules data\n");
 	modules_data->swap_data.swaptype = type;
 }
@@ -118,11 +141,9 @@ static int swap_check_swap_pid(int pid)
 	int ret = 0;
 	FILE *f;
 
-	sprintf(buf, "%s/swap/cgroup.procs", MEMCG_PATH);
-
-	f = fopen(buf, "r");
+	f = fopen(SWAPCG_PROCS, "r");
 	if (!f) {
-		_E("%s open failed", buf);
+		_E("%s open failed", SWAPCG_PROCS);
 		return RESOURCED_ERROR_FAIL;
 	}
 
@@ -143,11 +164,9 @@ static int swap_check_swap_cgroup(void)
 	int ret = SWAP_FALSE;
 	FILE *f;
 
-	sprintf(buf, "%s/swap/cgroup.procs", MEMCG_PATH);
-
-	f = fopen(buf, "r");
+	f = fopen(SWAPCG_PROCS, "r");
 	if (!f) {
-		_E("%s open failed", buf);
+		_E("%s open failed", SWAPCG_PROCS);
 		return RESOURCED_ERROR_FAIL;
 	}
 	while (fgets(buf, SWAP_PATH_MAX, f) != NULL) {
@@ -158,69 +177,162 @@ static int swap_check_swap_cgroup(void)
 	return ret;
 }
 
-static int swap_thread_do(void)
+static int swap_thread_do(FILE *procs, FILE *usage_in_bytes, FILE *force_reclaim)
 {
-	FILE *f;
 	char buf[SWAP_PATH_MAX] = {0,};
+	char appname[SWAP_PATH_MAX];
+	pid_t pid = 0;
 	int size;
+	int swap_cg_cnt=0;
 	unsigned long usage, nr_to_reclaim;
 
-	/* reclaim 25% of swap cgroup usage */
-	sprintf(buf, "%s/swap/memory.usage_in_bytes", MEMCG_PATH);
-	f = fopen(buf, "r");
-	if (!f) {
-		_E("%s open failed, %d", buf, f);
-		return RESOURCED_ERROR_FAIL;
+	/* check swap cgroup count */
+	while (fgets(buf, SWAP_PATH_MAX, procs) != NULL) {
+		pid_t tpid = 0;
+		int toom = 0;
+		int ret;
+
+		if (!pid) {
+			tpid = atoi(buf);
+
+			if (proc_get_oom_score_adj(tpid, &toom) < 0) {
+			       _D("pid(%d) was already terminated", tpid);
+			       continue;
+			}
+
+			if (toom < OOMADJ_BACKGRD_UNLOCKED)
+			       continue;
+
+			ret = proc_get_cmdline(tpid, appname);
+			if (ret == RESOURCED_ERROR_FAIL)
+			       continue;
+
+			pid = tpid;
+		}
+		swap_cg_cnt++;
 	}
 
-	if (fgets(buf, 32, f) == NULL) {
-		_E("fgets failed\n");
-		fclose(f);
-		return RESOURCED_ERROR_FAIL;
+	/* swap cgroup count is MAX, kill 1 process */
+	if (swap_cg_cnt >= SWAP_COUNT_MAX) {
+		kill(pid, SIGKILL);
+		_E("we killed %d (%s)", pid, appname);
 	}
+
+	/* cacluate reclaim size by usage and swap cgroup count */
+	if (fgets(buf, 32, usage_in_bytes) == NULL)
+		return RESOURCED_ERROR_FAIL;
+
 	usage = (unsigned long)atol(buf);
-	fclose(f);
 
-	nr_to_reclaim = BtoPAGE(usage) >> 2;
-	sprintf(buf, "%s/swap/memory.force_reclaim", MEMCG_PATH);
-	f = fopen(buf, "w");
-	if (!f) {
-		_E("%s open failed, %d", buf, f);
-		return RESOURCED_ERROR_FAIL;
-	}
+	nr_to_reclaim = BtoPAGE(usage) >> ((swap_cg_cnt >> 1) + 1);
 
+	/* set reclaim size */
 	size = sprintf(buf, "%lu", nr_to_reclaim);
-	if (fwrite(buf, 1, size, f) != size)
+	if (fwrite(buf, 1, size, force_reclaim) != size)
 		_E("fwrite %s\n", buf);
-	fclose(f);
 
 	return RESOURCED_ERROR_NONE;
 }
 
 static void *swap_thread_main(void * data)
 {
+	FILE *procs = NULL;
+	FILE *usage_in_bytes = NULL;
+	FILE *force_reclaim = NULL;
+
+	setpriority(PRIO_PROCESS, 0, SWAP_PRIORITY);
+
+	if (procs == NULL) {
+		procs = fopen(SWAPCG_PROCS, "r");
+		if (procs == NULL) {
+			_E("%s open failed", SWAPCG_PROCS);
+			return NULL;
+		}
+	}
+
+	if (usage_in_bytes == NULL) {
+		usage_in_bytes = fopen(SWAPCG_USAGE, "r");
+		if (usage_in_bytes == NULL) {
+			_E("%s open failed", SWAPCG_USAGE);
+			fclose(procs);
+			return NULL;
+		}
+	}
+
+	if (force_reclaim == NULL) {
+		force_reclaim = fopen(SWAPCG_RECLAIM, "w");
+		if (force_reclaim == NULL) {
+			_E("%s open failed", SWAPCG_RECLAIM);
+			fclose(procs);
+			fclose(usage_in_bytes);
+			return NULL;
+		}
+	}
+
 	while (1) {
+		pthread_mutex_lock(&swap_mutex);
+		pthread_cond_wait(&swap_cond, &swap_mutex);
+
 		/*
 		 * when signalled by main thread, it starts
 		 * swap_thread_do().
 		 */
-		pthread_mutex_lock(&swap_mutex);
-		pthread_cond_wait(&swap_cond, &swap_mutex);
 		_I("swap thread conditional signal received");
-		swap_thread_do();
+
+		fseek(procs, 0, SEEK_SET);
+		fseek(usage_in_bytes, 0, SEEK_SET);
+		fseek(force_reclaim, 0, SEEK_SET);
+
+		_D("swap_thread_do start");
+		swap_thread_do(procs, usage_in_bytes, force_reclaim);
+		_D("swap_thread_do end");
 		pthread_mutex_unlock(&swap_mutex);
 	}
+
+	if (procs)
+		fclose(procs);
+	if (usage_in_bytes)
+		fclose(usage_in_bytes);
+	if (force_reclaim)
+		fclose(force_reclaim);
 
 	return NULL;
 }
 
-static void swap_start(void)
+static Eina_Bool swap_send_signal(void *data)
 {
+	int ret;
+
+	_D("swap timer callback function start");
+
 	/* signal to swap_start to start swap */
-	pthread_mutex_lock(&swap_mutex);
-	pthread_cond_signal(&swap_cond);
-	_I("send signal to swap thread");
-	pthread_mutex_unlock(&swap_mutex);
+	ret = pthread_mutex_trylock(&swap_mutex);
+
+	if (ret)
+		_E("pthread_mutex_trylock fail : %d, errno : %d", ret, errno);
+	else {
+		pthread_cond_signal(&swap_cond);
+		_I("send signal to swap thread");
+		pthread_mutex_unlock(&swap_mutex);
+	}
+
+	_D("swap timer delete");
+
+	ecore_timer_del(swap_timer);
+	swap_timer = NULL;
+
+	return ECORE_CALLBACK_CANCEL;
+}
+
+static int swap_start(void *data)
+{
+	if (swap_timer == NULL) {
+		_D("swap timer start");
+		swap_timer =
+			ecore_timer_add(SWAP_TIMER_INTERVAL, swap_send_signal, (void *)NULL);
+	}
+
+	return RESOURCED_ERROR_NONE;
 }
 
 static int swap_thread_create(void)
@@ -271,24 +383,7 @@ static pid_t swap_off(void)
 	return pid;
 }
 
-static int swap_set_flashswap(unsigned int on)
-{
-	swap_flashout = (on ? FLASH_OUT_ON : FLASH_OUT_OFF);
-
-	return RESOURCED_ERROR_NONE;
-}
-
-static int swap_set_flashswap_on(void)
-{
-	return swap_set_flashswap(1);
-}
-
-static int swap_set_flashswap_off(void)
-{
-	return swap_set_flashswap(0);
-}
-
-static void restart_swap(void)
+static int restart_swap(void *data)
 {
 	int status;
 	pid_t pid;
@@ -296,14 +391,13 @@ static void restart_swap(void)
 
 	if (!swapon) {
 		swap_on();
-		swap_set_flashswap_on();
-		return;
+		return RESOURCED_ERROR_NONE;
 	}
 
 	pid = fork();
 	if (pid == -1) {
 		_E("fork() error");
-		return;
+		return RESOURCED_ERROR_FAIL;
 	} else if (pid == 0) {
 		pid = swap_off();
 		ret = waitpid(pid, &status, 0);
@@ -311,32 +405,31 @@ static void restart_swap(void)
 			_E("Error waiting for swap_off child process (PID: %d, status: %d)", (int)pid, status);
 		}
 		swap_on();
-		swap_set_flashswap_on();
 		exit(0);
 	}
 	swapon = 1;
+
+	return RESOURCED_ERROR_NONE;
 }
 
-static int swap_get_flashswap(void)
+static int swap_move_swap_cgroup(void *data)
 {
-	return swap_flashout;
-}
-
-static void swap_move_swap_cgroup(pid_t pid)
-{
+	int *args = data;
 	int size;
 	FILE *f;
 	char buf[SWAP_PATH_MAX] = {0,};
-	sprintf(buf, "%s/swap/cgroup.procs", MEMCG_PATH);
-	f = fopen(buf, "w");
+
+	f = fopen(SWAPCG_PROCS, "w");
 	if (!f) {
-		_E("Fail to %s file open", buf);
-		return;
+		_E("Fail to %s file open", SWAPCG_PROCS);
+		return RESOURCED_ERROR_FAIL;
 	}
-	size = sprintf(buf, "%d", (int)pid);
+	size = sprintf(buf, "%d", *args);
 	if (fwrite(buf, size, 1, f) != 1)
-		_E("fwrite cgroup tasks to swap cgroup failed : %d\n", (int)pid);
+		_E("fwrite cgroup tasks to swap cgroup failed : %d\n", *args);
 	fclose(f);
+
+	return RESOURCED_ERROR_NONE;
 }
 
 static void swap_start_pid_edbus_signal_handler(void *data, DBusMessage *msg)
@@ -359,11 +452,11 @@ static void swap_start_pid_edbus_signal_handler(void *data, DBusMessage *msg)
 	}
 
 	_I("swap cgroup entered : pid : %d", (int)pid);
-	swap_move_swap_cgroup(pid);
+	swap_move_swap_cgroup(&pid);
 
 	if (get_swap_status() == SWAP_OFF)
-			restart_swap();
-	swap_start();
+			restart_swap(NULL);
+	swap_start(NULL);
 }
 
 static void swap_type_edbus_signal_handler(void *data, DBusMessage *msg)
@@ -386,7 +479,6 @@ static void swap_type_edbus_signal_handler(void *data, DBusMessage *msg)
 	switch (type) {
 	case 0:
 		if (swap_get_swap_type() != SWAP_OFF) {
-			swap_set_flashswap_off();
 			if (swapon)
 				swap_off();
 			swap_set_swap_type(type);
@@ -394,44 +486,12 @@ static void swap_type_edbus_signal_handler(void *data, DBusMessage *msg)
 		break;
 	case 1:
 		if (swap_get_swap_type() != SWAP_ON) {
-			restart_swap();
+			restart_swap(NULL);
 			swap_set_swap_type(type);
 		}
 		break;
 	default:
 		_D("It is not valid swap type : %d", type);
-		break;
-	}
-}
-
-static void swap_flash_edbus_signal_handler(void *data, DBusMessage *msg)
-{
-	DBusError err;
-	int type;
-
-	if (dbus_message_is_signal(msg, RESOURCED_INTERFACE_SWAP, SIGNAL_NAME_SWAP_FLASH) == 0) {
-		_D("there is no swap type signal");
-		return;
-	}
-
-	dbus_error_init(&err);
-
-	if (dbus_message_get_args(msg, &err, DBUS_TYPE_INT32, &type, DBUS_TYPE_INVALID) == 0) {
-		_D("there is no message");
-		return;
-	}
-
-	switch (type) {
-	case 0:
-		if (swap_get_flashswap() == FLASH_OUT_ON)
-			swap_set_flashswap_off();
-		break;
-	case 1:
-		if (swap_get_flashswap() == FLASH_OUT_OFF)
-			swap_set_flashswap_on();
-		break;
-	default:
-		_D("It is not valid swap flash : %d", type);
 		break;
 	}
 }
@@ -451,23 +511,7 @@ static DBusMessage *edbus_getswaptype(E_DBus_Object *obj, DBusMessage *msg)
 	return reply;
 }
 
-static DBusMessage *edbus_getflashout_state(E_DBus_Object *obj, DBusMessage *msg)
-{
-	DBusMessageIter iter;
-	DBusMessage *reply;
-	int state;
-
-	state = swap_get_flashswap();
-
-	reply = dbus_message_new_method_return(msg);
-	dbus_message_iter_init_append(reply, &iter);
-	dbus_message_iter_append_basic(&iter, DBUS_TYPE_INT32, &state);
-
-	return reply;
-}
-
 static struct edbus_method edbus_methods[] = {
-	{ "GetFlashoutState",   NULL,   "i", edbus_getflashout_state },
 	{ "GetSwapType",   NULL,   "i", edbus_getswaptype },
 	/* Add methods here */
 };
@@ -480,90 +524,24 @@ static void swap_dbus_init(void)
 			SIGNAL_NAME_SWAP_TYPE,
 		    (void *)swap_type_edbus_signal_handler);
 	register_edbus_signal_handler(RESOURCED_PATH_SWAP, RESOURCED_INTERFACE_SWAP,
-			SIGNAL_NAME_SWAP_FLASH,
-		    (void *)swap_flash_edbus_signal_handler);
-	register_edbus_signal_handler(RESOURCED_PATH_SWAP, RESOURCED_INTERFACE_SWAP,
 			SIGNAL_NAME_SWAP_START_PID,
 		    (void *)swap_start_pid_edbus_signal_handler);
 
 	ret = edbus_add_methods(RESOURCED_PATH_SWAP, edbus_methods,
 			  ARRAY_SIZE(edbus_methods));
 
-	ret_value_msg_if(ret != RESOURCED_ERROR_NONE, ,
+	ret_msg_if(ret != RESOURCED_ERROR_NONE,
 		"DBus method registration for %s is failed",
 			RESOURCED_PATH_SWAP);
 }
 
-static int swap_get_swapout_count(int *count)
-{
-	char buf[SWAP_PATH_MAX] = {0,};
-	FILE *f;
-	size_t len;
-
-	f = fopen(SWAP_FLASH_COUNT_PATH, "r");
-
-	if (!f) {
-		_E("%s open failed", SWAP_FLASH_COUNT_PATH);
-		return RESOURCED_ERROR_FAIL;
-	}
-
-	len = fread(buf, 1, SWAP_PATH_MAX, f);
-
-	if (len <= 0) {
-		_E("fread %s fail\n", SWAP_FLASH_COUNT_PATH);
-		fclose(f);
-		return RESOURCED_ERROR_FAIL;
-	}
-
-	*count = atoi(buf);
-
-	fclose(f);
-
-	return RESOURCED_ERROR_NONE;
-}
-
-static int swap_get_last_swapcount(void)
-{
-	return last_swap_count;
-}
-
-static void swap_set_last_swapcount(int count)
-{
-	last_swap_count = count;
-}
-
-static void swap_check_swapout_count(void)
-{
-	struct shared_modules_data *modules_data = get_shared_modules_data();
-	int swap_flash_count;
-
-	ret_value_msg_if(modules_data == NULL, ,
-			 "Invalid shared modules data\n");
-	if (modules_data->swap_data.swaptype == SWAP_OFF)
-		return;
-
-	/* check flashswap count */
-	if (swap_get_swapout_count(&swap_flash_count) < 0)
-		return;
-
-	if ((swap_flash_count - swap_get_last_swapcount()) >
-			MBtoPage(512)) {
-		swap_set_last_swapcount(swap_flash_count);
-		swap_set_flashswap_off();
-		if (swapon)
-			swap_off();
-	}
-
-	return;
-}
-
 static int swap_init(void)
 {
-	int ret = RESOURCED_ERROR_NONE;
+	int ret;
 
 	ret = swap_thread_create();
 	if (ret) {
-		_E("swap thread create failed\n");
+		_E("swap thread create failed");
 		return ret;
 	}
 
@@ -574,30 +552,42 @@ static int swap_init(void)
 	return ret;
 }
 
-static int swap_intialized;
-
-static int resourced_swap_control(void *data)
+static int swap_check_node(void)
 {
-	int ret = RESOURCED_ERROR_NONE;
-	struct swap_data_type *s_data;
+	FILE *procs = NULL;
+	FILE *usage_in_bytes = NULL;
+	FILE *force_reclaim = NULL;
 
-	if (!swap_intialized)
-		return RESOURCED_ERROR_NONE;
-
-	s_data = (struct swap_data_type *)data;
-	switch(s_data->data_type.control_type) {
-	case SWAP_START:
-		swap_start();
-		break;
-	case SWAP_RESTART:
-		restart_swap();
-		break;
-	case SWAP_MOVE_CGROUP:
-		if (s_data->args)
-			swap_move_swap_cgroup((pid_t)s_data->args[0]);
-		break;
+	procs = fopen(SWAPCG_PROCS, "r");
+	if (procs == NULL) {
+		_E("%s open failed", SWAPCG_PROCS);
+		return RESOURCED_ERROR_NO_DATA;
 	}
-	return ret;
+
+	fclose(procs);
+
+	usage_in_bytes = fopen(SWAPCG_USAGE, "r");
+	if (usage_in_bytes == NULL) {
+		_E("%s open failed", SWAPCG_USAGE);
+		return RESOURCED_ERROR_NO_DATA;
+	}
+
+	fclose(usage_in_bytes);
+
+	force_reclaim = fopen(SWAPCG_RECLAIM, "w");
+	if (force_reclaim == NULL) {
+		_E("%s open failed", SWAPCG_RECLAIM);
+		return RESOURCED_ERROR_NO_DATA;
+	}
+
+	fclose(force_reclaim);
+
+	return RESOURCED_ERROR_NONE;
+}
+
+static int resourced_swap_check_runtime_support(void *data)
+{
+	return swap_check_node();
 }
 
 static int resourced_swap_status(void *data)
@@ -605,20 +595,13 @@ static int resourced_swap_status(void *data)
 	int ret = RESOURCED_ERROR_NONE;
 	struct swap_data_type *s_data;
 
-	if (!swap_intialized)
-		return RESOURCED_ERROR_NONE;
-
 	s_data = (struct swap_data_type *)data;
-	switch(s_data->data_type.status_type) {
+	switch(s_data->status_type) {
 	case SWAP_GET_TYPE:
 		ret = swap_get_swap_type();
 		break;
 	case SWAP_GET_CANDIDATE_PID:
 		ret = swap_get_candidate_pid();
-		break;
-	case SWAP_SET_CANDIDATE_PID:
-		if (s_data->args)
-			swap_set_candidate_pid((int*)s_data->args[0], (int)s_data->args[1]);
 		break;
 	case SWAP_GET_STATUS:
 		ret = get_swap_status();
@@ -632,9 +615,6 @@ static int resourced_swap_status(void *data)
 	case SWAP_CHECK_CGROUP:
 		ret = swap_check_swap_cgroup();
 		break;
-	case SWAP_CHECK_SWAPOUT_COUNT:
-		swap_check_swapout_count();
-		break;
 	}
 	return ret;
 }
@@ -644,25 +624,47 @@ static int resourced_swap_init(void *data)
 	struct modules_arg *marg = (struct modules_arg *)data;
 	struct daemon_opts *dopt = marg->opts;
 
-	swap_intialized = 1;
+	swap_ops = &swap_modules_ops;
 
 	if (dopt->enable_swap)
 		swap_set_swap_type(dopt->enable_swap);
+
+	register_notifier(RESOURCED_NOTIFIER_SWAP_SET_CANDIDATE_PID, swap_set_candidate_pid);
+	register_notifier(RESOURCED_NOTIFIER_SWAP_START, swap_start);
+	register_notifier(RESOURCED_NOTIFIER_SWAP_RESTART, restart_swap);
+	register_notifier(RESOURCED_NOTIFIER_SWAP_MOVE_CGROUP, swap_move_swap_cgroup);
 
 	return swap_init();
 }
 
 static int resourced_swap_finalize(void *data)
 {
+	unregister_notifier(RESOURCED_NOTIFIER_SWAP_SET_CANDIDATE_PID, swap_set_candidate_pid);
+	unregister_notifier(RESOURCED_NOTIFIER_SWAP_START, swap_start);
+	unregister_notifier(RESOURCED_NOTIFIER_SWAP_RESTART, restart_swap);
+	unregister_notifier(RESOURCED_NOTIFIER_SWAP_MOVE_CGROUP, swap_move_swap_cgroup);
+
 	return RESOURCED_ERROR_NONE;
 }
 
-static struct module_ops swap_modules_ops = {
+int swap_status(enum swap_status_type type, unsigned long *args)
+{
+	struct swap_data_type s_data;
+
+	if (!swap_ops)
+		return RESOURCED_ERROR_NONE;
+
+	s_data.status_type = type;
+	s_data.args = args;
+	return swap_ops->status(&s_data);
+}
+
+static const struct module_ops swap_modules_ops = {
 	.priority = MODULE_PRIORITY_NORMAL,
 	.name = "swap",
 	.init = resourced_swap_init,
 	.exit = resourced_swap_finalize,
-	.control = resourced_swap_control,
+	.check_runtime_support = resourced_swap_check_runtime_support,
 	.status = resourced_swap_status,
 };
 

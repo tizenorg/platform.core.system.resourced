@@ -28,7 +28,7 @@ extern "C" {
  * @brief Enumeration for return type
  */
 typedef enum {
-	NETWORK_ERROR_NONMONITOR = -8,		/** < Process don't show watchdog popup */
+	NETWORK_ERROR_NONMONITOR = -9,		/** < Process don't show watchdog popup */
 	NETWORK_ERROR_NOTIMPL = -7,		 /**< Not implemented yet error */
 	NETWORK_ERROR_UNINITIALIZED = -6,	 /**< Cgroup doen't mounted or daemon not started */
 	NETWORK_ERROR_NO_DATA = -5,		 /**< Success, but no data */
@@ -527,6 +527,7 @@ network_error_e network_join_app_performance(const char *app_id, const pid_t pid
  * @retval #NETWORK_ERROR_NONMONITOR Process don't show watchdog popup
  */
 network_error_e network_update_statistics(void);
+
 /*
  * @brief Counters update information
  * @details This structure is needed to prevent client API from modification
@@ -542,6 +543,7 @@ struct network_update_info {
 typedef network_cb_ret_e(*network_update_cb)(
 	const struct network_update_info *info,
 	void *user_data);
+
 /**
  * @brief Register callback for update counters.
  * @details Callback function will be called if
@@ -664,6 +666,7 @@ typedef struct {
  */
 typedef network_cb_ret_e(*network_info_cb) (const network_info_s *info,
 					       void *user_data);
+
 /**
  * @brief Data usage enumerate function
  * @details The callback is called for each application that used network
@@ -749,6 +752,7 @@ typedef struct {
 	network_tm_interval_s *interval;
 	network_connection_period_e connection_state;
 } network_reset_rule_s;
+
 /**
  * @brief Reset data usage information
  * @param[in] rule Reset rule. It's statistics erasing description

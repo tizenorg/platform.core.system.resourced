@@ -30,7 +30,7 @@
 #ifndef RESOURCED_PROTOCOL_INFO_NET_IFACE_H_
 #define RESOURCED_PROTOCOL_INFO_NET_IFACE_H_
 
-#include "resourced.h"
+#include "data_usage.h"
 
 void init_hw_net_protocol_type(void);
 

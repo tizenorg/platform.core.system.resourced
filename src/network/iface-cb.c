@@ -27,6 +27,7 @@
  */
 
 #include "macro.h"
+#include "datausage-common.h"
 #include "restriction-handler.h"
 #include "settings.h"
 #include "storage.h"
@@ -56,6 +57,9 @@ static iface_callbacks *create_iface_callback(void)
 	if (callback_data)
 		callbacks = g_list_prepend(callbacks, callback_data);
 	callback_data = create_iface_storage_callback();
+	if (callback_data)
+		callbacks = g_list_prepend(callbacks, callback_data);
+	callback_data = create_counter_callback();
 	if (callback_data)
 		callbacks = g_list_prepend(callbacks, callback_data);
 
@@ -103,12 +107,19 @@ static void process_nlh(int len, const struct nlmsghdr *nlh,
 			if (rth->rta_type != IFA_LOCAL)
 				continue;
 
-			if (nlh->nlmsg_type == RTM_NEWADDR)
+			if (nlh->nlmsg_type == RTM_NEWADDR) {
+				init_iftype();
 				return g_list_foreach(arg, _iface_up_iter,
 					&(ifa->ifa_index));
-			else if (nlh->nlmsg_type == RTM_DELADDR)
-				return g_list_foreach(arg, _iface_down_iter,
+
+			} else if (nlh->nlmsg_type == RTM_DELADDR) {
+				g_list_foreach(arg, _iface_down_iter,
 					&(ifa->ifa_index));
+				/* network delete hooks require old information,
+				 * for example for get_iftype by ifindex */
+				init_iftype();
+				return;
+			}
 		}
 	}
 }
@@ -206,7 +217,6 @@ int resourced_iface_init(void)
 		(void *)ifcallbacks, NULL, NULL);
 	ret_value_msg_if(iface_ecore_fd_handler == NULL, RESOURCED_ERROR_FAIL,
 			 "Failed to add iface callbacks\n");
-	init_iftype();
 	apply_iface_options();
 	return RESOURCED_ERROR_NONE;
 }

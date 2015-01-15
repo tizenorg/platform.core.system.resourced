@@ -1,6 +1,5 @@
 PRAGMA journal_mode = PERSIST;
 
- -- Information about counted traffic per time points.
 CREATE TABLE IF NOT EXISTS statistics (
   binpath TEXT,
   received BIGINT,
@@ -9,12 +8,12 @@ CREATE TABLE IF NOT EXISTS statistics (
   iftype INT,
   is_roaming INT,
   hw_net_protocol_type INT,
+  ifname TEXT,
   PRIMARY KEY (binpath, time_stamp, iftype)
 );
 
 CREATE INDEX IF NOT EXISTS binpath_st_idx ON statistics(binpath, iftype);
 
- -- Information about defined quotas.
 CREATE TABLE IF NOT EXISTS quotas (
   binpath TEXT,
   sent_quota BIGINT,
@@ -30,8 +29,6 @@ CREATE TABLE IF NOT EXISTS quotas (
 
 CREATE INDEX IF NOT EXISTS binpath_qt_idx ON quotas(binpath, iftype);
 
- -- Information about active quotas. One entry per quota time interval.
- -- Time intervals abut but don't overlap.
 CREATE TABLE IF NOT EXISTS effective_quotas (
   binpath TEXT,
   sent_used_quota BIGINT,
@@ -46,7 +43,6 @@ CREATE TABLE IF NOT EXISTS effective_quotas (
 
 CREATE INDEX IF NOT EXISTS binpath_effective_quotas_idx ON effective_quotas(binpath, iftype);
 
- -- Information about restrictions.
 CREATE TABLE IF NOT EXISTS restrictions (
   binpath TEXT,
   rcv_limit BIGINT,
@@ -60,7 +56,6 @@ CREATE TABLE IF NOT EXISTS restrictions (
 
 CREATE INDEX IF NOT EXISTS binpath_restrictions_idx ON restrictions(binpath, iftype);
 
- -- Information about network interfaces state
 CREATE TABLE IF NOT EXISTS iface_status (
   update_time BIGINT,
   iftype INT,
@@ -69,4 +64,3 @@ CREATE TABLE IF NOT EXISTS iface_status (
 );
 
 CREATE INDEX IF NOT EXISTS update_tm_if_idx ON iface_status(update_time, iftype, ifstatus);
-

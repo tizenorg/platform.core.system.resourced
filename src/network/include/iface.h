@@ -24,12 +24,13 @@
  * @desc Utility for working with network interfaces
  */
 
-#ifndef TRESMAN_LIBS_NET_IFACE_H_
-#define TRESMAN_LIBS_NET_IFACE_H_
+#ifndef TRESOURCED_LIBS_NET_IFACE_H_
+#define TRESOURCED_LIBS_NET_IFACE_H_
 
 #include <glib.h>
+#include <stdbool.h>
 
-#include "resourced.h"
+#include "data_usage.h"
 
 /**
  * @desc Storage now create an instance of this structure
@@ -45,6 +46,8 @@ void finalize_iftypes(void);
 int is_allowed_ifindex(int ifindex);
 
 resourced_iface_type get_iftype(int ifindex);
+char *get_iftype_name(resourced_iface_type iftype);
+bool is_address_exists(const char *name);
 
 resourced_iface_type convert_iftype(const char *buffer);
 
@@ -54,8 +57,9 @@ void set_datacall_allowance(const resourced_option_state datacall_option);
 typedef int(*ifindex_iterator)(int ifindex,
 	resourced_iface_type iftype, void *data);
 
-void for_each_ifindex(ifindex_iterator iter, void *data);
+void for_each_ifindex(ifindex_iterator iter, void(*empty_func)(void *),
+	void *data);
 
 typedef GList iface_callbacks;
 
-#endif /*TRESMAN_LIBS_NET_IFACE_H_*/
+#endif /*TRESOURCED_LIBS_NET_IFACE_H_*/

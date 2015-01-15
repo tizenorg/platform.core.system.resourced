@@ -1,7 +1,7 @@
 /*
  * resourced
  *
- * Copyright (c) 2000 - 2013 Samsung Electronics Co., Ltd. All rights reserved.
+ * Copyright (c) 2014 Samsung Electronics Co., Ltd. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,8 +30,10 @@
 #include <stdlib.h>
 #include <net/if.h>
 
+#include "const.h"
 #include "iface.h"
 #include "macro.h"
+#include "net-cls-cgroup.h"
 #include "trace.h"
 #include "restriction-helper.h"
 #include "datausage-restriction.h"
@@ -88,36 +90,69 @@ static resourced_cb_ret _restriction_iter(
 	return RESOURCED_CONTINUE;
 }
 
+enum restriction_apply_type
+{
+	KEEP_AS_IS,
+	UNSET,
+};
+
+struct apply_param
+{
+	enum restriction_apply_type apply_type;
+};
+
 static void _reset_restrictions_iter(gpointer data, gpointer user_data)
 {
 	resourced_restriction_info *arg = (resourced_restriction_info *)data;
+	struct apply_param *param = (struct apply_param *)user_data;
+
+	u_int32_t app_classid = RESOURCED_UNKNOWN_CLASSID;
 	resourced_net_restrictions rst = {0};
 	int error_code = RESOURCED_ERROR_NONE;
 	enum traffic_restriction_type rst_type;
 
-	ret_value_msg_if(!arg, , "Please provide valid pointer!");
+	ret_msg_if(!arg || !param, "Please provide valid pointer!");
 
 	rst.iftype = arg->iftype;
 	rst.send_limit = arg->send_limit;
 	rst.rcv_limit = arg->rcv_limit;
 	rst.roaming = arg->roaming;
-	rst_type = convert_to_restriction_type(arg->rst_state);
-	error_code = process_restriction_local(arg->app_id, arg->quota_id, &rst,
-					       rst_type);
 
-	ret_value_msg_if(error_code != RESOURCED_ERROR_NONE, ,
+	if (param->apply_type == KEEP_AS_IS)
+		rst_type = convert_to_restriction_type(arg->rst_state);
+	else if (param->apply_type == UNSET)
+		rst_type = RST_UNSET;
+	else
+		rst_type = RST_UNDEFINDED;
+
+	app_classid = get_classid_by_app_id(arg->app_id, false);
+
+	error_code = process_kernel_restriction(app_classid,
+		&rst, rst_type);
+
+	ret_msg_if(error_code != RESOURCED_ERROR_NONE,
 			 "restriction type %d failed, error %d\n", rst_type,
 			 error_code);
-	return;
 }
 
-static void _apply_reset_restrictions(const list_restrictions_info *restrictions)
+static void _apply_restrictions(const list_restrictions_info *restrictions)
 {
+	struct apply_param param = {.apply_type = KEEP_AS_IS};
 	if (!restrictions) {
 		_D("No restrictions!");
 		return;
 	}
-	g_list_foreach((GList *)restrictions, _reset_restrictions_iter, NULL);
+	g_list_foreach((GList *)restrictions, _reset_restrictions_iter, &param);
+}
+
+static void _reset_restrictions(const list_restrictions_info *restrictions)
+{
+	struct apply_param param = {.apply_type = UNSET};
+	if (!restrictions) {
+		_D("No restrictions!");
+		return;
+	}
+	g_list_foreach((GList *)restrictions, _reset_restrictions_iter, &param);
 }
 
 static void _free_restriction_iter(gpointer data)
@@ -140,28 +175,48 @@ static void _free_reset_restrictions(list_restrictions_info *restrictions)
 	g_list_free_full(restrictions, _free_restriction_iter);
 }
 
-static void _handle_on_iface_up(const int ifindex)
+static void process_on_iface_up(const int ifindex)
 {
-	/* Create local list of restriction for thread safety */
 	struct restriction_context context = {
 		.restrictions = 0,
 		.ifindex = ifindex,
 	};
 
-	init_iftype();
 	restrictions_foreach(_restriction_iter, &context);
 	if (!context.restrictions) {
 		_D("No restrictions!");
 		return;
 	}
-	_apply_reset_restrictions(context.restrictions);
+	_apply_restrictions(context.restrictions);
+	_free_reset_restrictions(context.restrictions);
+}
+
+static void handle_on_iface_up(const int ifindex)
+{
+	process_on_iface_up(ifindex);
+}
+
+static void handle_on_iface_down(const int ifindex)
+{
+	struct restriction_context context = {
+		.restrictions = 0,
+		.ifindex = ifindex,
+	};
+
+	restrictions_foreach(_restriction_iter, &context);
+	if (!context.restrictions) {
+		_D("No restrictions!");
+		return;
+	}
+	_reset_restrictions(context.restrictions);
 	_free_reset_restrictions(context.restrictions);
 }
 
 static resourced_cb_ret roaming_restrictions_iter(
 	const resourced_restriction_info *info, void *user_data)
 {
-	_reset_restrictions_iter((gpointer)info, (gpointer)user_data);
+	struct apply_param param = {.apply_type = KEEP_AS_IS};
+	_reset_restrictions_iter((gpointer)info, &param);
 	return RESOURCED_CONTINUE;
 }
 
@@ -184,8 +239,8 @@ iface_callback *create_restriction_callback(void)
 		_E("Malloc of iface_callback failed\n");
 		return NULL;
 	}
-	ret_arg->handle_iface_up = _handle_on_iface_up;
-	ret_arg->handle_iface_down = NULL;
+	ret_arg->handle_iface_up = handle_on_iface_up;
+	ret_arg->handle_iface_down = handle_on_iface_down;
 
 	return ret_arg;
 }
@@ -195,12 +250,15 @@ void reactivate_restrictions(void)
 	int i;
 	struct if_nameindex *ids = if_nameindex();
 
-	ret_value_msg_if(ids == NULL, ,
+	ret_msg_if(ids == NULL,
 			 "Failed to initialize iftype table! errno: %d, %s",
 			 errno, strerror(errno));
 
-	for (i = 0; ids[i].if_index != 0; ++i)
-		_handle_on_iface_up(ids[i].if_index);
+	for (i = 0; ids[i].if_index != 0; ++i) {
+		if (!is_address_exists(ids[i].if_name))
+			continue;
+		process_on_iface_up(ids[i].if_index);
+	}
 
 	if_freenameindex(ids);
 }

@@ -29,6 +29,7 @@
 
 #include "resourced.h"
 
+#include "daemon-options.h"
 #include "transmission.h"
 
 struct daemon_arg {

@@ -23,8 +23,8 @@
  */
 
 #include "const.h"
+#include "data_usage.h"
 #include "macro.h"
-#include "resourced.h"
 #include "trace.h"
 #include "transmission.h"
 

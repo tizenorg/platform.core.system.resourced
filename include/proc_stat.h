@@ -226,6 +226,7 @@ enum proc_cgroup_cmd_type { /** cgroup command type **/
 	PROC_CGROUP_SET_LAUNCH_REQUEST,
 	PROC_CGROUP_SET_RESUME_REQUEST,
 	PROC_CGROUP_SET_TERMINATE_REQUEST,
+	PROC_CGROUP_SET_SERVICE_REQUEST,
 	PROC_CGROUP_SET_NOTI_REQUEST,
 	PROC_CGROUP_SET_PROC_EXCLUDE_REQUEST,
 	PROC_CGROUP_GET_MEMSWEEP,
@@ -256,6 +257,12 @@ resourced_ret_c proc_cgroup_inactive(pid_t pid);
  * @desc Change process status about cgroup with type
  */
 resourced_ret_c proc_group_change_status(int type, pid_t pid, char* app_id);
+
+/**
+ * @desc Send process launch request
+ */
+resourced_ret_c proc_cgroup_launch(int type, pid_t pid, char* app_id, char* pkg_id);
+
 
 /**
  * @brief sweep memory about background processes

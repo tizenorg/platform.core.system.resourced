@@ -25,14 +25,16 @@
  *
  */
 
-#ifndef _RESMAN_APPLICATION_STAT_H_
-#define _RESMAN_APPLICATION_STAT_H_
+#ifndef _RESOURCED_APPLICATION_STAT_H_
+#define _RESOURCED_APPLICATION_STAT_H_
 
 #include <netinet/in.h>
 #include <glib.h>
 #include <sys/types.h>
 
-#include "resourced.h"
+#include "const.h"
+#include "data_usage.h"
+#include "daemon-options.h"
 #include "transmission.h"
 
 #define RSML_UNKNOWN_CLASSID 1
@@ -50,6 +52,9 @@ struct application_stat {
 	char *application_id;
 	uint32_t snd_count;
 	uint32_t rcv_count;
+	uint32_t delta_snd;
+	uint32_t delta_rcv;
+
 	pid_t pid;
 	int ifindex;
 	resourced_roaming_type is_roaming;
@@ -67,6 +72,7 @@ struct classid_iftype_key
 {
 	u_int32_t classid;
 	int iftype;
+	char ifname[MAX_NAME_LENGTH];
 };
 
 typedef GTree traffic_stat_tree;
@@ -74,10 +80,12 @@ typedef GTree traffic_stat_tree;
 struct application_stat_tree {
 	GTree *tree;
 	time_t last_touch_time;
+	pthread_rwlock_t guard;
 };
 
 struct application_stat_tree *create_app_stat_tree(void);
 void free_app_stat_tree(struct application_stat_tree *tree);
+void nulify_app_stat_tree(struct application_stat_tree **tree);
 
 traffic_stat_tree *create_traffic_stat_tree(void);
 void free_traffic_stat_tree(traffic_stat_tree *list);
@@ -88,4 +96,4 @@ resourced_ret_c prepare_application_stat(traffic_stat_tree *tree_in,
 		 volatile struct daemon_opts *opts);
 
 
-#endif /* _RESMAN_APPLICATION_STAT_H_ */
+#endif /* _RESOURCED_APPLICATION_STAT_H_ */

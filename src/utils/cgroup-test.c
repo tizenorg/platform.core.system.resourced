@@ -4,7 +4,7 @@
 #include <unistd.h>
 #include <inttypes.h>
 
-#include "cgroup.h"
+#include "net-cls-cgroup.h"
 
 int64_t timespecDiff(struct timespec *time_a, struct timespec *time_b)
 {
