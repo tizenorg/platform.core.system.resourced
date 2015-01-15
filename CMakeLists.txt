@@ -46,7 +46,8 @@ SET(PC_REQUIRED "glib-2.0
 		 vconf-internal-keys
 		 sqlite3
 		 dlog
-		 edbus")
+		 edbus
+     eina")
 
 SET(PC_PROVIDED_LIBS "-l${PROC-STAT}")
 

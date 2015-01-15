@@ -21,6 +21,10 @@ Source8:    resourced-logging.service
 %define logging_cpu OFF
 %define memory_module ON
 %define memory_cgroup OFF
+%define swap_module OFF
+%define network_state OFF
+%define telephony_feature OFF
+%define tethering_feature OFF
 
 %if "%{?tizen_profile_name}" == "mobile"
 	%define swap_module OFF
@@ -59,7 +63,7 @@ BuildRequires:  pkgconfig(ecore-file)
 BuildRequires:  pkgconfig(edbus)
 BuildRequires:  pkgconfig(capi-network-connection)
 BuildRequires:  pkgconfig(libsystemd-daemon)
-BuildRequires:  pkgconfig(journal)
+BuildRequires:  pkgconfig(eina)
 
 Requires(post): /sbin/ldconfig
 Requires(postun): /sbin/ldconfig
