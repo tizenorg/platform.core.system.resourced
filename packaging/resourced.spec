@@ -1,8 +1,7 @@
-Name:       system-resource
+Name:       resourced
 Summary:    System Resource Information
 Version:    0.2.86
 Release:    0
-VCS:        magnolia/kernel/api/system-resource#submit/master/20131010.041510-19-gcf6121a4bcce9c122d4ea05fa9974ec7bac227d8
 Group:      System/Libraries
 License:    Apache License, Version 2.0
 Source0:    %{name}-%{version}.tar.gz
@@ -67,19 +66,17 @@ BuildRequires:  pkgconfig(eina)
 
 Requires(post): /sbin/ldconfig
 Requires(postun): /sbin/ldconfig
-Requires: system-resource-resourced = %{version}-%{release}
-Requires: libresourced = %{version}-%{release}
 
 %if %{?logging_module} == ON
 BuildRequires:  pkgconfig(libsystemd-journal)
 %endif
 
 %description
+resourced
 
 %package resourced
 Summary: Resource Daemon
 Group:   System/Libraries
-Requires:   %{name} = %{version}-%{release}
 
 %description resourced
 Resource Daemon
@@ -95,7 +92,7 @@ Resource Daemon Library
 %package -n libresourced-devel
 Summary: Resource Daemon Library (Development)
 Group:   System/Libraries
-Requires:   %{name} = %{version}-%{release}
+Requires:   libresourced = %{version}-%{release}
 
 %description -n libresourced-devel
 Resource Daemon Library (Development)
@@ -137,7 +134,6 @@ make %{?jobs:-j%jobs}
 rm -rf %{buildroot}
 mkdir -p %{buildroot}/usr/share/license
 cp -f LICENSE %{buildroot}/usr/share/license/%{name}
-cp -f LICENSE %{buildroot}/usr/share/license/%{name}-resourced
 cp -f LICENSE %{buildroot}/usr/share/license/libresourced
 
 %make_install
@@ -213,11 +209,8 @@ fi
 
 %postun -p /sbin/ldconfig
 
-%files
+%files -n resourced
 /usr/share/license/%{name}
-%manifest system-resource.manifest
-%files resourced
-/usr/share/license/%{name}-resourced
 %attr(-,root, root) %{_bindir}/resourced
 %if %{?network_state} == ON
 	%config(noreplace) %attr(660,root,app) %{database_full_path}

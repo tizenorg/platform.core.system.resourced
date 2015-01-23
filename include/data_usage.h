@@ -171,7 +171,7 @@ typedef enum {
  */
 enum {
 	WARNING_THRESHOLD_DEFAULT,		/**< for quota it means
-		system-resource will evaluate proper value, for restriction it
+		resourced will evaluate proper value, for restriction it
 		means no warning */
 	WARNING_THRESHOLD_NONE,			/**< means no threshold at all */
 };
@@ -185,7 +185,7 @@ enum {
  * warning_send_threshold - threshold for warning notification on engress bytes
  * warning_rcv_threshold - threshold for warning notification on ingress bytes
  *		value - WARNING_THRESHOLD_UNDEF means no threshold
- *		      - WARNING_THRESHOLD_DEFAULT means system-resource will be
+ *		      - WARNING_THRESHOLD_DEFAULT means resourced will be
  *              responsible for evaluation threshold value
  *		The threshold value is amount of bytes remaining till blocking
  *

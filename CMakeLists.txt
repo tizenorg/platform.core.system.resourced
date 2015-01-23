@@ -1,6 +1,6 @@
 CMAKE_MINIMUM_REQUIRED(VERSION 2.6)
 
-SET(fw_name "system-resource")
+SET(fw_name "resourced")
 SET(RESOURCED resourced)
 SET(LIBS libs)
 SET(PROC-STAT proc-stat)
