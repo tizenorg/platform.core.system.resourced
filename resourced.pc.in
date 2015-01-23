@@ -8,7 +8,7 @@ libdir=@LIB_INSTALL_DIR@
 includedir=@INCLUDEDIR@
 
 Name: @PC_NAME_DEPRECATED@
-Description: @PACKAGE_DESCRIPTION@
+Description: Tizen Resource management Daemon
 Version: @VERSION@
 Requires: @PC_REQUIRED@
 Libs: -L${libdir} @PC_PROVIDED_LIBS@

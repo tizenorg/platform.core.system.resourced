@@ -1,6 +1,6 @@
 CMAKE_MINIMUM_REQUIRED(VERSION 2.6)
 
-SET(fw_name "system-resource")
+SET(fw_name "resourced")
 SET(RESOURCED resourced)
 SET(LIBS libs)
 SET(PROC-STAT proc-stat)
@@ -40,13 +40,7 @@ SET(PREFIX ${CMAKE_INSTALL_PREFIX})
 SET(INCLUDEDIR ${PREFIX}/include)
 SET(PC_NAME lib${RESOURCED})
 SET(PC_NAME_DEPRECATED ${fw_name})
-SET(PC_REQUIRED "glib-2.0
-		 vconf
-		 vconf-internal-keys
-		 sqlite3
-		 dlog
-		 edbus
-		 eina")
+SET(PC_REQUIRED "glib-2.0 vconf vconf-internal-keys sqlite3 dlog edbus eina")
 
 SET(PC_PROVIDED_LIBS "-l${PROC-STAT}")
 
