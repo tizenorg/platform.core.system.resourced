@@ -1,9 +1,9 @@
 Name:       resourced
-Summary:    System Resource Information
+Summary:    System Resource Management Daemon
 Version:    0.2.86
 Release:    0
 Group:      System/Libraries
-License:    Apache License, Version 2.0
+License:    Apache-2.0
 Source0:    %{name}-%{version}.tar.gz
 Source1:    resourced.service
 Source2:    resourced-zram.service
@@ -72,14 +72,14 @@ BuildRequires:  pkgconfig(libsystemd-journal)
 %endif
 
 %description
-resourced
+Resourced (Resource management daemon)
 
 %package resourced
 Summary: Resource Daemon
 Group:   System/Libraries
 
 %description resourced
-Resource Daemon
+Resource management daemon for memory management and process management (vip processes)
 
 %package -n libresourced
 Summary: Resource Daemon Library
@@ -87,7 +87,7 @@ Group:   System/Libraries
 Requires:   %{name} = %{version}-%{release}
 
 %description -n libresourced
-Resource Daemon Library
+Library of resourced (Resource management daemon)
 
 %package -n libresourced-devel
 Summary: Resource Daemon Library (Development)
@@ -95,7 +95,7 @@ Group:   System/Libraries
 Requires:   libresourced = %{version}-%{release}
 
 %description -n libresourced-devel
-Resource Daemon Library (Development)
+Library (Development) of resourced (Resource management daemon)
 
 %prep
 %setup -q
@@ -223,9 +223,9 @@ fi
 %config %{_sysconfdir}/dbus-1/system.d/resourced.conf
 %{_libdir}/systemd/system/resourced.service
 %{_libdir}/systemd/system/multi-user.target.wants/resourced.service
-/etc/resourced/memory.conf
+%config /etc/resourced/memory.conf
 %if %{?cpu_module} == ON
-/etc/resourced/cpu.conf
+%config /etc/resourced/cpu.conf
 %else
 %{_bindir}/resourced-cpucgroup.sh
 %{_libdir}/systemd/system/resourced-cpucgroup.service
@@ -241,11 +241,11 @@ fi
 %{_libdir}/systemd/system/graphical.target.wants/resourced-logging.service
 %endif
 %if %{?vip_agent_module} == ON
-/etc/resourced/vip-process.conf
+%config /etc/resourced/vip-process.conf
 %attr(-,root, root) %{_bindir}/vip-release-agent
 %endif
 %if %{?timer_slack} == ON
-/etc/resourced/timer-slack.conf
+%config /etc/resourced/timer-slack.conf
 %endif
 %{exclude_list_full_path}
 %if %{?powertop_state} == ON
@@ -284,7 +284,7 @@ fi
 %{_includedir}/system/rd-network.h
 %{_libdir}/libresourced.so
 %{_libdir}/librd-network.so
-/etc/resourced/network.conf
+%config /etc/resourced/network.conf
 %endif
 #powertop-wrapper part
 %if %{?powertop_state} == ON
