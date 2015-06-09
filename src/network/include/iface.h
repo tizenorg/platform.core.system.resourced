@@ -43,10 +43,13 @@ typedef struct {
 int init_iftype(void);
 void finalize_iftypes(void);
 
-int is_allowed_ifindex(int ifindex);
-
+/* TODO remove ktgrabber */
 resourced_iface_type get_iftype(int ifindex);
+
+int is_counting_allowed(resourced_iface_type iftype);
+
 char *get_iftype_name(resourced_iface_type iftype);
+resourced_iface_type get_iftype_by_name(char *name);
 bool is_address_exists(const char *name);
 
 resourced_iface_type convert_iftype(const char *buffer);
@@ -54,10 +57,17 @@ resourced_iface_type convert_iftype(const char *buffer);
 void set_wifi_allowance(const resourced_option_state wifi_option);
 void set_datacall_allowance(const resourced_option_state datacall_option);
 
+/* TODO remove it when ktgrabber solution will be removed */
 typedef int(*ifindex_iterator)(int ifindex,
 	resourced_iface_type iftype, void *data);
 
 void for_each_ifindex(ifindex_iterator iter, void(*empty_func)(void *),
+	void *data);
+
+typedef int(*ifnames_iterator)(resourced_iface_type iftype, char *ifname,
+		void *data);
+
+void for_each_ifnames(ifnames_iterator iter, void(*empty_func)(void *),
 	void *data);
 
 typedef GList iface_callbacks;

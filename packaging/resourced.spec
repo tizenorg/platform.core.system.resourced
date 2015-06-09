@@ -9,35 +9,42 @@ Source1:    resourced.service
 Source2:    resourced-zram.service
 Source5:    resourced_swapoff.service
 Source6:    resourced-cpucgroup.service
-Source8:    resourced-logging.service
 
 %define powertop_state OFF
 %define cpu_module ON
-%define vip_agent_module ON
 %define timer_slack ON
-%define logging_module OFF
+
+%define vip_agent_module ON
+
+%define logging_module ON
 %define logging_memory OFF
-%define logging_cpu OFF
+%define logging_cpu ON
+
 %define memory_module ON
-%define memory_cgroup OFF
 %define swap_module OFF
+%define memory_vmpressure ON
+
 %define network_state OFF
-%define telephony_feature OFF
 %define tethering_feature OFF
 
 %if "%{?tizen_profile_name}" == "mobile"
 	%define swap_module OFF
+	%define memory_vmpressure OFF
 	%define network_state OFF
-	%define telephony_feature OFF
 	%define tethering_feature OFF
-
 %endif
 
 %if "%{?tizen_profile_name}" == "wearable"
-	%define swap_module OFF
+	%define swap_module ON
+	%define memory_vmpressure ON
 	%define network_state OFF
-	%define telephony_feature OFF
+%endif
 
+%if "%{?tizen_profile_name}" == "tv"
+	%define swap_module ON
+	%define memory_vmpressure ON
+	%define network_state OFF
+	%define tethering_feature OFF
 %endif
 
 %if 0%{?tizen_build_binary_release_type_eng}
@@ -59,11 +66,13 @@ BuildRequires:  pkgconfig(vconf)
 BuildRequires:  pkgconfig(vconf-internal-keys)
 BuildRequires:  pkgconfig(ecore)
 BuildRequires:  pkgconfig(ecore-file)
-BuildRequires:  pkgconfig(edbus)
-BuildRequires:  pkgconfig(capi-network-connection)
-BuildRequires:  pkgconfig(libsystemd-daemon)
 BuildRequires:  pkgconfig(eina)
-
+BuildRequires:  pkgconfig(edbus)
+BuildRequires:  pkgconfig(libsystemd-daemon)
+BuildRequires:  pkgconfig(openssl)
+BuildRequires:  pkgconfig(bundle)
+#only for data types
+BuildRequires:  pkgconfig(tapi)
 Requires(post): /sbin/ldconfig
 Requires(postun): /sbin/ldconfig
 
@@ -72,7 +81,7 @@ BuildRequires:  pkgconfig(libsystemd-journal)
 %endif
 
 %description
-Resourced (Resource management daemon)
+Resourced daemon
 
 %package resourced
 Summary: Resource Daemon
@@ -87,15 +96,15 @@ Group:   System/Libraries
 Requires:   %{name} = %{version}-%{release}
 
 %description -n libresourced
-Library of resourced (Resource management daemon)
+Library for resourced (Resource Management Daemon)
 
 %package -n libresourced-devel
 Summary: Resource Daemon Library (Development)
 Group:   System/Libraries
-Requires:   libresourced = %{version}-%{release}
+Requires:   libresourced  = %{version}-%{release}
 
 %description -n libresourced-devel
-Library (Development) of resourced (Resource management daemon)
+Library (development) for resourced (Resource Management Daemon)
 
 %prep
 %setup -q
@@ -118,15 +127,30 @@ export CFLAGS="$CFLAGS -DTIZEN_DEBUG_ENABLE"
 export CXXFLAGS="$CXXFLAGS -DTIZEN_DEBUG_ENABLE"
 export FFLAGS="$FFLAGS -DTIZEN_DEBUG_ENABLE"
 
-%cmake . -DFULLVER=%{version} -DMAJORVER=${MAJORVER} -DCMAKE_BUILD_TYPE=Release \
+%cmake . \
+	-DCMAKE_INSTALL_PREFIX=%{_prefix} \
+	-DFULLVER=%{version} \
+	-DMAJORVER=${MAJORVER} \
+	-DCMAKE_BUILD_TYPE=Release \
 	-DEXCLUDE_LIST_FILE_NAME=%{exclude_list_file_name} \
-	-DEXCLUDE_LIST_FULL_PATH=%{exclude_list_full_path} -DDATABASE_FULL_PATH=%{database_full_path} \
-	-DEXCLUDE_LIST_OPT_FULL_PATH=%{exclude_list_opt_full_path} -DNETWORK_MODULE=%{network_state} -DSWAP_MODULE=%{swap_module} \
-	-DPOWERTOP_MODULE=%{powertop_state} -DCPU_MODULE=%{cpu_module}\
-	-DMEMORY_ENG=%{memory_eng} -DVIP_AGENT=%{vip_agent_module} -DTELEPHONY_FEATURE=%{telephony_feature} \
-	-DTIMER_SLACK=%{timer_slack} -DLOGGING_MODULE=%{logging_module} -DLOGGING_MEMORY=%{logging_memory} \
-	-DLOGGING_CPU=%{logging_cpu} -DDATAUSAGE_TYPE=NFACCT -DMEMORY_MODULE=%{memory_module} -DMEMORY_CGROUP=%{memory_cgroup}  \
-	-DTETHERING_FEATURE=%{tethering_feature}
+	-DEXCLUDE_LIST_FULL_PATH=%{exclude_list_full_path} \
+	-DEXCLUDE_LIST_OPT_FULL_PATH=%{exclude_list_opt_full_path} \
+	-DVIP_AGENT=%{vip_agent_module} \
+	-DSWAP_MODULE=%{swap_module} \
+	-DMEMORY_ENG=%{memory_eng} \
+	-DMEMORY_VMPRESSURE=%{memory_vmpressure} \
+	-DMEMORY_MODULE=%{memory_module} \
+	-DMEMORY_VMPRESSURE=%{memory_vmpressure} \
+	-DDATABASE_FULL_PATH=%{database_full_path} \
+	-DNETWORK_MODULE=%{network_state} \
+	-DTELEPHONY_FEATURE=%{telephony_feature} \
+	-DDATAUSAGE_TYPE=NFACCT \
+	-DLOGGING_MODULE=%{logging_module} \
+	-DLOGGING_MEMORY=%{logging_memory} \
+	-DLOGGING_CPU=%{logging_cpu} \
+	-DPOWERTOP_MODULE=%{powertop_state} \
+	-DCPU_MODULE=%{cpu_module} \
+	-DTIMER_SLACK=%{timer_slack}
 
 make %{?jobs:-j%jobs}
 
@@ -169,13 +193,6 @@ mkdir -p %{buildroot}/usr/share/powertop-wrapper/
 cp -p %_builddir/%name-%version/src/powertop-wrapper/header.html %{buildroot}/usr/share/powertop-wrapper
 %endif
 
-%if %{?logging_module} == ON
-#logging service file
-mkdir -p %{buildroot}%{_libdir}/systemd/system/graphical.target.wants
-install -m 0644 %SOURCE8 %{buildroot}%{_libdir}/systemd/system/resourced-logging.service
-ln -s ../resourced-logging.service %{buildroot}%{_libdir}/systemd/system/graphical.target.wants/resourced-logging.service
-%endif
-
 %pre resourced
 if [ "$1" = "2" ]; then # upgrade begins
 	systemctl stop resourced.service
@@ -187,12 +204,13 @@ fi
 
 init_vconf()
 {
-	vconftool set -t bool db/private/resourced/wifi_statistics 1 -i -f -s resourced
-	vconftool set -t bool db/private/resourced/datacall 1 -i -f -s resourced
-	vconftool set -t bool db/private/resourced/datacall_logging 1 -i -f -s resourced
-	vconftool set -t int db/private/resourced/datausage_timer 60 -i -f -s resourced
-	vconftool set -t string db/private/resourced/new_limit "" -u 5000 -f -s resourced
-	vconftool set -t string db/private/resourced/delete_limit "" -u 5000 -f -s resourced
+	vconftool set -t bool db/private/resourced/wifi_statistics 1 -i -f -s tizen::vconf::platform::rw
+	vconftool set -t bool db/private/resourced/datacall 1 -i -f -s tizen::vconf::platform::rw
+	vconftool set -t bool db/private/resourced/datacall_logging 1 -i -f -s tizen::vconf::platform::rw
+	vconftool set -t int db/private/resourced/datausage_timer 60 -i -f -s tizen::vconf::platform::rw
+	vconftool set -t string db/private/resourced/new_limit "" -u 5000 -f -s tizen::vconf::platform::rw
+	vconftool set -t string db/private/resourced/delete_limit "" -u 5000 -f -s tizen::vconf::platform::rw
+	vconftool set -t int db/private/resourced/network_db_entries 0 -i -f -s tizen::vconf::platform::rw
 }
 
 %if %{?network_state} == ON
@@ -211,11 +229,15 @@ fi
 
 %files -n resourced
 /usr/share/license/%{name}
+/etc/smack/accesses2.d/resourced.rule
 %attr(-,root, root) %{_bindir}/resourced
 %if %{?network_state} == ON
 	%config(noreplace) %attr(660,root,app) %{database_full_path}
 	%config(noreplace) %attr(660,root,app) %{database_full_path}-journal
 	/usr/bin/datausagetool
+	%config /etc/resourced/network.conf
+	/etc/opt/upgrade/500.resourced-datausage.patch.sh
+	%attr(700,root,root) /etc/opt/upgrade/500.resourced-datausage.patch.sh
 	%manifest resourced.manifest
 %else
 %manifest resourced_nodb.manifest
@@ -232,13 +254,10 @@ fi
 %{_libdir}/systemd/system/graphical.target.wants/resourced-cpucgroup.service
 %endif
 %if %{?swap_module} == ON
+%config /etc/resourced/swap.conf
 %{_libdir}/systemd/system/resourced-zram.service
 %{_libdir}/systemd/system/graphical.target.wants/resourced-zram.service
 %{_bindir}/resourced-zram.sh
-%endif
-%if %{?logging_module} == ON
-%{_libdir}/systemd/system/resourced-logging.service
-%{_libdir}/systemd/system/graphical.target.wants/resourced-logging.service
 %endif
 %if %{?vip_agent_module} == ON
 %config /etc/resourced/vip-process.conf
@@ -262,10 +281,7 @@ fi
 #proc-stat part
 %{_libdir}/libproc-stat.so.*
 #network part
-%if %{?network_state} == ON
 %{_libdir}/libresourced.so.*
-%{_libdir}/librd-network.so.*
-%endif
 #powertop-wrapper part
 %if %{?powertop_state} == ON
 %{_libdir}/libpowertop-wrapper.so.*
@@ -279,13 +295,10 @@ fi
 %{_includedir}/system/proc_stat.h
 %{_libdir}/libproc-stat.so
 #network part
-%if %{?network_state} != OFF
+%if %{?network_state} == ON
 %{_includedir}/system/data_usage.h
-%{_includedir}/system/rd-network.h
-%{_libdir}/libresourced.so
-%{_libdir}/librd-network.so
-%config /etc/resourced/network.conf
 %endif
+%{_libdir}/libresourced.so
 #powertop-wrapper part
 %if %{?powertop_state} == ON
 %{_includedir}/system/powertop-dapi.h

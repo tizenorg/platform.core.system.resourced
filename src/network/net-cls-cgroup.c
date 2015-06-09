@@ -24,20 +24,23 @@
  *
  */
 
-#include "appid-helper.h"
-#include "net-cls-cgroup.h"
-#include "cgroup.h"
-#include "const.h"
-#include "data_usage.h"
-#include "errors.h"
-#include "file-helper.h"
-#include "macro.h"
-#include "trace.h"
-
 #include <dirent.h>
 #include <glib.h>
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
+
+#include "appid-helper.h"
+#include "cgroup.h"
+#include "const.h"
+#include "counter.h"
+#include "data_usage.h"
+#include "datausage-common.h"
+#include "errors.h"
+#include "file-helper.h"
+#include "macro.h"
+#include "net-cls-cgroup.h"
+#include "trace.h"
 
 #define CUR_CLASSID_PATH "/tmp/cur_classid"
 #define CLASSID_FILE_NAME "/net_cls.classid"
@@ -80,12 +83,15 @@ static int place_classid_to_cgroup(const char *cgroup, const char *subdir,
 				   u_int32_t *classid)
 {
 	char buf[MAX_PATH_LENGTH];
-	u_int32_t generated_classid = produce_classid();
-	if (classid)
-		*classid = generated_classid;
+	u_int32_t result_classid = (classid && *classid) ? *classid :
+		produce_classid();
+
+	/* set classid as out argument */
+	if (classid && !*classid)
+		*classid = result_classid;
 
 	snprintf(buf, sizeof(buf), "%s/%s", cgroup, subdir);
-	return cgroup_write_node(buf, CLASSID_FILE_NAME, generated_classid);
+	return cgroup_write_node(buf, CLASSID_FILE_NAME, result_classid);
 }
 
 static u_int32_t get_classid_from_cgroup(const char *cgroup, const char *subdir)
@@ -154,42 +160,38 @@ populate_classids_with_pids(const char *dir_name_buf, size_t dir_name_buf_len,
 
 u_int32_t get_classid_by_app_id(const char *app_id, int create)
 {
-	char pkgname[MAX_PATH_LENGTH];
-	extract_pkgname(app_id, pkgname, sizeof(pkgname));
-	return get_classid_by_pkg_name(pkgname, create);
-}
-
-API u_int32_t get_classid_by_pkg_name(const char *pkg_name, int create)
-{
 	int ret = 0;
 	int exists;
 	u_int32_t classid = RESOURCED_UNKNOWN_CLASSID;
 
-	if (!strcmp(pkg_name, RESOURCED_ALL_APP))
+	if (!strcmp(app_id, RESOURCED_ALL_APP))
 		return RESOURCED_ALL_APP_CLASSID;
 
-	if (!strcmp(pkg_name, TETHERING_APP_NAME))
+	if (!strcmp(app_id, TETHERING_APP_NAME))
 		return RESOURCED_TETHERING_APP_CLASSID;
+
+	if (!strcmp(app_id, RESOURCED_BACKGROUND_APP_NAME))
+		return RESOURCED_FOREGROUND_APP_CLASSID;
 
 	/* just read */
 	if (!create)
 		classid = get_classid_from_cgroup(PATH_TO_NET_CGROUP_DIR,
-			pkg_name);
+			app_id);
 
 	if (classid != RESOURCED_UNKNOWN_CLASSID)
 		return classid;
 
-	ret = make_cgroup_subdir(PATH_TO_NET_CGROUP_DIR, (char *)pkg_name,
+	ret = make_cgroup_subdir(PATH_TO_NET_CGROUP_DIR, (char *)app_id,
 		&exists);
 	if (ret)
 		goto handle_error;
 
 	if (exists)
 		classid = get_classid_from_cgroup(PATH_TO_NET_CGROUP_DIR,
-			pkg_name);
+			app_id);
 	else
 		ret = place_classid_to_cgroup(PATH_TO_NET_CGROUP_DIR,
-			(char *)pkg_name, &classid);
+			(char *)app_id, &classid);
 	if (ret)
 		goto handle_error;
 
@@ -200,7 +202,6 @@ API u_int32_t get_classid_by_pkg_name(const char *pkg_name, int create)
 	ETRACE_RET_ERRCODE(ret);
 	return RESOURCED_UNKNOWN_CLASSID;
 }
-
 
 int update_classids(void)
 {
@@ -298,9 +299,9 @@ char *get_app_id_by_classid(const u_int32_t classid, const bool update_state)
 	return get_app_id_by_classid_local(classid);
 }
 
-API resourced_ret_c make_net_cls_cgroup_with_pid(const int pid, const char *pkg_name)
+API resourced_ret_c make_net_cls_cgroup(const char *pkg_name, u_int32_t classid)
 {
-	int ret = 0;
+	resourced_ret_c ret = RESOURCED_ERROR_NONE;
 	int exists = 0;
 
 	if (pkg_name == NULL) {
@@ -308,17 +309,44 @@ API resourced_ret_c make_net_cls_cgroup_with_pid(const int pid, const char *pkg_
 		return RESOURCED_ERROR_INVALID_PARAMETER;
 	}
 
-	_SD("pkg: %s; pid: %d\n", pkg_name, pid);
-
 	ret = make_cgroup_subdir(PATH_TO_NET_CGROUP_DIR, (char *)pkg_name, &exists);
 	ret_value_if(ret < 0, RESOURCED_ERROR_FAIL);
 
 	if (!exists) {
 		ret = place_classid_to_cgroup(PATH_TO_NET_CGROUP_DIR, pkg_name,
-			NULL);
+				classid ? &classid : NULL);
 		ret_value_if(ret < 0, RESOURCED_ERROR_FAIL);
 	}
-
-	return place_pid_to_cgroup(PATH_TO_NET_CGROUP_DIR, pkg_name, pid);
+	return ret;
 }
 
+API resourced_ret_c place_pids_to_net_cgroup(const int pid, const char *pkg_name)
+{
+	char child_buf[21 + MAX_DEC_SIZE(int) + MAX_DEC_SIZE(int)];
+	snprintf(child_buf, sizeof(child_buf), PROC_TASK_CHILDREN, pid, pid);
+
+	if (access(child_buf, F_OK)) {
+		_D("%s of %s is not existed", child_buf, pkg_name);
+		return place_pid_to_cgroup(PATH_TO_NET_CGROUP_DIR, pkg_name, pid);
+	}
+
+	return place_pidtree_to_cgroup(PATH_TO_NET_CGROUP_DIR, pkg_name, pid);
+}
+
+API resourced_ret_c make_net_cls_cgroup_with_pid(const int pid, const char *pkg_name)
+{
+	resourced_ret_c ret = make_net_cls_cgroup(pkg_name, RESOURCED_UNKNOWN_CLASSID);
+	ret_value_msg_if(ret != RESOURCED_ERROR_NONE, ret, "Can't create cgroup %s!", pkg_name);
+	_SD("pkg: %s; pid: %d\n", pkg_name, pid);
+	return place_pids_to_net_cgroup(pid, pkg_name);
+}
+
+void create_net_background_cgroup(struct counter_arg *carg)
+{
+	resourced_ret_c ret = make_net_cls_cgroup(RESOURCED_BACKGROUND_APP_NAME,
+			RESOURCED_BACKGROUND_APP_CLASSID);
+	if (ret == RESOURCED_ERROR_NONE)
+		background_apps(carg);
+	else
+		_E("Could not support quota for background application");
+}

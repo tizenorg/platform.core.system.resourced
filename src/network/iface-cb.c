@@ -227,6 +227,5 @@ void resourced_iface_finalize(void)
 	ecore_main_fd_handler_del(iface_ecore_fd_handler);
 	shutdown(iface_fd, 2);
 	close(iface_fd);
-	finalize_iftypes();
 	g_list_free_full(ifcallbacks, free);
 }

@@ -27,6 +27,7 @@ SET (HEADERS
   ${INCLUDE_COMMON_DIR}/module-data.h
   ${INCLUDE_COMMON_DIR}/module.h
   ${INCLUDE_COMMON_DIR}/swap-common.h
+  ${INCLUDE_MEMORY_DIR}/helper.h
 )
 
 SET (SOURCES
@@ -38,20 +39,24 @@ SET (SOURCES
   ${COMMON_SOURCE_DIR}/file-helper.c
   ${COMMON_SOURCE_DIR}/module-data.c
   ${COMMON_SOURCE_DIR}/module.c
-  ${NETWORK_SOURCE_DIR}/counter.c
   ${PROC-STAT_SOURCE_DIR}/proc-handler.c
   ${PROC-STAT_SOURCE_DIR}/proc-main.c
   ${PROC-STAT_SOURCE_DIR}/proc-noti.c
   ${PROC-STAT_SOURCE_DIR}/proc-process.c
   ${PROC-STAT_SOURCE_DIR}/proc-monitor.c
+  ${PROC-STAT_SOURCE_DIR}/proc-usage-stats.c
+  ${PROC-STAT_SOURCE_DIR}/proc-usage-stats-helper.c
   ${RESOURCED_SOURCE_DIR}/init.c
   ${RESOURCED_SOURCE_DIR}/main.c
+  ${MEMORY_SOURCE_DIR}/helper.c
   )
 
 INSTALL(FILES ${DATA_DIR}/${EXCLUDE_LIST_FILE_NAME} DESTINATION /usr/etc)
 #network module
 IF("${NETWORK_MODULE}" STREQUAL "ON")
-
+  SET(SOURCES ${SOURCES}
+    ${NETWORK_SOURCE_DIR}/counter.c
+  )
   IF("${DATAUSAGE_TYPE}" STREQUAL "NFACCT")
     SET(CONFIG_DATAUSAGE_NFACCT 1)
     SET(SOURCES ${SOURCES}
@@ -62,6 +67,17 @@ IF("${NETWORK_MODULE}" STREQUAL "ON")
     SET(SOURCES ${SOURCES}
       ${NETWORK_SOURCE_DIR}/generic-netlink.c
       ${NETWORK_SOURCE_DIR}/ktgrabber-restriction.c
+      ${NETWORK_SOURCE_DIR}/ktgrabber-parser.c
+    )
+  ENDIF()
+
+  IF("${WEARABLE_NOTI}" STREQUAL "ON")
+    SET(SOURCES ${SOURCES}
+      ${NETWORK_SOURCE_DIR}/notification-wearable.c
+    )
+  ELSE()
+    SET(SOURCES ${SOURCES}
+      ${NETWORK_SOURCE_DIR}/notification-mobile.c
     )
   ENDIF()
 
@@ -75,19 +91,24 @@ IF("${NETWORK_MODULE}" STREQUAL "ON")
     ${NETWORK_SOURCE_DIR}/datausage-common.c
     ${NETWORK_SOURCE_DIR}/iface-cb.c
     ${NETWORK_SOURCE_DIR}/nl-helper.c
-    ${NETWORK_SOURCE_DIR}/notification.c
     ${NETWORK_SOURCE_DIR}/restriction-handler.c
     ${NETWORK_SOURCE_DIR}/restriction-helper.c
     ${NETWORK_SOURCE_DIR}/restriction-local.c
     ${NETWORK_SOURCE_DIR}/tethering-restriction.c
+    ${NETWORK_SOURCE_DIR}/db-guard.c
     )
-
-   IF ("${TETHERING_FEATURE}" STREQUAL "ON")
-	SET(TETHERING_FEATURE 1)
-   ENDIF()
 
    INSTALL(FILES ${NETWORK_SOURCE_DIR}/network.conf
 		DESTINATION /etc/resourced)
+
+   INSTALL(FILES ${NETWORK_SOURCE_DIR}/500.resourced-datausage.patch.sh
+                 DESTINATION /etc/opt/upgrade)
+
+   SET (REQUIRES_LIST ${REQUIRES_LIST}
+	openssl
+	tapi
+   )
+
 
 ENDIF()
 
@@ -121,15 +142,12 @@ ENDIF()
 IF("${MEMORY_MODULE}" STREQUAL "ON")
   SET(SOURCES ${SOURCES}
     ${MEMORY_SOURCE_DIR}/lowmem-dbus.c
+    ${MEMORY_SOURCE_DIR}/memcontrol.c
   )
-  IF("${MEMORY_CGROUP}" STREQUAL "ON")
-    SET(SOURCES ${SOURCES}
-      ${MEMORY_SOURCE_DIR}/vmpressure-lowmem-handler.c
-    )
+  IF("${MEMORY_VMPRESSURE}" STREQUAL "ON")
+    SET(SOURCES ${SOURCES} ${MEMORY_SOURCE_DIR}/vmpressure-lowmem-handler.c)
   ELSE()
-    SET(SOURCES ${SOURCES}
-      ${MEMORY_SOURCE_DIR}/lowmem-handler.c
-    )
+    SET(SOURCES ${SOURCES} ${MEMORY_SOURCE_DIR}/lowmem-handler.c)
   ENDIF()
   ADD_DEFINITIONS("-DMEMORY_SUPPORT")
 ENDIF()
@@ -162,9 +180,10 @@ SET (REQUIRES_LIST ${REQUIRES_LIST}
 	vconf
 	vconf-internal-keys
 	ecore-file
-	edbus
-	libsystemd-daemon
 	eina
+	edbus
+	bundle
+	libsystemd-daemon
 )
 
 IF("${LOGGING_MODULE}" STREQUAL "ON")
@@ -180,7 +199,7 @@ FOREACH(flag ${daemon_pkgs_CFLAGS})
         SET(EXTRA_CFLAGS "${EXTRA_CFLAGS} ${flag} -pthread")
 ENDFOREACH(flag)
 
-SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${EXTRA_CFLAGS}")
+SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${EXTRA_CFLAGS} -fPIE")
 
 CONFIGURE_FILE(${INCLUDE_COMMON_DIR}/config.h.in
   ${INCLUDE_COMMON_DIR}/config.h)
@@ -198,7 +217,7 @@ TARGET_LINK_LIBRARIES(cgroup-test ${daemon_pkgs_LDFLAGS} "-L/lib/ -lrt")
 
 ADD_EXECUTABLE (${PROJECT_NAME} ${HEADERS} ${SOURCES})
 TARGET_LINK_LIBRARIES(${PROJECT_NAME}
-  ${daemon_pkgs_LDFLAGS}
+  ${daemon_pkgs_LDFLAGS} "-pie -lrt"
 )
 
 IF("${NETWORK_MODULE}" STREQUAL "ON")
@@ -208,7 +227,7 @@ IF("${NETWORK_MODULE}" STREQUAL "ON")
     storage
     settings
     net-cls
-    roaming
+    telephony
     net-iface
   )
 
@@ -241,6 +260,7 @@ ENDIF()
 
 IF("${SWAP_MODULE}" STREQUAL "ON")
 	INSTALL(PROGRAMS ${CMAKE_BINARY_DIR}/scripts/resourced-zram.sh DESTINATION bin)
+	INSTALL(FILES ${SWAP_SOURCE_DIR}/swap.conf DESTINATION /etc/resourced)
 ENDIF()
 
 IF("${CPU_MODULE}" STREQUAL "ON")

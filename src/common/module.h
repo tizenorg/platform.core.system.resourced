@@ -38,6 +38,8 @@ struct module_ops {
 	int (*check_runtime_support) (void *data);
 	int (*control) (void *data);
 	int (*status) (void *data);
+	int (*dump) (FILE *fp, int mode, void *dump_data);
+	void *dump_data;
 };
 
 void add_module(const struct module_ops *module);
@@ -46,6 +48,7 @@ void remove_module(const struct module_ops *module);
 void modules_check_runtime_support(void *data);
 void modules_init(void *data);
 void modules_exit(void *data);
+void modules_dump(FILE *fp, int mode);
 
 const struct module_ops *find_module(const char *name);
 

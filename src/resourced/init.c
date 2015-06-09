@@ -42,7 +42,6 @@
 
 static struct daemon_opts opts = { 1,
 				   1,
-				   1,
 				   COUNTER_UPDATE_PERIOD,
 				   FLUSH_PERIOD,
 				   RESOURCED_DEFAULT_STATE,
@@ -153,25 +152,29 @@ static void sig_term_handler(int sig)
 {
 	struct shared_modules_data *shared_data = get_shared_modules_data();
 
-	opts.state |= RESOURCED_FORCIBLY_QUIT_STATE;
 	_SD("sigterm or sigint received");
 	if (shared_data && shared_data->carg && shared_data->carg->ecore_timer) {
+		SET_BIT(shared_data->carg->opts->state, RESOURCED_FORCIBLY_QUIT_STATE);
 		/* save data on exit, it's impossible to do in fini
 		 * module function, due it executes right after ecore stopped */
+#ifdef NETWORK_MODULE
 		reschedule_count_timer(shared_data->carg, 0);
-
-		/* Another way it's introduce another timer and quit main loop
-		 * in it with waiting some event. */
-		sleep(TIME_TO_SAFE_DATA);
+#endif
+		ecore_timer_thaw(shared_data->darg->ecore_quit);
 	}
-
-	ecore_main_loop_quit();
 }
 
 static void add_signal_handler(void)
 {
 	signal(SIGTERM, sig_term_handler);
 	signal(SIGINT, sig_term_handler);
+}
+
+static Eina_Bool quit_main_loop(void *user_data)
+{
+	_D("Quit main loop");
+	ecore_main_loop_quit();
+	return ECORE_CALLBACK_CANCEL;
 }
 
 int resourced_init(struct daemon_arg *darg)
@@ -190,6 +193,11 @@ int resourced_init(struct daemon_arg *darg)
 	_D("argment swaptype = %s", swap_arg[opts.enable_swap]);
 	add_signal_handler();
 	edbus_init();
+	/* we couldn't create timer in signal callback, due ecore_timer_add
+	 * alocates memory */
+	darg->ecore_quit = ecore_timer_add(TIME_TO_SAFE_DATA, quit_main_loop, NULL);
+	ecore_timer_freeze(darg->ecore_quit);
+
 	return RESOURCED_ERROR_NONE;
 }
 

@@ -36,6 +36,7 @@
 #include "trace.h"
 #include "proc-handler.h"
 #include "proc-monitor.h"
+#include "proc-usage-stats.h"
 #include "module.h"
 #include "macro.h"
 #include "appid-helper.h"
@@ -47,12 +48,33 @@ static Ecore_File_Monitor *exclude_list_monitor;
 static const unsigned int exclude_list_limit = 1024;
 static int proc_notifd;
 #define BASE_UGPATH_PREFIX "/usr/ug/bin"
+#define LOG_PREFIX "resourced.log"
 
 enum proc_state {
 	PROC_STATE_DEFAULT,
 	PROC_STATE_FOREGROUND,
 	PROC_STATE_BACKGROUND,
 };
+
+static char *convert_to_proctype_str(int type)
+{
+	char *tmp = NULL;
+	switch (type) {
+	case PROC_TYPE_GUI:
+		tmp = "GUI";
+		break;
+	case PROC_TYPE_SERVICE:
+		tmp = "SERVICE";
+		break;
+	case PROC_TYPE_GROUP:
+		tmp = "GROUP";
+		break;
+	default:
+		tmp = "NONE";
+		break;
+	}
+	return tmp;
+}
 
 /*
  * @brief pid_info_list is only for pid_info_t
@@ -86,7 +108,7 @@ static struct pid_info_t *find_pid_info(pid_info_list pids, const pid_t pid)
 	struct pid_info_t pid_to_find = {
 		.pid = pid,
 		/* now it doesn't matter */
-		.type = RESOURCED_APP_TYPE_UNKNOWN,
+		.type = PROC_TYPE_UNKNOWN,
 	};
 	GSList *found = NULL;
 
@@ -100,24 +122,24 @@ static struct pid_info_t *find_pid_info(pid_info_list pids, const pid_t pid)
 	return NULL;
 }
 
-void proc_add_pid_list(struct proc_process_info_t *process_info, int pid, enum application_type type)
+void proc_add_pid_list(struct proc_process_info_t *ppi, int pid, enum application_type type)
 {
 	struct pid_info_t pid_to_find = {
 		.pid = pid,
 		/* now it doesn't matter */
-		.type = RESOURCED_APP_TYPE_UNKNOWN,
+		.type = PROC_TYPE_UNKNOWN,
 	};
 	GSList *found = NULL;
 
-	if (process_info->pids)
-		found = g_slist_find_custom((GSList *)process_info->pids,
+	if (ppi->pids)
+		found = g_slist_find_custom((GSList *)ppi->pids,
 			&pid_to_find, compare_pid);
 
 	if (found)
 		return;
 
 	pthread_mutex_lock(&proc_mutex);
-	process_info->pids = g_slist_prepend(process_info->pids, new_pid_info(pid, type));
+	ppi->pids = g_slist_prepend(ppi->pids, new_pid_info(pid, type));
 	pthread_mutex_unlock(&proc_mutex);
 }
 
@@ -149,48 +171,13 @@ static resourced_ret_c proc_check_ug(pid_t pid)
 	return RESOURCED_ERROR_NONE;
 }
 
-static void proc_set_service_oomscore(const pid_t pid, const int state)
+void proc_set_process_info_memcg(struct proc_process_info_t *ppi,
+	int memcg_idx, struct memcg_info_t *memcg_info)
 {
-	int oom_score = OOMADJ_SERVICE_DEFAULT;
-	switch(state) {
-	case PROC_STATE_DEFAULT:
-		oom_score = OOMADJ_SERVICE_DEFAULT;
-		break;
-	case PROC_STATE_FOREGROUND:
-		oom_score = OOMADJ_SERVICE_FOREGRD;
-		break;
-	case PROC_STATE_BACKGROUND:
-		oom_score = OOMADJ_SERVICE_BACKGRD;
-		break;
-	}
-	proc_set_oom_score_adj(pid, oom_score);
-}
-
-static pid_t get_service_pid(struct proc_process_info_t *info_t)
-{
-	GSList *iter = NULL;
-
-	if (!info_t) {
-		_D("Can't find process_info");
-		return RESOURCED_ERROR_FAIL;
-	}
-
-	gslist_for_each_item(iter, info_t->pids) {
-		struct pid_info_t *pid_info = (struct pid_info_t *)(iter->data);
-
-		if (pid_info->type == RESOURCED_APP_TYPE_SERVICE) {
-			_D("get_service_pid : pid (%d), type (%d)", pid_info->pid, pid_info->type);
-			return pid_info->pid;
-		}
-	}
-	return RESOURCED_ERROR_NO_DATA;
-}
-
-void proc_set_process_info_memcg(struct proc_process_info_t *process_info, int memcg_idx)
-{
-	if (!process_info)
+	if (!ppi)
 		return;
-	process_info->memcg_idx = memcg_idx;
+	ppi->memcg_idx = memcg_idx;
+	ppi->memcg_info = memcg_info;
 }
 
 struct proc_process_info_t *find_process_info(const char *appid, const pid_t pid, const char *pkgid)
@@ -224,47 +211,31 @@ struct proc_process_info_t *find_process_info(const char *appid, const pid_t pid
 	return NULL;
 }
 
-static resourced_ret_c proc_update_process_state(const pid_t pid, const int state)
-{
-	struct proc_process_info_t *process_info = NULL;
-	pid_t service_pid;
-	process_info = find_process_info(NULL, pid, NULL);
-	if (!process_info) {
-		_E("Current pid (%d) didn't have any process list", pid);
-		return RESOURCED_ERROR_INVALID_PARAMETER;
-	}
-	process_info->state = state;
-	service_pid = get_service_pid(process_info);
-	if (service_pid)
-		proc_set_service_oomscore(service_pid, state);
-	return RESOURCED_ERROR_NONE;
-}
-
 resourced_ret_c proc_set_runtime_exclude_list(const int pid, int type)
 {
 	GSList *iter = NULL;
-	struct proc_process_info_t *process_info = NULL;
-	struct pid_info_t *found_pid = NULL;
+	struct proc_process_info_t *ppi = NULL;
+	struct pid_info_t *found = NULL;
 
 	gslist_for_each_item(iter, proc_process_list) {
-		process_info = (struct proc_process_info_t *)iter->data;
-		if (!process_info->pids)
+		ppi = (struct proc_process_info_t *)iter->data;
+		if (!ppi->pids)
 			continue;
 
-		found_pid = find_pid_info(process_info->pids, pid);
-		if(!found_pid)
+		found = find_pid_info(ppi->pids, pid);
+		if(!found)
 			continue;
 
-		if(process_info->runtime_exclude) {
+		if(ppi->runtime_exclude) {
 			if (type == PROC_EXCLUDE)
-				process_info->runtime_exclude++;
+				ppi->runtime_exclude++;
 			else
-				process_info->runtime_exclude--;
+				ppi->runtime_exclude--;
 		} else
-			process_info->runtime_exclude = type;
+			ppi->runtime_exclude = type;
 
 		_D("found_pid %d, set proc exclude list, type = %d, exclude = %d",
-			    found_pid->pid, type, process_info->runtime_exclude);
+			    found->pid, type, ppi->runtime_exclude);
 		break;
 	}
 	return RESOURCED_ERROR_NONE;
@@ -272,109 +243,181 @@ resourced_ret_c proc_set_runtime_exclude_list(const int pid, int type)
 
 struct proc_process_info_t * proc_add_process_list(const int type, const pid_t pid, const char *appid, const char *pkgid)
 {
-	struct proc_process_info_t *process_info;
+	struct proc_process_info_t *ppi;
+	int owner_oom = 0;
 
 	if (!appid)
 		return NULL;
 
-	process_info = find_process_info(appid, pid, pkgid);
+	ppi = find_process_info(appid, pid, pkgid);
 	/* do not add if it already in list */
-	if (process_info && find_pid_info(process_info->pids, pid))
-		return process_info;
+	if (ppi && find_pid_info(ppi->pids, pid))
+		return ppi;
 
-	if (!process_info) {
-		process_info = malloc(sizeof(struct proc_process_info_t));
-		if (!process_info)
+	if (!ppi) {
+		ppi = malloc(sizeof(struct proc_process_info_t));
+		if (!ppi)
 			return NULL;
 
-		memset(process_info, 0, sizeof(struct proc_process_info_t));
-		strncpy(process_info->appid, appid, MAX_NAME_LENGTH - 1);
-		process_info->proc_exclude = resourced_proc_excluded(appid);
+		memset(ppi, 0, sizeof(struct proc_process_info_t));
+		strncpy(ppi->appid, appid, MAX_NAME_LENGTH - 1);
+		ppi->proc_exclude = resourced_proc_excluded(appid);
 		if (pkgid)
-			strncpy(process_info->pkgname, pkgid, MAX_NAME_LENGTH - 1);
+			strncpy(ppi->pkgname, pkgid, MAX_NAME_LENGTH - 1);
 		else
-			extract_pkgname(process_info->appid, process_info->pkgname,
+			extract_pkgname(ppi->appid, ppi->pkgname,
 				MAX_NAME_LENGTH);
 		pthread_mutex_lock(&proc_mutex);
 		proc_process_list = g_slist_prepend(proc_process_list,
-			process_info);
+			ppi);
 		pthread_mutex_unlock(&proc_mutex);
-		process_info->state = PROC_STATE_DEFAULT;
-	}
-	if (proc_check_ug(pid) == RESOURCED_ERROR_NONFREEZABLE)
-		process_info->runtime_exclude = PROC_EXCLUDE;
-	if (type == RESOURCED_APP_TYPE_SERVICE)
-		proc_set_service_oomscore(pid, process_info->state);
+	} else if (type == PROC_TYPE_SERVICE && ppi->main_pid > 0)
+		proc_get_oom_score_adj(ppi->main_pid, &owner_oom);
 
-	proc_add_pid_list(process_info, pid, type);
-	return process_info;
+	if (proc_check_ug(pid) == RESOURCED_ERROR_NONFREEZABLE)
+		ppi->runtime_exclude = PROC_EXCLUDE;
+	if (type == PROC_TYPE_SERVICE)
+		proc_set_service_oomscore(pid, owner_oom);
+
+	if (type == PROC_TYPE_GUI) {
+		if (ppi->main_pid && pid != ppi->main_pid){
+			if (proc_get_oom_score_adj(pid, &owner_oom) < 0) {
+				struct pid_info_t *found = NULL;
+				found = find_pid_info(ppi->pids, ppi->main_pid);
+				if(found) {
+					ppi->pids = g_slist_remove(ppi->pids,
+						    found);
+					free(found);
+				}
+				ppi->main_pid = pid;
+			}
+		} else
+			ppi->main_pid = pid;
+	}
+	proc_add_pid_list(ppi, pid, type);
+	return ppi;
 }
 
 struct proc_process_info_t * proc_create_process_list(const char *appid, const char *pkgid)
 {
-	struct proc_process_info_t *process_info;
+	struct proc_process_info_t *ppi;
 
 	if (!appid)
 		return NULL;
 
-	process_info = find_process_info(appid, 0, pkgid);
+	ppi = find_process_info(appid, 0, pkgid);
 	/* do not add if it already in list */
-	if (process_info)
-		return process_info;
+	if (ppi)
+		return ppi;
 
-	if (!process_info) {
-		process_info = malloc(sizeof(struct proc_process_info_t));
-		if (!process_info)
+	if (!ppi) {
+		ppi = malloc(sizeof(struct proc_process_info_t));
+		if (!ppi)
 			return NULL;
 
-		memset(process_info, 0, sizeof(struct proc_process_info_t));
-		strncpy(process_info->appid, appid, MAX_NAME_LENGTH - 1);
-		process_info->proc_exclude = resourced_proc_excluded(appid);
+		memset(ppi, 0, sizeof(struct proc_process_info_t));
+		strncpy(ppi->appid, appid, MAX_NAME_LENGTH - 1);
+		ppi->proc_exclude = resourced_proc_excluded(appid);
 		if (pkgid)
-			strncpy(process_info->pkgname, pkgid, MAX_NAME_LENGTH - 1);
+			strncpy(ppi->pkgname, pkgid, MAX_NAME_LENGTH - 1);
 		else
-			extract_pkgname(process_info->appid, process_info->pkgname,
+			extract_pkgname(ppi->appid, ppi->pkgname,
 				MAX_NAME_LENGTH);
 		pthread_mutex_lock(&proc_mutex);
 		proc_process_list = g_slist_prepend(proc_process_list,
-			process_info);
+			ppi);
 		pthread_mutex_unlock(&proc_mutex);
-		process_info->state = PROC_STATE_DEFAULT;
 	}
-	return process_info;
+	return ppi;
 }
 
 int proc_remove_process_list(const pid_t pid)
 {
 	GSList *iter = NULL;
-	struct proc_process_info_t *process_info = NULL;
-	struct pid_info_t *found_pid = NULL;
+	struct proc_process_info_t *ppi = NULL;
+	struct pid_info_t *found = NULL;
 
 	pthread_mutex_lock(&proc_mutex);
 	gslist_for_each_item(iter, proc_process_list) {
-		process_info = (struct proc_process_info_t *)iter->data;
-		if (!process_info->pids)
+		ppi = (struct proc_process_info_t *)iter->data;
+		if (!ppi->pids)
 			continue;
 
-		found_pid = find_pid_info(process_info->pids, pid);
-		if(!found_pid)
+		found = find_pid_info(ppi->pids, pid);
+		if(!found)
 			continue;
 
-		_D("found_pid %d", found_pid->pid);
+		_D("found_pid %d", found->pid);
+		if (ppi->main_pid == pid)
+			ppi->main_pid = 0;
 		/* Introduce function for removing and cleaning */
-		process_info->pids = g_slist_remove(process_info->pids,
-			found_pid);
-		free(found_pid);
-		if (!process_info->pids) {
-			proc_process_list = g_slist_remove(
-				proc_process_list,
-				process_info);
-			free(process_info);
-		}
+		ppi->pids = g_slist_remove(ppi->pids,
+			found);
+		free(found);
 		break;
 	}
 	pthread_mutex_unlock(&proc_mutex);
 	return 0;
+}
+
+int proc_delete_process_list(void)
+{
+	GSList *iter, *next;
+	GSList *pid_iter = NULL;
+	struct proc_process_info_t *ppi = NULL;
+
+	pthread_mutex_lock(&proc_mutex);
+	gslist_for_each_safe(proc_process_list, iter, next, ppi) {
+		if (ppi->pids) {
+			gslist_for_each_item(pid_iter, ppi->pids) {
+				struct pid_info_t *pi = (struct pid_info_t *)(pid_iter->data);
+				if (pi) {
+					ppi->pids = g_slist_remove(ppi->pids, pi);
+					free(pi);
+				}
+			}
+		}
+		proc_process_list = g_slist_remove(proc_process_list, ppi);
+		free(ppi);
+	}
+	pthread_mutex_unlock(&proc_mutex);
+	return 0;
+}
+
+static void proc_dump_process_list(FILE* fp)
+{
+	GSList *iter = NULL;
+	GSList *iter_pid = NULL;
+	struct proc_process_info_t *process_info = NULL;
+	int index = 0 ;
+
+	LOG_DUMP(fp, "[PROCESS LISTS]\n");
+	gslist_for_each_item(iter, proc_process_list) {
+		process_info = (struct proc_process_info_t *)iter->data;
+		LOG_DUMP(fp, "index : %d, appid : %s, pkgname : %s, main_pid : %d, type : %x\n",
+			    index, process_info->appid, process_info->pkgname,
+			    process_info->main_pid, process_info->type);
+		if (process_info->pids) {
+			gslist_for_each_item(iter_pid, process_info->pids) {
+				struct pid_info_t *pid_info = (struct pid_info_t *)(iter_pid->data);
+				if (pid_info) {
+					pid_t pid;
+					int oom_score_adj;
+					char appname[PROC_NAME_MAX];
+					pid = pid_info->pid;
+					if (proc_get_oom_score_adj(pid, &oom_score_adj) < 0 ||
+						    proc_get_cmdline(pid, appname) < 0) {
+						process_info->pids = g_slist_remove(process_info->pids, pid_info);
+						free(pid_info);
+						continue;
+					}
+					LOG_DUMP(fp, "\t type : %s, pid : %d, command line : %s, oom_score : %d\n",
+					    convert_to_proctype_str(pid_info->type), pid, appname, oom_score_adj);
+				}
+			}
+		}
+		index++;
+	}
 }
 
 static void proc_free_exclude_key(gpointer data)
@@ -502,11 +545,15 @@ int resourced_proc_init(const struct daemon_opts *opts)
 {
 	int ret;
 
-	proc_notifd = proc_noti_init( );
+	proc_notifd = proc_noti_init();
 
 	ret = proc_monitor_init();
 	if (ret)
 		_E("proc_monitor_init failed : %d", ret);
+
+	ret = proc_usage_stats_init();
+	if (ret)
+		_E("proc_usage_stats_init failed : %d", ret);
 
 	proc_exclude_init();
 	return ret;
@@ -514,6 +561,7 @@ int resourced_proc_init(const struct daemon_opts *opts)
 
 int resourced_proc_exit(const struct daemon_opts *opts)
 {
+	proc_delete_process_list();
 	if (proc_notifd)
 		close(proc_notifd);
 	g_hash_table_destroy(proc_exclude_list);
@@ -524,22 +572,32 @@ int resourced_proc_exit(const struct daemon_opts *opts)
 
 void proc_set_apptype(const char *appid, const char *pkgid, int type)
 {
-	struct proc_process_info_t *process_info =
+	struct proc_process_info_t *ppi =
 		proc_create_process_list(appid, pkgid);
-	if (process_info)
-		process_info->type = type;
+	if (ppi)
+		ppi->type = type;
+}
+
+int proc_get_apptype(const pid_t pid)
+{
+	struct proc_process_info_t *ppi =
+		find_process_info(NULL, pid, NULL);
+
+	if (ppi) {
+		_D("get apptype = %d", ppi->type);
+		return ppi->type;
+	} else
+		_D("there is no process info for pid = %d", pid);
+	return PROC_NONE;
 }
 
 int resourced_proc_status_change(int type, pid_t pid, char* app_name, char* pkg_name)
 {
 	int ret = 0, oom_score_adj = 0;
-	char pidbuf[32];
-	struct proc_status proc_data;;
+	char pidbuf[MAX_DEC_SIZE(int)];
+	struct proc_status proc_data = {0};
 
 	if (pid && (proc_get_oom_score_adj(pid, &oom_score_adj) < 0)) {
-		/* due process with pid is no longer exits
-		 * we need to remove it from
-		 * freezer_process_list	 */
 		proc_remove_process_list(pid);
 		_E("Empty pid or process not exists. %d", pid);
 		return RESOURCED_ERROR_FAIL;
@@ -552,7 +610,7 @@ int resourced_proc_status_change(int type, pid_t pid, char* app_name, char* pkg_
 
 	proc_data.pid = pid;
 	proc_data.appid = app_name;
-	proc_data.processinfo = NULL;
+	proc_data.ppi = NULL;
 	switch (type) {
 	case PROC_CGROUP_SET_FOREGRD:
 		_SD("set foreground : %d", pid);
@@ -561,7 +619,8 @@ int resourced_proc_status_change(int type, pid_t pid, char* app_name, char* pkg_
 		ret = proc_set_foregrd(pid, oom_score_adj);
 		if (ret != 0)
 			return RESOURCED_ERROR_NO_DATA;
-		proc_update_process_state(pid, PROC_STATE_FOREGROUND);
+		proc_data.ppi = find_process_info(app_name, pid, NULL);
+		proc_data.appid = proc_data.ppi->appid;
 		resourced_notify(RESOURCED_NOTIFIER_APP_FOREGRD, &proc_data);
 		break;
 	case PROC_CGROUP_SET_LAUNCH_REQUEST:
@@ -575,7 +634,7 @@ int resourced_proc_status_change(int type, pid_t pid, char* app_name, char* pkg_
 			_SD("launch request %s with pkgname", pkg_name);
 		ret = resourced_proc_excluded(app_name);
 		if (!ret)
-			proc_data.processinfo = proc_add_process_list(RESOURCED_APP_TYPE_GUI, pid, app_name, pkg_name);
+			proc_data.ppi = proc_add_process_list(PROC_TYPE_GUI, pid, app_name, pkg_name);
 		resourced_notify(RESOURCED_NOTIFIER_APP_LAUNCH, &proc_data);
 		_E("available memory = %u", get_available());
 		break;
@@ -587,29 +646,26 @@ int resourced_proc_status_change(int type, pid_t pid, char* app_name, char* pkg_
 		_SD("service launch request %s, %d", app_name, pid);
 		if (pkg_name)
 			_SD("launch request %s with pkgname", pkg_name);
-		proc_add_process_list(RESOURCED_APP_TYPE_SERVICE, pid, app_name, pkg_name);
+		proc_data.ppi = proc_add_process_list(PROC_TYPE_SERVICE, pid, app_name, pkg_name);
 		if (resourced_proc_excluded(app_name) == RESOURCED_ERROR_NONE)
 			resourced_notify(RESOURCED_NOTIFIER_SERVICE_LAUNCH, &proc_data);
 		break;
 	case PROC_CGROUP_SET_RESUME_REQUEST:
 		_SD("resume request %d", pid);
 		/* init oom_score_value */
-		if (oom_score_adj >= OOMADJ_BACKGRD_UNLOCKED) {
-			resourced_notify(RESOURCED_NOTIFIER_APP_RESUME, &proc_data);
-			proc_set_oom_score_adj(pid, OOMADJ_INIT);
-		}
-
 		if (!app_name) {
 			_E("need application name!pid = %d", pid);
 			return RESOURCED_ERROR_NO_DATA;
 		}
 
-		proc_add_process_list(RESOURCED_APP_TYPE_GUI, pid, app_name, pkg_name);
-		if (ret != RESOURCED_ERROR_NONE)
-			_D("Failed to add to freezer list: pid %d", pid);
-
+		proc_data.ppi = proc_add_process_list(PROC_TYPE_GUI, pid, app_name, pkg_name);
+		if (oom_score_adj >= OOMADJ_BACKGRD_UNLOCKED) {
+			resourced_notify(RESOURCED_NOTIFIER_APP_RESUME, &proc_data);
+			proc_set_oom_score_adj(pid, OOMADJ_INIT);
+		}
 		break;
 	case PROC_CGROUP_SET_TERMINATE_REQUEST:
+		proc_data.ppi = find_process_info(app_name, pid, NULL);
 		resourced_notify(RESOURCED_NOTIFIER_APP_TERMINATE, &proc_data);
 		proc_remove_process_list(pid);
 		break;
@@ -626,7 +682,6 @@ int resourced_proc_status_change(int type, pid_t pid, char* app_name, char* pkg_
 		ret = proc_set_backgrd(pid, oom_score_adj);
 		if (ret != 0)
 			break;
-		proc_update_process_state(pid, PROC_STATE_BACKGROUND);
 		break;
 	case PROC_CGROUP_SET_INACTIVE:
 		ret = proc_set_inactive(pid, oom_score_adj);
@@ -673,3 +728,16 @@ int resourced_proc_action(int type, int argnum, char **arg)
 	return resourced_proc_status_change(type, pid, cgroup_name, pkg_name);
 }
 
+void resourced_proc_dump(int mode, const char *dirpath)
+{
+	char buf[PROC_BUF_MAX];
+	FILE *f = NULL;
+	if (dirpath) {
+		snprintf(buf, sizeof(buf), "%s/%s", dirpath, LOG_PREFIX);
+		f = fopen(buf, "w+");
+	}
+	proc_dump_process_list(f);
+	modules_dump((void*)f, mode);
+	if (f)
+		fclose(f);
+}

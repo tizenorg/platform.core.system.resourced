@@ -34,6 +34,8 @@
 #include "resourced.h"
 #include "settings.h"
 #include "trace.h"
+#include "telephony.h"
+#include "notification.h"
 
 #include <stdlib.h>
 #include <vconf.h>
@@ -87,6 +89,16 @@ static void datausage_timer_change_cb(keynode_t *key, void *data)
 	options->update_period = val;
 }
 
+static void datausage_sim_change_cb(keynode_t *key, void *data)
+{
+	int val = vconf_keynode_get_int(key);
+
+	_SD("key = %s, value = %d(int)\n",
+	    vconf_keynode_get_name(key), val);
+
+	check_and_clear_all_noti();
+}
+
 void resourced_add_vconf_datausage_cb(struct counter_arg *carg)
 {
 	_D("Add vconf datausage callbacks\n");
@@ -101,6 +113,9 @@ void resourced_add_vconf_datausage_cb(struct counter_arg *carg)
 	vconf_notify_key_changed(RESOURCED_DATACALL_LOGGING_PATH,
 				 datacall_logging_change_cb,
 				 (void *)carg->opts);
+	vconf_notify_key_changed(VCONF_TELEPHONY_DEFAULT_DATA_SERVICE,
+				 datausage_sim_change_cb,
+				 NULL);
 }
 
 void resourced_remove_vconf_datausage_cb(void)
@@ -113,4 +128,6 @@ void resourced_remove_vconf_datausage_cb(void)
 				 datausage_timer_change_cb);
 	vconf_ignore_key_changed(RESOURCED_DATACALL_LOGGING_PATH,
 				 datacall_logging_change_cb);
+	vconf_ignore_key_changed(VCONF_TELEPHONY_DEFAULT_DATA_SERVICE,
+				 datausage_sim_change_cb);
 }

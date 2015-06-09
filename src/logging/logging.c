@@ -54,11 +54,12 @@
 #define	WRITE_INFO_MAX 		10
 #define	MAX_PROC_LIST 		200
 
-#define	WEBPROCESS_NAME		"WebProcess"
+#define	WEBPROCESS_NAME		"/usr/bin/WebProcess"
+#define	WEBPROCESS_NAME_LEN	19
 #define	MAX_PROC_ITEM		200
 #define	INC_PROC_ITEM		10
 #define	COMMIT_INTERVAL		10*60	/* 10 min */
-#define LOGGING_PTIORITY	-20
+#define LOGGING_PTIORITY	20
 
 #define SIGNAL_LOGGING_INIT	"LoggingInit"
 #define SIGNAL_LOGGING_GET	"LoggingGet"
@@ -83,6 +84,8 @@ static pthread_t	logging_thread	= 0;
 static pthread_mutex_t	logging_mutex	= PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t	proc_list_mutex	= PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t	logging_cond	= PTHREAD_COND_INITIALIZER;
+
+static void broadcast_logging_data_updated_signal(void);
 
 static int init_logging_infos(struct logging_infos *info, const char *key,
 	pid_t pid, int oom, time_t now)
@@ -139,9 +142,9 @@ static void insert_hash_table(char *key, pid_t pid, int oom)
 	struct logging_infos *info;
 	void **stats;
 	char *name;
-	time_t now;
+	struct timespec ts;
 
-	now = time(NULL);
+	clock_gettime(CLOCK_MONOTONIC, &ts);
 
 	name = malloc(strlen(key) + 1);
 
@@ -168,10 +171,10 @@ static void insert_hash_table(char *key, pid_t pid, int oom)
 	}
 
 	info->stats = stats;
-	init_logging_infos(info, name, pid, oom, now);
+	init_logging_infos(info, name, pid, oom, ts.tv_sec);
 
 	g_hash_table_insert(logging_proc_list, (gpointer) name, (gpointer) info);
-	update_logging_infos(info, now, true);
+	update_logging_infos(info, ts.tv_sec, true);
 	return;
 }
 
@@ -227,6 +230,9 @@ static int write_logging_subsys_info(struct logging_sub_sys *pss, int sindex,
 	write_journal(pss, sindex);
 
 	pss->last_commit = now;
+
+	broadcast_logging_data_updated_signal();
+
 	return RESOURCED_ERROR_NONE;
 
 }
@@ -235,16 +241,16 @@ static int write_logging_infos(bool force)
 {
 	int i;
 	int ret;
-	time_t now;
+	struct timespec ts;
 
-	now = time(NULL);
+	clock_gettime(CLOCK_MONOTONIC, &ts);
 
 	for (i = 0; i < logging_ss_list->len; i++) {
 		struct logging_sub_sys *ss = &g_array_index(logging_ss_list,
 						struct logging_sub_sys, i);
-		ret = write_logging_subsys_info(ss, i, now, force);
+		ret = write_logging_subsys_info(ss, i, ts.tv_sec, force);
 		if (ret != RESOURCED_ERROR_NONE) {
-			_E("write logging at %lu", now);
+			_E("write logging at %lu", ts.tv_sec);
 			/* not return error, just continue updating */
 		}
 	}
@@ -256,7 +262,7 @@ int register_logging_subsystem(const char*name, struct logging_info_ops *ops)
 {
 	struct logging_sub_sys ss;
 	char *ss_name;
-	time_t now;
+	struct timespec ts;
 
 	ss_name = malloc(strlen(name)+1);
 
@@ -265,12 +271,12 @@ int register_logging_subsystem(const char*name, struct logging_info_ops *ops)
 		return RESOURCED_ERROR_FAIL;
 	}
 
-	now = time(NULL);
+	clock_gettime(CLOCK_MONOTONIC, &ts);
 
 	strcpy(ss_name, name);
 	ss.name = ss_name;
 	ss.commit_interval = COMMIT_INTERVAL;
-	ss.last_commit = now;
+	ss.last_commit = ts.tv_sec;
 	ss.ops = ops;
 
 	g_array_append_val(logging_ss_list, ss);
@@ -299,21 +305,7 @@ int update_commit_interval(const char *name, time_t commit_interval)
 
 static inline int is_webprocess(char *name)
 {
-	return !strcmp(name, WEBPROCESS_NAME);
-}
-
-static int rename_webprocess(pid_t pgid, char *name)
-{
-	char webui_name[PROC_NAME_MAX];
-	int ret;
-
-	if ((ret = proc_get_cmdline(pgid, webui_name)) != RESOURCED_ERROR_NONE)
-		return RESOURCED_ERROR_FAIL;
-
-	strcat(name, ".");
-	strcat(name, webui_name);
-
-	return RESOURCED_ERROR_NONE;
+	return !strncmp(name, WEBPROCESS_NAME, WEBPROCESS_NAME_LEN);
 }
 
 static int get_cmdline(pid_t pid, char *cmdline)
@@ -331,6 +323,20 @@ static int get_cmdline(pid_t pid, char *cmdline)
 		return RESOURCED_ERROR_FAIL;
 	}
 	fclose(fp);
+
+	return RESOURCED_ERROR_NONE;
+}
+
+static int rename_webprocess(pid_t pgid, char *name)
+{
+	char webui_name[PROC_NAME_MAX];
+	int ret;
+
+	if ((ret = get_cmdline(pgid, webui_name)) != RESOURCED_ERROR_NONE)
+		return RESOURCED_ERROR_FAIL;
+
+	strcat(name, ":");
+	strcat(name, webui_name);
 
 	return RESOURCED_ERROR_NONE;
 }
@@ -460,14 +466,14 @@ static void update_proc_list(void)
 {
 	GHashTableIter iter;
 	gpointer key, value;
-	time_t now;
 	struct logging_infos *infos;
+        struct timespec ts;
 	int ret;
 
 	if (need_to_update)
 		update_proc_state();
 
-	now = time(NULL);
+	clock_gettime(CLOCK_MONOTONIC, &ts);
 
 	g_hash_table_iter_init(&iter, logging_proc_list);
 
@@ -490,7 +496,7 @@ static void update_proc_list(void)
 		infos = (struct logging_infos *)value;
 
 		if (infos->running)
-			update_logging_infos(infos, now, false);
+			update_logging_infos(infos, ts.tv_sec, false);
 		ret = pthread_mutex_unlock(&proc_list_mutex);
 		if (ret) {
 			_E("proc_list_mutex::pthread_mutex_unlock() failed, %d", ret);
@@ -737,7 +743,6 @@ static void logging_get_edbus_signal_handler(void *data, DBusMessage *msg)
 	}
 	write_logging_infos(true);
 	_D("logging_get_edbus_signal_handler");
-	broadcast_logging_data_updated_signal();
 }
 
 static int logging_init(void)
@@ -771,11 +776,11 @@ static int logging_init(void)
 
 	register_edbus_signal_handler(RESOURCED_PATH_LOGGING,
 		RESOURCED_INTERFACE_LOGGING, SIGNAL_LOGGING_INIT,
-		    (void *)logging_init_booting_done_edbus_signal_handler);
+		    (void *)logging_init_booting_done_edbus_signal_handler, NULL);
 
 	register_edbus_signal_handler(RESOURCED_PATH_LOGGING,
 		RESOURCED_INTERFACE_LOGGING, SIGNAL_LOGGING_GET,
-		    (void *)logging_get_edbus_signal_handler);
+		    (void *)logging_get_edbus_signal_handler, NULL);
 
 	return RESOURCED_ERROR_NONE;
 }

@@ -33,6 +33,7 @@
 #include <sys/types.h>
 
 #include "const.h"
+#include "config.h"
 #include "data_usage.h"
 #include "daemon-options.h"
 #include "transmission.h"
@@ -55,27 +56,30 @@ struct application_stat {
 	uint32_t delta_snd;
 	uint32_t delta_rcv;
 
+#ifndef CONFIG_DATAUSAGE_NFACCT
 	pid_t pid;
 	int ifindex;
+#endif
 	resourced_roaming_type is_roaming;
-};
 
-/*
-* Structure for holding serialized data from kernel @see traffic_event
-*/
-struct traffic_stat {
-	unsigned long bytes;
-	int ifindex;
+	/* foreground/background state is here,
+	 * not in classid_iftype_key, it means
+	 * we'll not able to handle simultaneously
+	 * counter per one application for background and
+	 * foreground withing one counting cycle,
+	 * so every time application goes to background/foreground
+	 * we'll request its counter update */
+	resourced_state_t ground;
 };
 
 struct classid_iftype_key
 {
 	u_int32_t classid;
 	int iftype;
-	char ifname[MAX_NAME_LENGTH];
+	/* pointer to telephony's imsi */
+	char *imsi;
+	char ifname[MAX_IFACE_LENGTH];
 };
-
-typedef GTree traffic_stat_tree;
 
 struct application_stat_tree {
 	GTree *tree;
@@ -87,13 +91,16 @@ struct application_stat_tree *create_app_stat_tree(void);
 void free_app_stat_tree(struct application_stat_tree *tree);
 void nulify_app_stat_tree(struct application_stat_tree **tree);
 
-traffic_stat_tree *create_traffic_stat_tree(void);
-void free_traffic_stat_tree(traffic_stat_tree *list);
+struct counter_arg;
+#ifdef CONFIG_DATAUSAGE_NFACCT
+void fill_nfacct_result(char *cnt_name, uint64_t bytes,
+			  struct counter_arg *carg);
+#else
+/* It's not same function used at netacct and it's only used at ktgrabber. */
+void fill_app_stat_result(int ifindex, int classid, uint64_t bytes, int iotype,
+			  struct counter_arg *carg);
+#endif
 
-resourced_ret_c prepare_application_stat(traffic_stat_tree *tree_in,
-		 traffic_stat_tree *tree_out,
-		 struct application_stat_tree *result,
-		 volatile struct daemon_opts *opts);
 
 
 #endif /* _RESOURCED_APPLICATION_STAT_H_ */

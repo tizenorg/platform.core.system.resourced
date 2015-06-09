@@ -39,8 +39,6 @@
 #include "lowmem-handler.h"
 #include "notifier.h"
 
-
-
 #define WATCHDOG_LAUNCHING_PARAM "WatchdogPopupLaunch"
 #define WATCHDOG_KEY1			"_SYSPOPUP_CONTENT_"
 #define WATCHDOG_KEY2			"_APP_NAME_"
@@ -56,6 +54,9 @@
 #define SIGNAL_PROC_GROUP	  	"ProcGroup"
 #define TIZEN_DEBUG_MODE_FILE   "/opt/etc/.debugmode"
 
+#define SIGNAL_DUMP		"Dump"
+#define SIGNAL_DUMP_START	"Start"
+#define SIGNAL_DUMP_FINISH	"Finish"
 
 #define INIT_PID	1
 #define INIT_PROC_VAL	-1
@@ -235,6 +236,8 @@ static void proc_dbus_prelaunch_signal_handler(void *data, DBusMessage *msg)
 	char *appid;
 	char *pkgid;
 	int flags;
+	struct proc_status proc_data;;
+	struct proc_process_info_t *ppi;
 
 	ret = dbus_message_is_signal(msg, RESOURCED_INTERFACE_PROCESS,
 		SIGNAL_PROC_PRELAUNCH);
@@ -256,10 +259,13 @@ static void proc_dbus_prelaunch_signal_handler(void *data, DBusMessage *msg)
 	_D("call proc_dbus_prelaunch_handler: appid = %s, pkgid = %s, flags = %d",
 		appid, pkgid, flags);
 
-	if (flags & PROC_LARGE_HEAP) {
-		proc_set_apptype(appid, pkgid, PROC_LARGE_HEAP);
+	ppi = proc_create_process_list(appid, pkgid);
+	ppi->type = flags;
+	proc_data.appid = appid;
+	proc_data.ppi = ppi;
+	resourced_notify(RESOURCED_NOTIFIER_APP_PRELAUNCH, &proc_data);
+	if (flags & PROC_LARGEMEMORY)
 		lowmem_dynamic_process_killer(DYNAMIC_KILL_LARGEHEAP);
-	}
 }
 
 static void proc_dbus_sweep_signal_handler(void *data, DBusMessage *msg)
@@ -432,7 +438,7 @@ static void proc_dbus_grouping_handler(void *data, DBusMessage *msg)
 	int pid, childpid, ret;
 
 	if (dbus_message_is_signal(msg, RESOURCED_INTERFACE_PROCESS, SIGNAL_PROC_GROUP) == 0) {
-		_D("there is no watchdog result signal");
+		_D("there is no process group signal");
 		return;
 	}
 
@@ -445,8 +451,42 @@ static void proc_dbus_grouping_handler(void *data, DBusMessage *msg)
 		_D("there is no message");
 		return;
 	}
-
+	_D("received process grouping : owner %d, child %d", pid, childpid);
 	proc_set_group(pid, childpid);
+}
+
+static void send_dump_signal(char *signal)
+{
+	pid_t pid = getpid();
+
+	broadcast_edbus_signal(DUMP_SERVICE_OBJECT_PATH,
+	    DUMP_SERVICE_INTERFACE_NAME, signal, DBUS_TYPE_INT32, &pid);
+}
+
+static void proc_dbus_dump_handler(void *data, DBusMessage *msg)
+{
+	DBusError err;
+	dbus_bool_t ret;
+	char *path;
+	int mode;
+
+	if (dbus_message_is_signal(msg, DUMP_SERVICE_INTERFACE_NAME, SIGNAL_DUMP) == 0) {
+		_D("there is no process group signal");
+		return;
+	}
+
+	dbus_error_init(&err);
+
+	ret = dbus_message_get_args(msg, &err, DBUS_TYPE_INT32, &mode,
+		    DBUS_TYPE_STRING, &path, DBUS_TYPE_INVALID);
+	if (ret == 0) {
+		_D("there is no message");
+		return;
+	}
+	_D("received dump request : path %s", path);
+	send_dump_signal(SIGNAL_DUMP_START);
+	resourced_proc_dump(mode, path);
+	send_dump_signal(SIGNAL_DUMP_FINISH);
 }
 
 static DBusMessage *edbus_signal_trigger(E_DBus_Object *obj, DBusMessage *msg)
@@ -520,41 +560,44 @@ static resourced_ret_c proc_dbus_init(void)
 {
 	register_edbus_signal_handler(RESOURCED_PATH_PROCESS, RESOURCED_INTERFACE_PROCESS,
 			SIGNAL_PROC_WATCHDOG_RESULT,
-		    proc_dbus_watchdog_result);
+		    proc_dbus_watchdog_result, NULL);
 
 	register_edbus_signal_handler(RESOURCED_PATH_PROCESS, RESOURCED_INTERFACE_PROCESS,
 			SIGNAL_PROC_ACTIVE,
-		    proc_dbus_active_signal_handler);
+		    proc_dbus_active_signal_handler, NULL);
 
 	register_edbus_signal_handler(RESOURCED_PATH_PROCESS, RESOURCED_INTERFACE_PROCESS,
 			SIGNAL_PROC_EXCLUDE,
-		    proc_dbus_exclude_signal_handler);
+		    proc_dbus_exclude_signal_handler, NULL);
 
 	register_edbus_signal_handler(RESOURCED_PATH_PROCESS, RESOURCED_INTERFACE_PROCESS,
 			SIGNAL_PROC_PRELAUNCH,
-		    proc_dbus_prelaunch_signal_handler);
+		    proc_dbus_prelaunch_signal_handler, NULL);
 
 	register_edbus_signal_handler(RESOURCED_PATH_PROCESS, RESOURCED_INTERFACE_PROCESS,
 			SIGNAL_PROC_STATUS,
-		    proc_dbus_proc_signal_handler);
+		    proc_dbus_proc_signal_handler, NULL);
 
 	register_edbus_signal_handler(RESOURCED_PATH_PROCESS, RESOURCED_INTERFACE_PROCESS,
 			SIGNAL_PROC_SWEEP,
-		    proc_dbus_sweep_signal_handler);
+		    proc_dbus_sweep_signal_handler, NULL);
 
 	register_edbus_signal_handler(RESOURCED_PATH_PROCESS, RESOURCED_INTERFACE_PROCESS,
 			SIGNAL_PROC_WATCHDOG,
-		    proc_dbus_watchdog_handler);
+		    proc_dbus_watchdog_handler, NULL);
 
 	register_edbus_signal_handler(RESOURCED_PATH_PROCESS, RESOURCED_INTERFACE_PROCESS,
-			SIGNAL_PROC_WATCHDOG,
-		    proc_dbus_grouping_handler);
+			SIGNAL_PROC_GROUP,
+		    proc_dbus_grouping_handler, NULL);
 
 	register_edbus_signal_handler(DEVICED_PATH_DISPLAY,
-		    DEVICED_INTERFACE_DISPLAY, SIGNAL_LCD_ON, proc_dbus_lcd_on);
+		    DEVICED_INTERFACE_DISPLAY, SIGNAL_LCD_ON, proc_dbus_lcd_on, NULL);
 
 	register_edbus_signal_handler(DEVICED_PATH_DISPLAY,
-		    DEVICED_INTERFACE_DISPLAY, SIGNAL_LCD_OFF, proc_dbus_lcd_off);
+		    DEVICED_INTERFACE_DISPLAY, SIGNAL_LCD_OFF, proc_dbus_lcd_off, NULL);
+
+	register_edbus_signal_handler(DUMP_SERVICE_OBJECT_PATH,
+		    DUMP_SERVICE_INTERFACE_NAME, SIGNAL_DUMP, proc_dbus_dump_handler, NULL);
 
 	/* start watchdog check timer for preveting ANR during booting */
 	watchdog_check_timer =

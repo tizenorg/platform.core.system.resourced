@@ -32,6 +32,8 @@
 
 #include <resourced.h>
 
+#include "counter.h"
+#include "nfacct-rule.h"
 #include "iface.h"
 
 enum netstat_control_type {
@@ -61,5 +63,28 @@ iface_callback *create_counter_callback(void);
 
 struct nfacct_rule;
 void keep_counter(struct nfacct_rule *counter);
+/* remove counter from tree and execute its rule */
+void finalize_counter(struct nfacct_rule *counter);
+
+void set_finalize_flag(struct nfacct_rule *counter);
+void update_counter_quota_value(struct nfacct_rule *counter, uint64_t bytes);
+void extract_restriction_list(struct counter_arg *arg, GSList **rst_list);
+resourced_state_t get_app_ground(struct nfacct_rule *counter);
+
+/**
+ * @desc mark appropriate nfacct by app_id as background
+ */
+void mark_background(const char *app_id);
+
+/**
+ * @desc  move all pids of existing nfacct from background cgroup,
+ * to appropriate apps cgroups
+ */
+void foreground_apps(struct counter_arg *carg);
+
+/**
+ * @desc move all pids of existing nfacct to background cgroup
+ */
+void background_apps(struct counter_arg *carg);
 
 #endif /* __RESOURCED_NETSTAT_COMMON_H__ */

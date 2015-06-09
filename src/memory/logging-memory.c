@@ -49,6 +49,7 @@
 #include "macro.h"
 #include "proc-process.h"
 #include "logging.h"
+#include "smaps-helper.h"
 
 #define	MEM_NAME "memory"
 #define	MEM_COMMIT_INTERVAL		30*60	/* 30 min */
@@ -70,165 +71,6 @@ struct logging_memory_info {
 	time_t log_interval;
 	pid_t current_pid;
 };
-
-struct mapinfo {
-	unsigned size;
-	unsigned rss;
-	unsigned pss;
-	unsigned shared_clean;
-	unsigned shared_dirty;
-	unsigned private_clean;
-	unsigned private_dirty;
-};
-
-static int ignore_smaps_field;
-static struct mapinfo *mi;
-static struct mapinfo *maps;
-
-static void check_kernel_version(void)
-{
-	struct utsname buf;
-	int ret;
-
-	ret = uname(&buf);
-
-	if (ret)
-		return;
-
-	if (buf.release[0] == '3') {
-		char *pch;
-		char str[3];
-		int sub_version;
-		pch = strstr(buf.release, ".");
-		strncpy(str, pch+1, 2);
-		sub_version = atoi(str);
-
-		if (sub_version >= 10)
-			ignore_smaps_field = 8; /* Referenced, Anonymous, AnonHugePages,
-						   Swap, KernelPageSize, MMUPageSize,
-						   Locked, VmFlags */
-
-		else
-			ignore_smaps_field = 7; /* Referenced, Anonymous, AnonHugePages,
-						   Swap, KernelPageSize, MMUPageSize,
-						   Locked */
-	} else {
-		ignore_smaps_field = 4; /* Referenced, Swap, KernelPageSize,
-					   MMUPageSize */
-	}
-}
-
-
-/* 6f000000-6f01e000 rwxp 00000000 00:0c 16389419   /android/lib/libcomposer.so
- * 012345678901234567890123456789012345678901234567890123456789
- * 0         1         2         3         4         5
- */
-
-static int read_mapinfo(char** smaps, int rest_line)
-{
-	char* line;
-	int len;
-
-	if ((line = cgets(smaps)) == 0)
-		return RESOURCED_ERROR_FAIL;
-
-	len    = strlen(line);
-	if (len < 1) {
-		_E("line is less than 1");
-		return RESOURCED_ERROR_FAIL;
-	}
-
-	if ((line = cgets(smaps)) == 0)
-		goto oops;
-	if (sscanf(line, "Size: %d kB", &mi->size) != 1)
-		goto oops;
-	if ((line = cgets(smaps)) == 0)
-		goto oops;
-	if (sscanf(line, "Rss: %d kB", &mi->rss) != 1)
-		goto oops;
-	if ((line = cgets(smaps)) == 0)
-		goto oops;
-	if (sscanf(line, "Pss: %d kB", &mi->pss) == 1)
-		if ((line = cgets(smaps)) == 0)
-			goto oops;
-	if (sscanf(line, "Shared_Clean: %d kB", &mi->shared_clean) != 1)
-		goto oops;
-	if ((line = cgets(smaps)) == 0)
-		goto oops;
-	if (sscanf(line, "Shared_Dirty: %d kB", &mi->shared_dirty) != 1)
-		goto oops;
-	if ((line = cgets(smaps)) == 0)
-		goto oops;
-	if (sscanf(line, "Private_Clean: %d kB", &mi->private_clean) != 1)
-		goto oops;
-	if ((line = cgets(smaps)) == 0)
-		goto oops;
-	if (sscanf(line, "Private_Dirty: %d kB", &mi->private_dirty) != 1)
-		goto oops;
-
-	while (rest_line-- && cgets(smaps))
-		;
-
-	return RESOURCED_ERROR_NONE;
- oops:
-	_E("mi get error\n");
-	return RESOURCED_ERROR_FAIL;
-}
-
-static void init_maps()
-{
-	maps->size = 0;
-	maps->rss = 0;
-	maps->pss = 0;
-	maps->shared_clean = 0;
-	maps->shared_dirty = 0;
-	maps->private_clean = 0;
-	maps->private_dirty = 0;
-}
-
-static int load_maps(int pid)
-{
-	char* smaps, *start;
-	char tmp[128];
-
-	sprintf(tmp, "/proc/%d/smaps", pid);
-	smaps = cread(tmp);
-	if (smaps == NULL)
-		return RESOURCED_ERROR_FAIL;
-
-	start = smaps;
-	init_maps();
-
-	while (read_mapinfo(&smaps, ignore_smaps_field)
-			== RESOURCED_ERROR_NONE) {
-		maps->size += mi->size;
-		maps->rss += mi->rss;
-		maps->pss += mi->pss;
-		maps->shared_clean += mi->shared_clean;
-		maps->shared_dirty += mi->shared_dirty;
-		maps->private_clean += mi->private_clean;
-		maps->private_dirty += mi->private_dirty;
-	}
-
-	if(start)
-		free(start);
-	return RESOURCED_ERROR_NONE;
-}
-
-int get_pss(pid_t pid, unsigned *pss, unsigned *uss)
-{
-	int ret;
-	ret = load_maps(pid);
-	if (ret != RESOURCED_ERROR_NONE) {
-		*pss = 0;
-		*uss = 0;
-	} else {
-		*pss = maps->pss;
-		*uss = maps->private_clean + maps->private_dirty;
-	}
-
-	return ret;
-}
 
 static void update_log_interval(struct logging_memory_info *loginfo, int oom,
 	int always)
@@ -296,7 +138,7 @@ static int update_memory_info(void *pl, pid_t pid, int oom,
 		if (now < loginfo->last_log_time + loginfo->log_interval)
 			return ret;
 
-	ret = get_pss(pid, &pss, &uss);
+	ret = smaps_helper_get_pss(pid, &pss, &uss);
 
 	if (ret != RESOURCED_ERROR_NONE)
 		return ret;
@@ -346,52 +188,25 @@ static struct logging_info_ops memory_info_ops = {
 	.init	= init_memory_info,
 };
 
-static int allocate_memory(void)
-{
-	maps = (struct mapinfo *)malloc(sizeof(struct mapinfo));
-
-	if (!maps) {
-		_E("fail to allocate mapinfo\n");
-		return RESOURCED_ERROR_FAIL;
-	}
-
-	mi = malloc(sizeof(struct mapinfo));
-	if (mi == NULL) {
-		_E("malloc failed for mapinfo");
-		free(maps);
-		return RESOURCED_ERROR_FAIL;
-	}
-	return RESOURCED_ERROR_NONE;
-}
-
-static void free_memory(void)
-{
-	free(maps);
-	free(mi);
-}
-
 static int logging_memory_init(void *data)
 {
 	int ret;
-	check_kernel_version();
-
-	ret = allocate_memory();
-
+	ret = smaps_helper_init();
 	if (ret != RESOURCED_ERROR_NONE) {
-		_E("allocate structures failed");
-		return RESOURCED_ERROR_FAIL;
+			_E("smaps helper failed");
+			return RESOURCED_ERROR_FAIL;
 	}
 
 	ret = register_logging_subsystem(MEM_NAME, &memory_info_ops);
 	if(ret != RESOURCED_ERROR_NONE) {
 		_E("register logging subsystem failed");
-		free_memory();
+		smaps_helper_free();
 		return RESOURCED_ERROR_FAIL;
 	}
 	ret = update_commit_interval(MEM_NAME, MEM_COMMIT_INTERVAL);
 	if(ret != RESOURCED_ERROR_NONE) {
 		_E("update commit interval logging subsystem failed");
-		free_memory();
+		smaps_helper_free();
 		return RESOURCED_ERROR_FAIL;
 	}
 
@@ -402,7 +217,7 @@ static int logging_memory_init(void *data)
 static int logging_memory_exit(void *data)
 {
 	_D("logging memory finalize");
-	free_memory();
+	smaps_helper_free();
 	return RESOURCED_ERROR_NONE;
 }
 

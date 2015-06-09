@@ -81,6 +81,40 @@ resourced_ret_c place_pid_to_cgroup(const char *cgroup_subsystem,
 	return place_pid_to_cgroup_by_fullpath(buf, pid);
 }
 
+resourced_ret_c place_pidtree_to_cgroup(const char *cgroup_subsystem,
+	const char *cgroup_name, const int pid)
+{
+	char buf[MAX_PATH_LENGTH];
+
+	/*/proc/%d/task/%d/children */
+	char child_buf[21 + MAX_DEC_SIZE(int) + MAX_DEC_SIZE(int)];
+	char pidbuf[MAX_DEC_SIZE(int)];
+	resourced_ret_c ret;
+
+	FILE *f;
+
+	snprintf(buf, sizeof(buf), "%s/%s", cgroup_subsystem, cgroup_name);
+	/* place parent */
+	ret = place_pid_to_cgroup_by_fullpath(buf, pid);
+	ret_value_msg_if(ret != RESOURCED_ERROR_NONE, ret,
+	  "Failed to put parent process %d into %s cgroup", pid, cgroup_name);
+
+	snprintf(child_buf, sizeof(child_buf), PROC_TASK_CHILDREN,
+		 pid, pid);
+	f = fopen(child_buf, "r");
+	ret_value_msg_if(!f, RESOURCED_ERROR_FAIL, "Failed to get child pids!");
+	while (fgets(pidbuf, sizeof(pidbuf), f) != NULL) {
+		int child_pid = atoi(pidbuf);
+		ret_value_msg_if(child_pid < 0, RESOURCED_ERROR_FAIL,
+				 "Invalid child pid!");
+		resourced_ret_c ret = place_pid_to_cgroup_by_fullpath(buf, child_pid);
+		ret_value_msg_if(ret != RESOURCED_ERROR_NONE, ret,
+	  "Failed to put parent process %d into %s cgroup", pid, cgroup_name);
+
+	}
+	return RESOURCED_ERROR_NONE;
+}
+
 int cgroup_write_node(const char *cgroup_name,
 		const char *file_name, unsigned int value)
 {
@@ -113,7 +147,11 @@ int make_cgroup_subdir(char* parentdir, char* cgroup_name, int *exists)
 	int cgroup_exists = 0, ret = 0;
 	char buf[MAX_PATH_LENGTH];
 
-	ret = snprintf(buf, sizeof(buf), "%s/%s", parentdir, cgroup_name);
+	if (parentdir)
+		ret = snprintf(buf, sizeof(buf), "%s/%s", parentdir, cgroup_name);
+	else
+		ret = snprintf(buf, sizeof(buf), "%s", cgroup_name);
+
 	ret_value_msg_if(ret > sizeof(buf), RESOURCED_ERROR_FAIL,
 		"Not enought buffer size for %s%s", parentdir, cgroup_name);
 

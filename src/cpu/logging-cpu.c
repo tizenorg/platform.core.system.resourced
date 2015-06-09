@@ -55,7 +55,7 @@
 
 #define	CPU_MAX_INTERVAL		20*60	/* 5 min */
 #define	CPU_INIT_INTERVAL		20*60	/* 3 min */
-#define	CPU_FOREGRD_INTERVAL		3*60	/* 1 min */
+#define	CPU_FOREGRD_INTERVAL		2	/* 1 min */
 #define	CPU_BACKGRD_INTERVAL		10*60	/* 2 min */
 #define	CPU_BACKGRD_OLD_INTERVAL	15*60	/* 5 min */
 
@@ -64,6 +64,8 @@ struct logging_cpu_info {
 	unsigned long stime;
 	unsigned long last_utime;
 	unsigned long last_stime;
+	unsigned long last_commit_utime;
+	unsigned long last_commit_stime;
 	bool last_commited;
 	time_t last_log_time;
 	time_t log_interval;
@@ -147,6 +149,8 @@ static int init_cpu_info(void **pl, int pid, int oom, time_t now)
 	info->stime = 0;
 	info->last_utime = 0;
 	info->last_stime = 0;
+	info->last_commit_utime = 0;
+	info->last_commit_stime = 0;
 	info->last_log_time = now;
 	info->last_commited = false;
 
@@ -215,13 +219,18 @@ static int write_cpu_info(char *name, struct logging_infos *infos,
 	if (!infos->running && ci->last_commited)
 		return RESOURCED_ERROR_NONE;
 
+	if (ci->last_commit_utime == ci->utime &&
+		ci->last_commit_stime == ci->stime)
+		return RESOURCED_ERROR_NONE;
+
 	sd_journal_send("NAME=cpu",
 		"TIME=%ld", ci->last_log_time,
 		"PNAME=%s", name,
 		"UTIME=%ld", ci->utime,
 		"STIME=%ld", ci->stime,
 		NULL);
-
+	ci->last_commit_utime = ci->utime;
+	ci->last_commit_stime = ci->stime;
 	ci->last_commited = true;
 
 	return RESOURCED_ERROR_NONE;

@@ -27,28 +27,27 @@
 #define __LOWMEM_HANDLER_H__
 
 void lowmem_dbus_init(void);
-int lowmem_oom_killer_cb(int memcg_idx, int flags);
+int lowmem_memory_oom_killer(int flags);
 void lowmem_dynamic_process_killer(int type);
 unsigned int get_available(void);
 void change_memory_state(int state, int force);
+void lowmem_memcg_set_threshold(int idx, int level, int value);
+void lowmem_memcg_set_leave_threshold(int idx, int value);
 
-void set_threshold(int level, int thres);
-void set_leave_threshold(int thres);
-
-#define NUM_FOREGROUND			3
 enum {
 	MEMCG_MEMORY,
 	MEMCG_FOREGROUND,
-	MEMCG_BACKGROUND = MEMCG_FOREGROUND + NUM_FOREGROUND,
-	MEMCG_MAX_GROUPS,
+	MEMCG_BACKGROUND,
+	MEMCG_SWAP,
+	MEMCG_MAX,
 };
 
 enum {
-	MEMNOTIFY_NORMAL,
-	MEMNOTIFY_SWAP,
-	MEMNOTIFY_LOW,
-	MEMNOTIFY_MEDIUM,
-	MEMNOTIFY_MAX_LEVELS,
+	LOWMEM_NORMAL,
+	LOWMEM_SWAP,
+	LOWMEM_LOW,
+	LOWMEM_MEDIUM,
+	LOWMEM_MAX_LEVEL,
 };
 
 enum oom_killer_cb_flags {

@@ -40,6 +40,7 @@ struct swap_module_data {
 
 struct shared_modules_data {
 	struct counter_arg *carg;
+	struct daemon_arg *darg;
 	struct swap_module_data swap_data;
 };
 

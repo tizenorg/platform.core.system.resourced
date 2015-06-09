@@ -31,10 +31,9 @@
 resourced_iface_type get_store_iftype(const u_int32_t app_classid,
 				      const resourced_iface_type iftype)
 {
-	/* We need to put RESOURCED_IFACE_ALL type into the database,
-	   in case of the "tethering" because it with no iftype */
+	/* in general tethering is based on datacall interface */
 	return (app_classid == RESOURCED_TETHERING_APP_CLASSID) ?
-		RESOURCED_IFACE_ALL : iftype;
+		RESOURCED_IFACE_DATACALL : iftype;
 }
 
 resourced_restriction_state convert_to_restriction_state(

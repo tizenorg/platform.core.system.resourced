@@ -31,17 +31,18 @@
 #include "daemon-options.h"
 #include "resourced.h"
 #include "const.h"
+#include "memcontrol.h"
 
 #define PROC_BUF_MAX 64
-#define PROC_NAME_MAX 512
+#define PROC_NAME_MAX 1024
 
 typedef GSList *pid_info_list;
 
 enum application_type {
-	RESOURCED_APP_TYPE_UNKNOWN,
-	RESOURCED_APP_TYPE_GUI,
-	RESOURCED_APP_TYPE_SERVICE,
-	RESOURCED_APP_TYPE_GROUP,
+	PROC_TYPE_UNKNOWN,
+	PROC_TYPE_GUI,
+	PROC_TYPE_SERVICE,
+	PROC_TYPE_GROUP,
 };
 
 struct pid_info_t {
@@ -52,18 +53,19 @@ struct pid_info_t {
 struct proc_process_info_t {
 	char appid[MAX_PATH_LENGTH];
 	char pkgname[MAX_PATH_LENGTH];
+	pid_t main_pid;
 	pid_info_list pids;
 	int proc_exclude;
 	int runtime_exclude;
 	int memcg_idx;
-	int state;
+	struct memcg_info_t *memcg_info;
 	int type;
 };
 
 struct proc_status {
 	pid_t pid;
 	char* appid;
-	struct proc_process_info_t *processinfo;
+	struct proc_process_info_t *ppi;
 };
 
 enum proc_exclude_type {
@@ -77,14 +79,17 @@ enum {
 };
 
 enum proc_prelaunch_flags {
-	PROC_LARGE_HEAP	= 0x01u,	/* for mark large heap */
+	PROC_NONE	= 0x00u,
+	PROC_LARGEMEMORY	= 0x01u,	/* for mark large memory */
 	PROC_SIGTERM	= 0x02u,	/* for make killer kill victim by SIGTERM */
+	PROC_WEBAPP	= 0x04u,	/* for checking webapp */
 };
 
 extern int current_lcd_state;
+extern GSList *proc_process_list;
 
 
-void proc_add_pid_list(struct proc_process_info_t *process_info, int pid, enum application_type type);
+void proc_add_pid_list(struct proc_process_info_t *ppi, int pid, enum application_type type);
 
 int resourced_proc_init(const struct daemon_opts *opts);
 
@@ -97,15 +102,19 @@ int resourced_proc_excluded(const char *app_name);
 
 int resourced_proc_status_change(int type, pid_t pid, char* app_name,  char* pkg_name);
 
+void resourced_proc_dump(int type, const char *path);
+
 struct proc_process_info_t *find_process_info(const char *appid, const pid_t pid, const char *pkgid);
 
 struct pid_info_t *new_pid_info(const pid_t pid, const int type);
 
-void proc_set_process_info_memcg(struct proc_process_info_t *process_info, int memcg_idx);
+void proc_set_process_info_memcg(struct proc_process_info_t *ppi,
+	int memcg_idx, struct memcg_info_t *memcg_info);
 resourced_ret_c proc_set_runtime_exclude_list(const int pid, int type);
 struct proc_process_info_t *proc_add_process_list(const int type, const pid_t pid, const char *appid, const char *pkgid);
+struct proc_process_info_t * proc_create_process_list(const char *appid, const char *pkgid);
 int proc_remove_process_list(const pid_t pid);
 void proc_set_apptype(const char *appid, const char *pkgid, int type);
-
+int proc_get_apptype(const pid_t pid);
 
 #endif /*__PROC_MAIN_H__ */
