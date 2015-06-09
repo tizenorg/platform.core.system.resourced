@@ -1,7 +1,7 @@
 /*
  * resourced
  *
- * Copyright (c) 2000 - 2013 Samsung Electronics Co., Ltd. All rights reserved.
+ * Copyright (c) 2014 Samsung Electronics Co., Ltd. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@
 
 
 /*
- * @file notification.c
+ * @file notification_wearable.c
  *
  * @desc Notification specific functions
  *
@@ -32,20 +32,24 @@
 #include "notification.h"
 #include "trace.h"
 #include "macro.h"
-#include "roaming.h"
+#include "telephony.h"
 #include "datausage-vconf-common.h"
 
-#define RESTRICTION_ACTIVE "RestrictionActive"
-#define RESTRICTION_WARNING "RestrictionWarning"
+#define RESTRICTION_ACTIVE     "RestrictionActive"
+#define RESTRICTION_WARNING    "RestrictionWarning"
 
-#define NOTI_KEY		"_SYSPOPUP_CONTENT_"
-#define NOTI_KEY_LIMIT	"_DATAUSAGE_LIMIT_"
-#define NOTI_VALUE_DISABLED	"datausage_disabled"
-#define NOTI_VALUE_WARNING	"datausage_warning"
+#define NOTI_KEY               "_SYSPOPUP_CONTENT_"
+#define NOTI_KEY_LIMIT         "_DATAUSAGE_LIMIT_"
+#define NOTI_VALUE_DISABLED    "datausage_disabled"
+#define NOTI_VALUE_WARNING     "datausage_warning"
+#define METHOD_CALL_POPUP      "DatausagePopupLaunch"
 
-#define METHOD_CALL_POPUP "DatausagePopupLaunch"
+void check_and_clear_all_noti(void)
+{
 
-static int show_restriction_popup(const char *value)
+}
+
+static int show_restriction_popup(const char *value, data_usage_quota *du_quota)
 {
 	char buf[MAX_DEC_SIZE(int)];
 	char str_val[32];
@@ -59,9 +63,6 @@ static int show_restriction_popup(const char *value)
 		_E("data usage limit is not set");
 		return RESOURCED_ERROR_FAIL;
 	}
-
-	if (restriction_read_quota(&quota_limit) < 0)
-		_E("Failed to read a quota value");
 
 	if (quota_limit <= 0) {
 		_D("quota_limit is invalid\n");
@@ -82,7 +83,7 @@ static int show_restriction_popup(const char *value)
 	return ret;
 }
 
-void send_restriction_notification(const char *appid)
+void send_restriction_notification(const char *appid, data_usage_quota *du_quota)
 {
 	if (broadcast_edbus_signal(RESOURCED_PATH_NETWORK,
 	                           RESOURCED_INTERFACE_NETWORK,
@@ -95,10 +96,10 @@ void send_restriction_notification(const char *appid)
 	restriction_set_status(RESTRICTION_STATE_SET);
 
 	_I("Show a network disabled popup");
-	show_restriction_popup(NOTI_VALUE_DISABLED);
+	show_restriction_popup(NOTI_VALUE_DISABLED, du_quota);
 }
 
-void send_restriction_warn_notification(const char *appid)
+void send_restriction_warn_notification(const char *appid, data_usage_quota *du_quota)
 {
 	if (broadcast_edbus_signal(RESOURCED_PATH_NETWORK,
 	                           RESOURCED_INTERFACE_NETWORK,
@@ -109,6 +110,6 @@ void send_restriction_warn_notification(const char *appid)
 	}
 
 	_I("Show a network warning popup");
-	show_restriction_popup(NOTI_VALUE_WARNING);
+	show_restriction_popup(NOTI_VALUE_WARNING, du_quota);
 }
 

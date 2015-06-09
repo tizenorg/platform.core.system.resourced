@@ -5,6 +5,7 @@ Wants=tizen-system.target
 
 [Service]
 Type=notify
+EnvironmentFile=/run/tizen-mobile-env
 Environment="CGROUP_MEMORY_SWAP=/sys/fs/cgroup/memory/swap"
 Environment="SWAPFILE=/dev/zram0"
 ExecStartPre=-/bin/mkdir -pm 755 $CGROUP_MEMORY_SWAP

@@ -121,6 +121,7 @@ typedef struct {
 	int snd_warning_limit;
 	int rcv_warning_limit;
 	resourced_roaming_type roaming;
+	char *ifname;
 } resourced_net_restrictions;
 
 /**
@@ -199,10 +200,11 @@ typedef struct {
 	int64_t rcv_quota;
 	int snd_warning_threshold;
 	int rcv_warning_threshold;
-	resourced_state_t quota_type;
+	resourced_state_t quota_type; /* TODO rename to ground */
 	resourced_iface_type iftype;
 	time_t *start_time;
 	resourced_roaming_type roaming_type;
+	const char *imsi;
 } data_usage_quota;
 
 /**
@@ -218,8 +220,10 @@ typedef struct {
  */
 struct datausage_quota_reset_rule {
 	const char *app_id;
+	const char *imsi;
 	resourced_iface_type iftype;
 	resourced_roaming_type roaming;
+	resourced_state_t quota_type;
 };
 
 /**
@@ -247,12 +251,13 @@ typedef struct {
 typedef struct {
 	const char *app_id;
 	const char *ifname;
+	const char *imsi;
 	resourced_iface_type iftype;
 	resourced_tm_interval *interval;
-	resourced_common_info foreground;
-	resourced_common_info background;
+	resourced_counters cnt;
 	resourced_roaming_type roaming;
 	resourced_hw_net_protocol_type hw_net_protocol_type;
+	resourced_state_t ground;
 } data_usage_info;
 
 /**
@@ -298,6 +303,7 @@ typedef struct {
  */
 typedef struct {
 	const char *app_id;
+	const char *ifname;
 	resourced_iface_type iftype;
 	resourced_restriction_state rst_state;
 	int rcv_limit;
@@ -328,6 +334,7 @@ typedef resourced_cb_ret(*resourced_restriction_cb)(
 typedef struct {
 	unsigned char version;
 	char *app_id;
+	const char *imsi;
 	resourced_iface_type iftype;
 	resourced_tm_interval *interval;
 	resourced_connection_period_type connection_state;

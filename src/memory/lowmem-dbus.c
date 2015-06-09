@@ -32,6 +32,7 @@
 #include "edbus-handler.h"
 #include "resourced.h"
 #include "macro.h"
+#include "memcontrol.h"
 
 #define SIGNAL_NAME_OOM_SET_THRESHOLD			"SetThreshold"
 #define SIGNAL_NAME_OOM_SET_LEAVE_THRESHOLD		"SetLeaveThreshold"
@@ -59,7 +60,7 @@ static void lowmem_dbus_oom_set_threshold(void *data, DBusMessage *msg)
 		return;
 	}
 
-	set_threshold(level, thres);
+	lowmem_memcg_set_threshold(MEMCG_MEMORY, level, thres);
 }
 
 static void lowmem_dbus_oom_set_leave_threshold(void *data, DBusMessage *msg)
@@ -84,7 +85,7 @@ static void lowmem_dbus_oom_set_leave_threshold(void *data, DBusMessage *msg)
 		return;
 	}
 
-	set_leave_threshold(thres);
+	lowmem_memcg_set_leave_threshold(MEMCG_MEMORY, thres);
 }
 
 static void lowmem_dbus_oom_trigger(void *data, DBusMessage *msg)
@@ -107,22 +108,22 @@ static void lowmem_dbus_oom_trigger(void *data, DBusMessage *msg)
 	if (launching)
 		flags |= OOM_NOMEMORY_CHECK;
 
-	change_memory_state(MEMNOTIFY_LOW, 1);
-	lowmem_oom_killer_cb(MEMCG_MEMORY, flags);
+	change_memory_state(LOWMEM_LOW, 1);
+	lowmem_memory_oom_killer(flags);
 	_D("flags = %d", flags);
-	change_memory_state(MEMNOTIFY_NORMAL, 0);
+	change_memory_state(LOWMEM_NORMAL, 0);
 }
 
 void lowmem_dbus_init(void)
 {
 	register_edbus_signal_handler(RESOURCED_PATH_OOM, RESOURCED_INTERFACE_OOM,
 			SIGNAL_NAME_OOM_SET_THRESHOLD,
-		    lowmem_dbus_oom_set_threshold);
+		    lowmem_dbus_oom_set_threshold, NULL);
 	register_edbus_signal_handler(RESOURCED_PATH_OOM, RESOURCED_INTERFACE_OOM,
 			SIGNAL_NAME_OOM_SET_LEAVE_THRESHOLD,
-		    lowmem_dbus_oom_set_leave_threshold);
+		    lowmem_dbus_oom_set_leave_threshold, NULL);
 	register_edbus_signal_handler(RESOURCED_PATH_OOM, RESOURCED_INTERFACE_OOM,
 			SIGNAL_NAME_OOM_TRIGGER,
-		    lowmem_dbus_oom_trigger);
+		    lowmem_dbus_oom_trigger, NULL);
 
 }

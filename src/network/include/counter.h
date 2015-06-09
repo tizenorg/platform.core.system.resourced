@@ -33,6 +33,8 @@
 
 #include <Ecore.h>
 
+#define RESOURCED_BACKGROUND_APP_NAME "BACKGROUND"
+
 struct counter_arg {
 	int sock;
 	int ans_len;
@@ -46,13 +48,19 @@ struct counter_arg {
 	int noti_fd;
 	Ecore_Fd_Handler *noti_fd_handler;
 #endif
+	int serialized_counters; /* number of counters which was serialized in
+				    current request */
 	struct daemon_opts *opts;
 	struct application_stat_tree *result;
-	traffic_stat_tree *in_tree;
-	traffic_stat_tree *out_tree;
+	time_t last_run_time;
+	/* main timer for getting kernel counters */
 	Ecore_Timer *ecore_timer;
+	/* handler for kernel's fd for getting counters from ktgrabber/nfacct */
 	Ecore_Fd_Handler *ecore_fd_handler;
+	/* timer for separate obtaining values from kernel and store result into db */
 	Ecore_Timer *store_result_timer;
+	/* timer for reset old statistics */
+	Ecore_Timer *erase_timer;
 };
 
 /**

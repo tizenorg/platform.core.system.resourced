@@ -41,6 +41,7 @@ struct counter_arg *init_counter_arg(struct daemon_opts *opts)
 	result->pid = getpid();
 #endif
 	result->opts = opts;
+	result->serialized_counters = 0;
 	return result;
 }
 

@@ -25,9 +25,7 @@
 #include <sqlite3.h>
 #include <resourced.h>
 #include <data_usage.h>
-#include <rd-network.h>
 
-#include "cgroup.h"		/*get_classid_by_pkg_name */
 #include "const.h"
 #include "database.h"
 #include "datausage-restriction.h"

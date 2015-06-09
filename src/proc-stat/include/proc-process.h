@@ -65,4 +65,7 @@ pid_t find_pid_from_cmdline(char *cmdline);
 
 void proc_set_group(pid_t onwerpid, pid_t childpid);
 
+int proc_set_service_oomscore(const pid_t pid, const int oom_score);
+
+
 #endif /*__PROC_PROCESS_H__*/

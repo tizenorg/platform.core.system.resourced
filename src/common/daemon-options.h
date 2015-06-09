@@ -31,7 +31,6 @@
 #include <signal.h>
 
 struct daemon_opts {
-	sig_atomic_t is_update_quota;
 	sig_atomic_t datacall_logging;  /**< type of rsml_datacall_logging_option */
 	sig_atomic_t start_daemon;
 	sig_atomic_t update_period;

@@ -1053,7 +1053,11 @@ void check_kernel_version(void)
 			char str[3];
 			int sub_version;
 			pch = strstr(buf.release, ".");
+			if (!pch)
+				return;
+
 			strncpy(str, pch+1, 2);
+			str[2] = '\0';
 			sub_version = atoi(str);
 
 			if (sub_version >= 10)
@@ -1065,7 +1069,7 @@ void check_kernel_version(void)
 				ignore_smaps_field = 7; /* Referenced, Anonymous, AnonHugePages,
 						   Swap, KernelPageSize, MMUPageSize,
 						   Locked */
-		} else {
+	} else {
 			ignore_smaps_field = 4; /* Referenced, Swap, KernelPageSize,
 						   MMUPageSize */
 		}

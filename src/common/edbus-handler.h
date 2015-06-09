@@ -94,6 +94,9 @@ struct edbus_object {
 #define SYSTEM_POPUP_PATH_WATCHDOG SYSTEM_POPUP_PATH_NAME"/System"
 #define SYSTEM_POPUP_IFACE_WATCHDOG SYSTEM_POPUP_BUS_NAME".System"
 
+#define SYSTEM_POPUP_PATH_DATAUSAGE SYSTEM_POPUP_PATH_NAME"/DataUsage"
+#define SYSTEM_POPUP_IFACE_DATAUSAGE SYSTEM_POPUP_BUS_NAME".DataUsage"
+
 /*
  * Deviced
  */
@@ -103,6 +106,14 @@ struct edbus_object {
 
 #define DEVICED_PATH_DISPLAY               "/Org/Tizen/System/DeviceD/Display"
 #define DEVICED_INTERFACE_DISPLAY	DEVICED_BUS_NAME".display"
+
+/*
+ * dump service
+ */
+#define DUMP_SERVICE_BUS_NAME               "org.tizen.system.dumpservice"
+#define DUMP_SERVICE_OBJECT_PATH            "/Org/Tizen/System/DumpService"
+#define DUMP_SERVICE_INTERFACE_NAME         DUMP_SERVICE_BUS_NAME
+
 
 #define SIGNAL_LCD_ON	"LCDOn"
 #define SIGNAL_LCD_OFF	"LCDOff"
@@ -130,7 +141,7 @@ int dbus_method_async(const char *dest, const char *path,
 		const char *sig, char *param[]);
 
 int register_edbus_signal_handler(const char *path, const char *interface,
-		const char *name, E_DBus_Signal_Cb cb);
+		const char *name, E_DBus_Signal_Cb cb, void *user_data);
 E_DBus_Interface *get_edbus_interface(const char *path);
 pid_t get_edbus_sender_pid(DBusMessage *msg);
 int broadcast_edbus_signal_str(const char *path, const char *interface,
@@ -140,6 +151,7 @@ int broadcast_edbus_signal(const char *path, const char *interface,
 resourced_ret_c edbus_add_methods(const char *path,
 		       const struct edbus_method *const edbus_methods,
 		       const size_t size);
+resourced_ret_c edbus_message_send(DBusMessage *msg);
 int register_edbus_interface(struct edbus_object *object);
 
 void edbus_init(void);

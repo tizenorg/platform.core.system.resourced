@@ -113,3 +113,16 @@ void modules_exit(void *data)
 			_E("Fail to deinitialize [%s] module\n", module->name);
 	}
 }
+
+void modules_dump(FILE *fp, int mode)
+{
+	GSList *iter;
+	const struct module_ops *module;
+
+	gslist_for_each_item(iter, modules_list) {
+		module = (struct module_ops *)iter->data;
+		_D("dump [%s] module\n", module->name);
+		if (module->dump)
+			module->dump(fp, mode, module->dump_data);
+	}
+}

@@ -49,11 +49,10 @@
 
 static int iface_stat[RESOURCED_IFACE_LAST_ELEM - 1];
 static GTree *iftypes; /* holds int key and value of type resourced_iface_type */
-static GTree *ifnames; /* for keeping ifype - interface name association */
+
+static GSList *ifnames; /* for keeping ifype - interface name association */
 
 static pthread_rwlock_t iftypes_guard = PTHREAD_RWLOCK_INITIALIZER;
-static pthread_rwlock_t ifnames_guard = PTHREAD_RWLOCK_INITIALIZER;
-
 
 static const char *UEVENT_FMT = "/sys/class/net/%s/uevent";
 static const char *DEVTYPE_KEY = "DEVTYPE";
@@ -69,6 +68,12 @@ static GSList *ifnames_relations;
 struct iface_relation {
 	resourced_iface_type iftype;
 	char ifname[MAX_NAME_LENGTH];
+};
+
+struct iface_status {
+	bool active;
+	char ifname[MAX_NAME_LENGTH];
+	resourced_iface_type iftype;
 };
 
 static gint compare_int(gconstpointer a, gconstpointer b,
@@ -101,22 +106,42 @@ static void put_iftype_to_tree(GTree *iftypes_tree, int ifindex, int iftype)
 	g_tree_replace(iftypes_tree, (gpointer)ifindex, new_value);
 }
 
-static void put_ifname_to_tree(GTree *ifnames_tree, char *ifname, int iftype)
+static void keep_ifname(GSList **ifnames_list, char *ifname, int iftype)
 {
-	int name_len = strlen(ifname) + 1;
-	gpointer new_value = (gpointer)malloc(name_len);
-	if (!new_value) {
-		_E("Malloc of put_ifname_to_tree failed\n");
-		return;
-	}
-	strncpy(new_value, ifname, name_len);
+	GSList *iter;
+	bool found = false;
+	struct iface_status *value;
+	ret_msg_if (!ifnames_list || !ifname, "Please provide valid argument!");
 
-	if (!ifnames_tree) {
-		free(new_value);
-		_E("Please provide valid argument!");
-		return;
+	gslist_for_each_item(iter, *ifnames_list) {
+		struct iface_status *cur = (struct iface_status *)iter->data;
+		if (cur->iftype == iftype && !strcmp(cur->ifname, ifname)) {
+			cur->active = true;
+			found = true;
+		}
 	}
-	g_tree_replace(ifnames_tree, (gpointer)iftype, new_value);
+
+	if (found)
+		return;
+
+	_D("Add new entry into ifnames");
+	value = (struct iface_status *)malloc(
+			sizeof(struct iface_status));
+
+	ret_msg_if (!value, "Can't allocate memory for iface_status\n");
+	value->active = true; /* we're putting it => it's active now */
+	value->iftype = iftype;
+	STRING_SAVE_COPY(value->ifname, ifname);
+	*ifnames_list = g_slist_prepend(*ifnames_list, value);
+}
+
+static void reset_active_ifnames(GSList *ifnames_list)
+{
+	GSList *iter;
+	gslist_for_each_item(iter, ifnames_list) {
+		struct iface_status *value = (struct iface_status *)iter->data;
+		value->active = false;
+	}
 }
 
 static resourced_iface_type get_iftype_from_tree(GTree *iftypes_tree, int ifindex)
@@ -247,7 +272,6 @@ int init_iftype(void)
 	resourced_iface_type iftype;
 	struct if_nameindex *ids = if_nameindex();
 	GTree *iftypes_next = create_iface_tree();
-	GTree *ifnames_next = create_iface_tree();
 
 	if (ids == NULL) {
 		_E("Failed to initialize iftype table! errno: %d, %s",
@@ -263,16 +287,22 @@ int init_iftype(void)
 			   NET_INTERFACE_NAMES_FILE);
 	}
 
+	reset_active_ifnames(ifnames);
 	iface_stat_allowance();
 
 	for (i = 0; ids[i].if_index != 0; ++i) {
 		if (!is_address_exists(ids[i].if_name))
 			continue;
 		iftype = read_iftype(ids[i].if_name);
+		/* don't put unknown network interface into list */
+		if (iftype == RESOURCED_IFACE_UNKNOWN) {
+			_D("unknown ifname %s, ifype %d", ids[i].if_name, iftype);
+			continue;
+		}
 		put_iftype_to_tree(iftypes_next, ids[i].if_index, iftype);
 		/*  we know here iftype/ids[i].if_name, lets populate
 		 *	ifnames_tree */
-		put_ifname_to_tree(ifnames_next, ids[i].if_name, iftype);
+		keep_ifname(&ifnames, ids[i].if_name, iftype);
 		_D("ifname %s, ifype %d", ids[i].if_name, iftype);
 	}
 
@@ -280,14 +310,13 @@ int init_iftype(void)
 	if_freenameindex(ids);
 
 	reset_tree(iftypes_next, &iftypes, &iftypes_guard);
-	reset_tree(ifnames_next, &ifnames, &ifnames_guard);
 	return RESOURCED_ERROR_NONE;
 }
 
 void finalize_iftypes(void)
 {
 	reset_tree(NULL, &iftypes, &iftypes_guard);
-	reset_tree(NULL, &ifnames, &ifnames_guard);
+	g_slist_free_full(ifnames, free);
 	g_slist_free_full(ifnames_relations, free);
 }
 
@@ -314,75 +343,81 @@ resourced_iface_type convert_iftype(const char *buffer)
 	return RESOURCED_IFACE_UNKNOWN;
 }
 
-int is_allowed_ifindex(int ifindex)
+int is_counting_allowed(resourced_iface_type iftype)
 {
-	return iface_stat[get_iftype(ifindex)];
+	return iface_stat[iftype];
 }
 
-resourced_iface_type get_iftype(int ifindex)
+API resourced_iface_type get_iftype(int ifindex)
 {
 	return get_iftype_from_tree(iftypes, ifindex);
 }
 
-static gboolean print_ifname(gpointer key, gpointer value, gpointer data)
+static char *lookup_ifname(GSList *ifnames_list, int iftype)
 {
-	_D("ifname %s", (char *)value);
-	return FALSE;
-}
+	GSList *iter;
 
-static char *get_ifname_from_tree(GTree *ifnames_tree, int iftype)
-{
-	char *ret = NULL;
+	ret_value_msg_if(!ifnames_list, NULL, "Please provide valid argument!");
 
-	ret_value_msg_if(!ifnames_tree, NULL, "Please provide valid argument!");
+	gslist_for_each_item(iter, ifnames_list) {
+		struct iface_status *value = (struct iface_status *)iter->data;
+		if (value->iftype == iftype)
+			return value->ifname;
+	}
 
-	pthread_rwlock_rdlock(&ifnames_guard);
-	ret = (char *)g_tree_lookup(ifnames_tree, (gpointer)iftype);
-	pthread_rwlock_unlock(&ifnames_guard);
-	if (ret == NULL)
-		g_tree_foreach(ifnames_tree, print_ifname, NULL);
-
-	return ret;
+	return NULL;
 }
 
 char *get_iftype_name(resourced_iface_type iftype)
 {
-	return get_ifname_from_tree(ifnames, iftype);
+	return lookup_ifname(ifnames, iftype);
 }
 
-static gboolean search_loopback(gpointer key,
-                  gpointer value,
-                  gpointer data)
+resourced_iface_type get_iftype_by_name(char *name)
 {
-	int *res = (int *)data;
-	if (!value)
-		return FALSE;
-	*res = *(int *)value == RESOURCED_IFACE_UNKNOWN ? TRUE : FALSE;
-	return *res;
+	GSList *iter;
+	ret_value_msg_if(name == NULL, RESOURCED_IFACE_UNKNOWN,
+		"Invalid argument");
+
+	gslist_for_each_item(iter, ifnames) {
+		struct iface_status *value = (struct iface_status *)iter->data;
+		if (!strcmp(value->ifname, name))
+			return value->iftype;
+	}
+
+	return RESOURCED_IFACE_UNKNOWN;
 }
 
-static bool is_only_loopback(GTree *iftypes_tree)
-{
-	int nodes = g_tree_nnodes(iftypes_tree);
-	int res = 0;
-
-	if (nodes > 1)
-		return false;
-
-	g_tree_foreach(iftypes_tree, search_loopback, &res);
-	return res;
-}
-
+/* now used only in ./src/network/ktgrabber-restriction.c:285 */
 void for_each_ifindex(ifindex_iterator iter, void(*empty_func)(void *),
 	void *data)
 {
 	pthread_rwlock_rdlock(&iftypes_guard);
-	if (!is_only_loopback(iftypes))
-		g_tree_foreach(iftypes, (GTraverseFunc)iter, data);
-	else if (empty_func)
+	g_tree_foreach(iftypes, (GTraverseFunc)iter, data);
+
+	if (empty_func)
 		empty_func(data);
 
 	pthread_rwlock_unlock(&iftypes_guard);
+}
+
+void for_each_ifnames(ifnames_iterator iter_cb, void(*empty_func)(void *),
+	void *data)
+{
+	GSList *iter;
+	gslist_for_each_item(iter, ifnames) {
+		struct iface_status *value = (struct iface_status *)iter->data;
+		/* as before invoke cb only for active interfaces */
+		if (!value->active)
+			continue;
+
+		if (iter_cb(value->iftype, value->ifname, data) == TRUE)
+			break;
+	}
+
+	if (empty_func)
+		empty_func(data);
+
 }
 
 void set_wifi_allowance(const resourced_option_state wifi_option)
@@ -394,3 +429,4 @@ void set_datacall_allowance(const resourced_option_state datacall_option)
 {
 	iface_stat[RESOURCED_IFACE_DATACALL] = datacall_option == RESOURCED_OPTION_ENABLE ? 1 : 0;
 }
+

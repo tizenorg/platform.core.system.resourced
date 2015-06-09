@@ -42,5 +42,4 @@ struct logging_info_ops {
 
 int register_logging_subsystem(const char *name, struct logging_info_ops *ops);
 int update_commit_interval(const char *name, time_t commit_interval);
-int get_pss(pid_t pid, unsigned *pss, unsigned *uss);
 #endif /*__LOGGING_H__*/

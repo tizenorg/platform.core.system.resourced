@@ -25,32 +25,20 @@
 #ifndef __SWAP_COMMON_H__
 #define __SWAP_COMMON_H__
 
-enum swap_status_type {
-	SWAP_GET_TYPE,
-	SWAP_GET_CANDIDATE_PID,
-	SWAP_GET_STATUS,
-	SWAP_CHECK_PID,
-	SWAP_CHECK_CGROUP,
-};
-
 enum {
 	SWAP_OFF,
 	SWAP_ON,
 	SWAP_ARG_END,
 };
 
-enum {
-	SWAP_FALSE,
-	SWAP_TRUE,
-};
-
 #ifdef SWAP_SUPPORT
-extern int swap_status(enum swap_status_type type, unsigned long *args);
+int swap_check_swap_pid(int pid);
 #else
-static inline int swap_status(enum swap_status_type type, unsigned long *args)
+static inline int swap_check_swap_pid(int pid)
 {
-	return RESOURCED_ERROR_NONE;
+	return RESOURCED_ERROR_FAIL;
 }
 #endif /* SWAP_SUPPORT */
+
 
 #endif /* __SWAP_COMMON_H__ */

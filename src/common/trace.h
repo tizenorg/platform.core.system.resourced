@@ -79,4 +79,8 @@
 #define ETRACE_ERRNO_MSG(fmt, arg...) \
 	TRACE_RET_ERRCODE_MSG(E, -errno, fmt, ##arg)
 
+#define LOG_DUMP(fp, fmt, arg...) \
+	if (fp) fprintf(fp, fmt, ##arg); \
+	else _E(fmt, ##arg);
+
 #endif	/* _SYSTEM_RESOURCE_TRACE_H_ */

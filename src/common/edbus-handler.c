@@ -35,6 +35,8 @@
 
 struct edbus_list{
 	char *signal_name;
+	char *signal_path;
+
 	E_DBus_Signal_Handler *handler;
 };
 
@@ -66,6 +68,11 @@ static int append_variant(DBusMessageIter *iter,
 
 	for (ch = (char*)sig, i = 0; *ch != '\0'; ++i, ++ch) {
 		switch (*ch) {
+		case 'b':
+			int_type = atoi(param[i]);
+			dbus_message_iter_append_basic(iter,
+				DBUS_TYPE_BOOLEAN, &int_type);
+			break;
 		case 'i':
 			int_type = atoi(param[i]);
 			dbus_message_iter_append_basic(iter,
@@ -329,19 +336,20 @@ static void unregister_edbus_signal_handle(void)
 }
 
 int register_edbus_signal_handler(const char *path, const char *interface,
-		const char *name, E_DBus_Signal_Cb cb)
+		const char *name, E_DBus_Signal_Cb cb, void *user_data)
 {
 	Eina_List *search;
 	struct edbus_list *entry;
 	E_DBus_Signal_Handler *handler;
 
 	EINA_LIST_FOREACH(edbus_handler_list, search, entry) {
-		if (entry != NULL && strncmp(entry->signal_name, name, strlen(name)) == 0)
+		if (entry != NULL && strncmp(entry->signal_name, name, strlen(name)) == 0 &&
+			strncmp(entry->signal_path, path, strlen(path)) == 0)
 			return RESOURCED_ERROR_FAIL;
 	}
 
 	handler = e_dbus_signal_handler_add(edbus_conn, NULL, path,
-				interface, name, cb, NULL);
+				interface, name, cb, user_data);
 
 	if (!handler) {
 		_E("fail to add edbus handler");
@@ -359,19 +367,34 @@ int register_edbus_signal_handler(const char *path, const char *interface,
 
 	if (!entry->signal_name) {
 		_E("Malloc failed");
-		free(entry);
-		return -1;
+		goto release_entry;
+	}
+
+	entry->signal_path = strndup(path, strlen(path));
+	if (!entry->signal_path) {
+		_E("Malloc failed");
+		goto release_name;
 	}
 
 	entry->handler = handler;
 	edbus_handler_list = eina_list_prepend(edbus_handler_list, entry);
 	if (!edbus_handler_list) {
 		_E("eina_list_prepend failed");
-		free(entry->signal_name);
-		free(entry);
-		return RESOURCED_ERROR_FAIL;
+		goto release_path;
 	}
+
 	return RESOURCED_ERROR_NONE;
+
+release_path:
+	free(entry->signal_path);
+
+release_name:
+	free(entry->signal_name);
+
+release_entry:
+
+	free(entry);
+	return RESOURCED_ERROR_FAIL;
 }
 
 int broadcast_edbus_signal_str(const char *path, const char *interface,
@@ -471,6 +494,19 @@ resourced_ret_c edbus_add_methods(const char *path,
 				edbus_methods[i].member);
 			return RESOURCED_ERROR_FAIL;
 		}
+	}
+
+	return RESOURCED_ERROR_NONE;
+}
+
+resourced_ret_c edbus_message_send(DBusMessage *msg)
+{
+	DBusPendingCall *pending;
+
+	pending = e_dbus_message_send(edbus_conn, msg, NULL, -1, NULL);
+	if (!pending) {
+		_E("sending message over dbus failed, connection disconnected!");
+		return RESOURCED_ERROR_FAIL;
 	}
 
 	return RESOURCED_ERROR_NONE;

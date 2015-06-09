@@ -1,7 +1,7 @@
 /*
  * resourced
  *
- * Copyright (c) 2000 - 2012 Samsung Electronics Co., Ltd. All rights reserved.
+ * Copyright (c) 2000 - 2014 Samsung Electronics Co., Ltd. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,24 +19,31 @@
 
 /*
  *
- * @file roaming.h
+ * @file telephony.h
  *
  * @desc Roaming persistent object. Due roaming changes not so often we can keep it in
  *  our memory and handle roaming changes.
  */
 
-#ifndef _RSML_LIBS_ROAMING_H
-#define _RSML_LIBS_ROAMING_H
+#ifndef __RESOURCED_TELEPHONY_H
+#define __RESOURCED_TELEPHONY_H
 
+#include <stdbool.h>
 #include "data_usage.h"
 
+#define VCONF_TELEPHONY_DEFAULT_DATA_SERVICE "db/telephony/dualsim/default_data_service"
+
+resourced_roaming_type get_current_roaming(void);
+resourced_hw_net_protocol_type get_current_protocol(resourced_iface_type iftype);
+
 /**
- * @brief Just get roaming state.
+ * @brief Get international mobile subscriber identity from saved list for current modem
  */
-resourced_roaming_type get_roaming(void);
+char *get_current_modem_imsi(void);
+char *get_imsi_hash(char *imsi);
+bool check_event_in_current_modem(const char *imsi_hash,
+		const resourced_iface_type iftype);
 
-typedef void(*roaming_cb)(void);
+void finilize_telephony(void);
 
-void regist_roaming_cb(roaming_cb cb);
-
-#endif /* _RSML_LIBS_ROAMING_H*/
+#endif /* __RESOURCED_TELEPHONY_H */

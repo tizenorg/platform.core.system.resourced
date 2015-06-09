@@ -1,7 +1,7 @@
 /*
- *  resourced
+ * resourced
  *
- * Copyright (c) 2013 - 2014 Samsung Electronics Co., Ltd. All rights reserved.
+ * Copyright (c) 2000 - 2014 Samsung Electronics Co., Ltd. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,26 +18,21 @@
  */
 
 /*
+ * @file db-guard.h
  *
- * @file roaming.c
+ * @desc This guard procedures are responsible for period db erasing
  *
- * @desc It's dummy implementation for none telephony case.
+ * Copyright (c) 2014 Samsung Electronics Co., Ltd. All rights reserved.
+ *
  */
 
-#include "macro.h"
-#include "roaming.h"
-#include "trace.h"
+#ifndef _RESOURCED_DB_GUARD_H_
+#define _RESOURCED_DB_GUARD_H_
 
-/* for avoiding dependency in this file */
+void change_db_entries_num_num(int num);
 
-void regist_roaming_cb(roaming_cb UNUSED cb)
-{
-	_D("ROAMING ISN'T SUPPORTED, CHECK TELEPHONY MODULE");
-}
+struct counter_arg;
+resourced_ret_c resourced_init_db_guard(struct counter_arg *carg);
 
-resourced_roaming_type get_roaming(void)
-{
-	_D("ROAMING ISN'T SUPPORTED, CHECK TELEPHONY MODULE");
-	return RESOURCED_ROAMING_UNKNOWN;
-}
+#endif /* _RESOURCED_DB_GUARD_H_ */
 

@@ -38,4 +38,5 @@ void init_modules_arg(struct modules_arg *marg, struct daemon_arg *darg)
 	ret_msg_if(marg == NULL || darg == NULL,
 			 "Init modules argument failed\n");
 	marg->opts = darg->opts;
+	modules_data.darg = darg;
 }
