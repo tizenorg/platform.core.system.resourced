@@ -237,10 +237,9 @@ fi
 	%config /etc/resourced/network.conf
 	/etc/opt/upgrade/500.resourced-datausage.patch.sh
 	%attr(700,root,root) /etc/opt/upgrade/500.resourced-datausage.patch.sh
-	%manifest resourced.manifest
-%else
-%manifest resourced_nodb.manifest
 %endif
+
+%manifest resourced.manifest
 %config %{_sysconfdir}/dbus-1/system.d/resourced.conf
 %{_libdir}/systemd/system/resourced.service
 %{_libdir}/systemd/system/multi-user.target.wants/resourced.service
