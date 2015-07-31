@@ -19,6 +19,8 @@ Source2:    resourced-cpucgroup.service
 %define network_state OFF
 %define memory_eng ON
 
+%define tests_module ON
+
 %if "%{?tizen_profile_name}" == "mobile"
 	%define swap_module ON
 	%define freezer_module ON
@@ -149,6 +151,7 @@ export FFLAGS="$FFLAGS -DTIZEN_DEBUG_ENABLE"
 	 -DMEMORY_MODULE=%{memory_module} \
 	 -DWEARABLE_NOTI=%{wearable_noti} \
 	 -DBLOCK_MODULE=%{block_module} \
+	 -DTESTS_MODULE=%{tests_module}
 
 make %{?jobs:-j%jobs}
 
@@ -264,6 +267,16 @@ fi
 %attr(-,root, root) %{_bindir}/mem-stress
 %{_libdir}/systemd/system/mem-stress.service
 %{_libdir}/systemd/system/graphical.target.wants/mem-stress.service
+%if %{?tests_module} == ON
+%defattr(-,root,root,-)
+%{_bindir}/resourced_memory_test
+%defattr(-,root,root,-)
+%{_bindir}/resourced_dummy_process
+%defattr(-,root,root,-)
+%{_bindir}/resourced_hogger_memory
+%{_bindir}/resourced_dbus_sender.sh
+%{_bindir}/resourced_util_memory_test.sh
+%endif
 
 %files -n libresourced
 %manifest libresourced.manifest
@@ -284,4 +297,3 @@ fi
 #network part
 %{_libdir}/libresourced.so
 %{_includedir}/system/data_usage.h
-
