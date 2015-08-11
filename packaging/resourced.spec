@@ -5,14 +5,10 @@ Release:    0
 Group:      System/Libraries
 License:    Apache-2.0
 Source0:    %{name}-%{version}.tar.gz
-Source1:    resourced.service
-Source2:    resourced-zram.service
-Source5:    resourced_swapoff.service
-Source6:    resourced-cpucgroup.service
 
 %define powertop_state OFF
 %define cpu_module ON
-%define timer_slack ON
+%define timer_slack OFF
 
 %define vip_agent_module ON
 
@@ -161,6 +157,11 @@ cp -f LICENSE %{buildroot}/usr/share/license/libresourced
 
 %make_install
 
+%install_service multi-user.target.wants resourced.service
+%if %{?swap_module} == ON
+%install_service graphical.target.wants resourced-zram.service
+%endif
+
 %if %{?network_state} == ON
 	mkdir -p %{buildroot}/opt/usr/dbspace
 	sqlite3 %{buildroot}%{database_full_path} < %{buildroot}/usr/share/traffic_db.sql
@@ -168,23 +169,6 @@ cp -f LICENSE %{buildroot}/usr/share/license/libresourced
 %endif
 
 mkdir -p %{buildroot}%{_libdir}/systemd/system/multi-user.target.wants
-%if %{?swap_module} == ON
-install -m 0644 %SOURCE1 %{buildroot}%{_libdir}/systemd/system/resourced.service
-ln -s ../resourced.service %{buildroot}%{_libdir}/systemd/system/multi-user.target.wants/resourced.service
-
-mkdir -p %{buildroot}%{_libdir}/systemd/system/graphical.target.wants
-install -m 0644 %SOURCE2 %{buildroot}%{_libdir}/systemd/system/resourced-zram.service
-ln -s ../resourced-zram.service %{buildroot}%{_libdir}/systemd/system/graphical.target.wants/resourced-zram.service
-%else
-install -m 0644 %SOURCE5 %{buildroot}%{_libdir}/systemd/system/resourced.service
-ln -s ../resourced.service %{buildroot}%{_libdir}/systemd/system/multi-user.target.wants/resourced.service
-%endif
-
-%if %{?cpu_module} == OFF
-mkdir -p %{buildroot}%{_libdir}/systemd/system/graphical.target.wants
-install -m 0644 %SOURCE6 %{buildroot}%{_libdir}/systemd/system/resourced-cpucgroup.service
-ln -s ../resourced-cpucgroup.service %{buildroot}%{_libdir}/systemd/system/graphical.target.wants/resourced-cpucgroup.service
-%endif
 
 #powertop-wrapper part
 %if %{?powertop_state} == ON
@@ -240,20 +224,14 @@ fi
 
 %manifest resourced.manifest
 %config %{_sysconfdir}/dbus-1/system.d/resourced.conf
-%{_libdir}/systemd/system/resourced.service
-%{_libdir}/systemd/system/multi-user.target.wants/resourced.service
+%{_unitdir}/resourced.service
+%{_unitdir}/multi-user.target.wants/resourced.service
 %config /etc/resourced/memory.conf
-%if %{?cpu_module} == ON
 %config /etc/resourced/cpu.conf
-%else
-%{_bindir}/resourced-cpucgroup.sh
-%{_libdir}/systemd/system/resourced-cpucgroup.service
-%{_libdir}/systemd/system/graphical.target.wants/resourced-cpucgroup.service
-%endif
 %if %{?swap_module} == ON
 %config /etc/resourced/swap.conf
-%{_libdir}/systemd/system/resourced-zram.service
-%{_libdir}/systemd/system/graphical.target.wants/resourced-zram.service
+%{_unitdir}/resourced-zram.service
+%{_unitdir}/graphical.target.wants/resourced-zram.service
 %{_bindir}/resourced-zram.sh
 %endif
 %if %{?vip_agent_module} == ON
