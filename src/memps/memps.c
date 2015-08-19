@@ -1048,7 +1048,12 @@ void check_kernel_version(void)
 	ret = uname(&buf);
 
 	if (!ret) {
-		if (buf.release[0] == '3') {
+			/* Kernel 4.0 should be the same as kernel >= 3.10 */
+			if (buf.release[0] == '4') {
+				ignore_smaps_field = 8; /* Referenced, Anonymous, AnonHugePages,
+						   Swap, KernelPageSize, MMUPageSize,
+						   Locked, VmFlags */
+			} else if (buf.release[0] == '3') {
 			char *pch;
 			char str[3];
 			int sub_version;
