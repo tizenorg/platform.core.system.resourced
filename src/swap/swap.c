@@ -141,16 +141,6 @@ static const char *compact_reason_to_str(enum swap_compact_reason reason)
 	return "";
 }
 
-enum swap_state swap_get_state(void)
-{
-	struct shared_modules_data *modules_data = get_shared_modules_data();
-
-	ret_value_msg_if(modules_data == NULL, RESOURCED_ERROR_FAIL,
-			 "Invalid shared modules data\n");
-
-	return modules_data->swap_data.swap_state;
-}
-
 static void swap_set_state(enum swap_state state)
 {
 	struct shared_modules_data *modules_data = get_shared_modules_data();

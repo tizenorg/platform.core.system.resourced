@@ -32,7 +32,7 @@ Source2:    resourced-cpucgroup.service
 
 %if "%{?tizen_profile_name}" == "wearable"
 	%define freezer_module ON
-	%define swap_module ON
+	%define swap_module OFF
 	%define network_state OFF
 	%define tethering_feature OFF
 	%define wearable_noti ON
