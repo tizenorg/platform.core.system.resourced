@@ -25,16 +25,16 @@
  *
  */
 
-#ifndef TRESOURCED_LIBS_SETTINGS_H_
-#define TRESOURCED_LIBS_SETTINGS_H_
+#ifndef TRESOURCED_LIBS_LOAD_OPTIONS_H_
+#define TRESOURCED_LIBS_LOAD_OPTIONS_H_
 
 #include "data_usage.h"
 
-#define RESOURCED_WIFI_STATISTICS_PATH "db/private/resourced/wifi_statistics"
-#define RESOURCED_DATACALL_PATH "db/private/resourced/datacall"
-#define RESOURCED_DATAUSAGE_TIMER_PATH "db/private/resourced/datausage_timer"
-#define RESOURCED_DATACALL_LOGGING_PATH "db/private/resourced/datacall_logging"
+#define RESOURCED_WIFI_STATISTICS_PATH "db/resourced/wifi_statistics"
+#define RESOURCED_DATACALL_PATH "db/resourced/datacall"
+#define RESOURCED_DATAUSAGE_TIMER_PATH "db/resourced/datausage_timer"
+#define RESOURCED_DATACALL_LOGGING_PATH "db/resourced/datacall_logging"
 
-int load_options(resourced_options *options);
+int load_vconf_net_options(resourced_options *options);
 
-#endif /*TRESOURCED_LIBS_SETTINGS_H_*/
+#endif /*TRESOURCED_LIBS_LOAD_OPTIONS_H_*/

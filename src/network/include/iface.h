@@ -1,7 +1,7 @@
 /*
  * resourced
  *
- * Copyright (c) 2000 - 2013 Samsung Electronics Co., Ltd. All rights reserved.
+ * Copyright (c) 2000 - 2015 Samsung Electronics Co., Ltd. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,15 +30,19 @@
 #include <glib.h>
 #include <stdbool.h>
 
+#include "config-parser.h"
 #include "data_usage.h"
+#include "macro.h"
 
 /**
  * @desc Storage now create an instance of this structure
  */
 typedef struct {
-	void(*handle_iface_up)(int ifindex);
-	void(*handle_iface_down)(int ifindex);
+	void (*handle_iface_up)(int ifindex);
+	void (*handle_iface_down)(int ifindex);
 } iface_callback;
+
+typedef void (*allowance_cb)(resourced_iface_type iftype, bool enabled);
 
 int init_iftype(void);
 void finalize_iftypes(void);
@@ -58,18 +62,23 @@ void set_wifi_allowance(const resourced_option_state wifi_option);
 void set_datacall_allowance(const resourced_option_state datacall_option);
 
 /* TODO remove it when ktgrabber solution will be removed */
-typedef int(*ifindex_iterator)(int ifindex,
+typedef int (*ifindex_iterator)(int ifindex,
 	resourced_iface_type iftype, void *data);
 
 void for_each_ifindex(ifindex_iterator iter, void(*empty_func)(void *),
 	void *data);
 
-typedef int(*ifnames_iterator)(resourced_iface_type iftype, char *ifname,
+typedef int (*ifnames_iterator)(resourced_iface_type iftype, char *ifname,
 		void *data);
 
 void for_each_ifnames(ifnames_iterator iter, void(*empty_func)(void *),
 	void *data);
 
 typedef GList iface_callbacks;
+
+void set_change_allow_cb(allowance_cb cb);
+
+int fill_ifaces_relation(struct parse_result *result,
+			 void UNUSED *user_data);
 
 #endif /*TRESOURCED_LIBS_NET_IFACE_H_*/

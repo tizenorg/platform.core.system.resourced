@@ -29,7 +29,7 @@ int main(void)
 	}
 	for (i = 0; i < PACKET_NUMBER; i++) {
 		printf("Sending packet %d\n", i);
-		sprintf(buf, "This is packet %d\n", i);
+		snprintf(buf, sizeof(buf), "This is packet %d\n", i);
 		if (sendto(s, buf, BUF_SIZE, 0, (struct sockaddr *)&remote_address, slen) == -1) {
 			perror("sendto()");
 			exit(1);

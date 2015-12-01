@@ -32,16 +32,17 @@
 struct resourced_noti { /** cgroup notification type **/
 	int pid;
 	int type;
-	char *path;
 	int argc;
 	char *argv[NOTI_MAXARG];
 };
 
 #define SYNC_OPERATION(type) type == PROC_CGROUP_GET_MEMSWEEP || \
 	type == PROC_CGROUP_SET_RESUME_REQUEST || \
-	type == PROC_CGROUP_SET_TERMINATE_REQUEST
+	type == PROC_CGROUP_SET_TERMINATE_REQUEST || \
+	type >= PROC_CGROUP_GET_CMDLINE
 
-int proc_noti_init(void);
-
+int write_response(int *retval, int fd, char *buf, int len);
+int read_message(int fd, struct resourced_noti *msg);
+void free_message(struct resourced_noti *msg);
 
 #endif /*__PROC_HANDLER_H__*/

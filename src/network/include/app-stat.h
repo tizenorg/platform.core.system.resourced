@@ -35,7 +35,6 @@
 #include "const.h"
 #include "config.h"
 #include "data_usage.h"
-#include "daemon-options.h"
 #include "transmission.h"
 
 #define RSML_UNKNOWN_CLASSID 1

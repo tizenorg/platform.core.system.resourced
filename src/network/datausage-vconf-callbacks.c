@@ -25,7 +25,6 @@
 
 #include "const.h"
 #include "counter.h"
-#include "daemon-options.h"
 #include "datausage-vconf-callbacks.h"
 #include "datausage-quota-processing.h"
 #include "datausage-quota.h"
@@ -61,6 +60,8 @@ static void datacall_change_cb(keynode_t *key, void *data)
 
 static void datacall_logging_change_cb(keynode_t *key, void *data)
 {
+/* TODO introduce set_datacall_logging */
+#if 0
 	struct daemon_opts *options = (struct daemon_opts *)data;
 	int val = vconf_keynode_get_bool(key);
 
@@ -72,11 +73,12 @@ static void datacall_logging_change_cb(keynode_t *key, void *data)
 	    vconf_keynode_get_name(key), val);
 	options->datacall_logging = val ? RESOURCED_OPTION_ENABLE :
 		RESOURCED_OPTION_DISABLE;
+#endif
 }
 
 static void datausage_timer_change_cb(keynode_t *key, void *data)
 {
-	struct daemon_opts *options = (struct daemon_opts *)data;
+	struct net_counter_opts *options = (struct net_counter_opts *)data;
 	int val = vconf_keynode_get_int(key);
 
 	if (!options) {

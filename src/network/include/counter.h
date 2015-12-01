@@ -29,7 +29,6 @@
 
 #include "app-stat.h"
 #include "config.h"
-#include "daemon-options.h"
 
 #include <Ecore.h>
 
@@ -50,7 +49,7 @@ struct counter_arg {
 #endif
 	int serialized_counters; /* number of counters which was serialized in
 				    current request */
-	struct daemon_opts *opts;
+	struct net_counter_opts *opts;
 	struct application_stat_tree *result;
 	time_t last_run_time;
 	/* main timer for getting kernel counters */
@@ -63,6 +62,12 @@ struct counter_arg {
 	Ecore_Timer *erase_timer;
 };
 
+struct net_counter_opts {
+	sig_atomic_t update_period;
+	sig_atomic_t flush_period;
+	sig_atomic_t state;
+};
+
 /**
  * @desc Reschedule existing traffic counter function
  *  Rescheduling logic is following, we will postpone
@@ -70,7 +75,7 @@ struct counter_arg {
  */
 void reschedule_count_timer(const struct counter_arg *carg, const double delay);
 
-struct counter_arg *init_counter_arg(struct daemon_opts *opts);
+struct counter_arg *init_counter_arg(struct net_counter_opts *opts);
 
 void finalize_carg(struct counter_arg *carg);
 

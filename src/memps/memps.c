@@ -29,40 +29,28 @@
 #include <dirent.h>
 #include <sys/utsname.h>
 
+#include <getopt.h>
+
+#include "file-helper.h"
+#include "smaps.h"
+#include "procfs.h"
+#include "util.h"
+#include "trace.h"
+#include "cgroup.h"
+
 #define STR_SGX_PATH	"/dev/pvrsrvkm"
 #define STR_3D_PATH1	"/dev/mali"
 #define STR_3D_PATH2	"/dev/kgsl-3d0"
 #define STR_DRM_PATH1	"/drm mm object (deleted)"
 #define STR_DRM_PATH2	"/dev/dri/card0"
+#define MEMCG_PATH	"/sys/fs/cgroup/memory"
+#define ZRAM_USED_PATH	"/sys/block/zram0/mem_used_total"
 
 #define BUF_MAX         (BUFSIZ)            /* most optimal for libc::stdio */
-#define BUF_INC_SIZE    (512 * 1024)        /* maximal SMAPS I saw 2 MB     */
-#define KB(bytes)       ((bytes)/1024)
+#define BUF_INC_SIZE    (512 << 10)        /* maximal SMAPS I saw 2 MB     */
 
 typedef struct geminfo geminfo;
-typedef struct mapinfo mapinfo;
 typedef struct trib_mapinfo trib_mapinfo;
-
-enum {
-	OUTPUT_UART,
-	OUTPUT_FILE,
-	NUM_OUTPUT_TYPE
-};
-
-struct mapinfo {
-	mapinfo *next;
-	unsigned start;
-	unsigned end;
-	unsigned size;
-	unsigned rss;
-	unsigned pss;
-	unsigned shared_clean;
-	unsigned shared_dirty;
-	unsigned private_clean;
-	unsigned private_dirty;
-	char perm[4];
-	char name[1];
-};
 
 /* classify normal, graphic and other devices memory */
 struct trib_mapinfo {
@@ -72,6 +60,7 @@ struct trib_mapinfo {
 	unsigned private_dirty;
 	unsigned shared_clean_pss;
 	unsigned shared_dirty_pss;
+	unsigned swap;
 	unsigned rss;
 	unsigned pss;
 	unsigned size;
@@ -91,71 +80,11 @@ struct geminfo {
 	unsigned hcount;
 };
 
-static int ignore_smaps_field;
-static int sum;
-static int verbos;
-
-/* reads file contents into memory */
-static char* cread(const char* path)
-{
-	/* once allocated area for reads */
-	static char*	text = NULL;
-	static size_t	size = 0;
-
-	ssize_t	ret;
-	char*	ptr = text;
-	size_t	cap = size;
-	int	fd  = open(path, O_RDONLY);
-
-	if (fd < 0) {
-		return NULL;
-	}
-
-	do {
-		/* ensure we have enough space */
-		if (cap == 0) {
-			ptr = (char*)realloc(text, size + BUF_INC_SIZE);
-			if (ptr == NULL) {
-				ret = -1;
-				break;
-			}
-
-			text  = ptr;
-			ptr   = text + size;
-			cap   = BUF_INC_SIZE;
-			size += BUF_INC_SIZE;
-		}
-		ret = read(fd, ptr, cap);
-		if (ret == 0) {
-			*ptr = 0;
-		} else if (ret > 0) {
-			cap -= ret;
-			ptr += ret;
-		}
-	} while (ret > 0);
-	close(fd);
-
-	return (ret < 0 ? NULL : text);
-} /* cread */
-
-/* like fgets/gets but adjusting contents pointer */
-static inline char* cgets(char** contents)
-{
-	if (contents && *contents && **contents) {
-		char* bos = *contents;		/* begin of string */
-		char* eos = strchr(bos, '\n');	/* end of string   */
-
-		if (eos) {
-			*contents = eos + 1;
-			*eos      = 0;
-		} else {
-			*contents = NULL;
-		}
-		return bos;
-	}
-
-	return NULL;
-} /* cgets */
+static bool arg_sum = false;
+static bool arg_all = false;
+static bool arg_rss = false;
+static bool arg_verbose = false;
+static char *arg_file = NULL;
 
 
 static unsigned get_peak_rss(unsigned int pid)
@@ -165,10 +94,10 @@ static unsigned get_peak_rss(unsigned int pid)
 	char* line;
 	char* value;
 
-	sprintf(tmp, "/proc/%d/status", pid);
+	snprintf(tmp, sizeof(tmp), "/proc/%d/status", pid);
 	line = cread(tmp);
 	if (line == NULL) {
-		fprintf(stderr,	"cannot open %s\n", tmp);
+		_E("cannot open %s", tmp);
 		return 0;
 	}
 
@@ -189,21 +118,24 @@ static geminfo *read_geminfo(FILE *fp)
 	unsigned int pid, tgid, handle, refcount, hcount;
 	unsigned gem_size;
 
-	if (fgets(line, BUF_MAX, fp) != NULL) {
-		if (sscanf(line, "%d %d %d %d %d 0x%x",
-			&pid, &tgid, &handle, &refcount,
-			&hcount, &gem_size) != NUM_GEM_FIELD)
-			return NULL;
-
-		tgeminfo = malloc(sizeof(geminfo));
-		if (tgeminfo == NULL)
-			return NULL;
-		tgeminfo->tgid = tgid;
-		tgeminfo->hcount = hcount;
-		tgeminfo->rss_size = KB(gem_size);
-		tgeminfo->pss_size = KB(gem_size/tgeminfo->hcount);
-	} else
+	if (fgets(line, BUF_MAX, fp) == NULL)
 		return NULL;
+
+	if (sscanf(line, "%d %d %d %d %d 0x%x", &pid, &tgid,
+	    &handle, &refcount, &hcount, &gem_size) != NUM_GEM_FIELD)
+		return NULL;
+
+	if (hcount == 0)
+		return NULL;
+
+	tgeminfo = malloc(sizeof(geminfo));
+	if (tgeminfo == NULL)
+		return NULL;
+
+	tgeminfo->tgid = tgid;
+	tgeminfo->hcount = hcount;
+	tgeminfo->rss_size = BYTE_TO_KBYTE(gem_size);
+	tgeminfo->pss_size = BYTE_TO_KBYTE(gem_size/tgeminfo->hcount);
 
 	return tgeminfo;
 }
@@ -213,21 +145,19 @@ static geminfo *load_geminfo(void)
 {
 	geminfo *ginfo;
 	geminfo *gilist = NULL;
-	FILE *drm_fp;
+	_cleanup_fclose_ FILE *drm_fp = NULL;
 	char line[BUF_MAX];
 
 	drm_fp = fopen("/sys/kernel/debug/dri/0/gem_info", "r");
 
 	if (drm_fp == NULL) {
-		fprintf(stderr,
-		"cannot open /sys/kernel/debug/dri/0/gem_info\n");
+		_E("cannot open /sys/kernel/debug/dri/0/gem_info");
 		return NULL;
 	}
 
-	if (fgets(line, BUF_MAX, drm_fp) == NULL) {
-		fclose(drm_fp);
+	if (fgets(line, BUF_MAX, drm_fp) == NULL)
 		return NULL;
-	} else {
+	else {
 		/* we should count a number of whitespace separated fields */
 		int 	 in_field = (line[0] && !isblank(line[0]));
 		unsigned int size = (unsigned)in_field;
@@ -250,10 +180,8 @@ static geminfo *load_geminfo(void)
 			}
 		} /* while */
 
-		if (size != NUM_GEM_FIELD) {
-			fclose(drm_fp);
+		if (size != NUM_GEM_FIELD)
 			return NULL;
-		}
 	}
 
 	while ((ginfo = read_geminfo(drm_fp)) != NULL) {
@@ -267,280 +195,212 @@ static geminfo *load_geminfo(void)
 		gilist = ginfo;
 	}
 
-	fclose(drm_fp);
-
 	return gilist;
-}
-
-
-/* 6f000000-6f01e000 rwxp 00000000 00:0c 16389419   /android/lib/libcomposer.so
- * 012345678901234567890123456789012345678901234567890123456789
- * 0         1         2         3         4         5
- */
-
-mapinfo *read_mapinfo(char** smaps, int rest_line)
-{
-	char* line;
-	mapinfo *mi;
-	int len;
-	int tmp;
-
-	if ((line = cgets(smaps)) == 0)
-		return 0;
-
-	len    = strlen(line);
-	if (len < 1)
-		return 0;
-
-	mi = malloc(sizeof(mapinfo) + len + 16);
-	if (mi == 0)
-		return 0;
-
-	mi->start = strtoul(line, 0, 16);
-	mi->end = strtoul(line + 9, 0, 16);
-
-	mi->perm[0] = line[18];	/* read */
-	mi->perm[1] = line[19];	/* write */
-	mi->perm[2] = line[20];	/* execute */
-	mi->perm[3] = line[21];	/* may share or private */
-
-	if (len < 50)
-		strcpy(mi->name, "[anon]");
-	else
-		strcpy(mi->name, line + 49);
-
-	if ((line = cgets(smaps)) == 0)
-		goto oops;
-	if (sscanf(line, "Size: %d kB", &mi->size) != 1)
-		goto oops;
-	if ((line = cgets(smaps)) == 0)
-		goto oops;
-	if (sscanf(line, "Rss: %d kB", &mi->rss) != 1)
-		goto oops;
-	if ((line = cgets(smaps)) == 0)
-		goto oops;
-	if (sscanf(line, "Pss: %d kB", &mi->pss) == 1)
-		if ((line = cgets(smaps)) == 0)
-			goto oops;
-	if (sscanf(line, "Shared_Clean: %d kB", &mi->shared_clean) != 1)
-		goto oops;
-	if ((line = cgets(smaps)) == 0)
-		goto oops;
-	if (sscanf(line, "Shared_Dirty: %d kB", &mi->shared_dirty) != 1)
-		goto oops;
-	if ((line = cgets(smaps)) == 0)
-		goto oops;
-	if (sscanf(line, "Private_Clean: %d kB", &mi->private_clean) != 1)
-		goto oops;
-	if ((line = cgets(smaps)) == 0)
-		goto oops;
-	if (sscanf(line, "Private_Dirty: %d kB", &mi->private_dirty) != 1)
-		goto oops;
-
-	while (rest_line-- && (line = cgets(smaps))) {
-		if (sscanf(line, "PSwap: %d kB", &tmp) == 1)
-			rest_line++;
-	}
-
-	return mi;
- oops:
-	printf("mi get error\n");
-	free(mi);
-	return 0;
 }
 
 static unsigned total_gem_memory(void)
 {
-	FILE *gem_fp;
+	_cleanup_fclose_ FILE *gem_fp = NULL;
 	unsigned total_gem_mem = 0;
 	unsigned name, size, handles, refcount;
 	char line[BUF_MAX];
 
 	gem_fp = fopen("/proc/dri/0/gem_names", "r");
 	if(gem_fp == NULL) {
-		fprintf(stderr,
-		"cannot open /proc/dir/0/gem_names\n");
+		_E("cannot open /proc/dir/0/gem_names");
 		return 0;
 	}
 
-	if (fgets(line, BUF_MAX, gem_fp) == NULL) {
-		fclose(gem_fp);
+	if (fgets(line, BUF_MAX, gem_fp) == NULL)
 		return 0;
-	}
 
 	while (fgets(line, BUF_MAX, gem_fp) != NULL)
 		if (sscanf(line, "%d %d %d %d\n",
 		    &name, &size, &handles, &refcount) == 4)
 			total_gem_mem += size;
-	fclose(gem_fp);
 
 	return total_gem_mem;
 }
 
-static void get_mem_info(FILE *output_fp)
+/**
+ * @desc Provides usage in bytes for provided memory cgroup. Works
+ * with/without swap accounting.
+ *
+ * @param memcg_path[in] Full path to memory cgroup
+ * @param swap[in] Boolean value for deciding if account usage with swap
+ * @return current cgroup usage in bytes or 0 on error
+ */
+static unsigned int get_memcg_usage(const char *memcg_path, bool swap)
+{
+	int ret;
+	unsigned int usage;
+
+	if (swap) {
+		ret = cgroup_read_node(memcg_path,
+				"/memory.memsw.usage_in_bytes", &usage);
+	} else {
+		ret = cgroup_read_node(memcg_path, "/memory.usage_in_bytes",
+				&usage);
+	}
+
+	if (ret != RESOURCED_ERROR_NONE)
+		usage = 0;
+
+	return usage;
+}
+
+static void get_memcg_info(void)
 {
 	char buf[PATH_MAX];
-	FILE *fp;
-	char *idx;
-	unsigned int free = 0, cached = 0;
+	_cleanup_closedir_ DIR *pdir = NULL;
+	struct dirent *entry;
+	struct stat path_stat;
+	long usage_swap;
+	unsigned long usage, usage_with_swap;
+
+	_I("====================================================================");
+	_I("MEMORY CGROUPS USAGE INFO");
+
+	pdir = opendir(MEMCG_PATH);
+	if (pdir == NULL) {
+		_E("cannot read directory %s", MEMCG_PATH);
+		return;
+	}
+
+	while ((entry = readdir(pdir)) != NULL) {
+		sprintf(buf, "%s/%s", MEMCG_PATH, entry->d_name);
+		/* If can't stat then ignore */
+		if (stat(buf, &path_stat) != 0)
+			continue;
+
+		/* If it's not directory or it's parent path then ignore */
+		if (!(S_ISDIR(path_stat.st_mode) &&
+			strcmp(entry->d_name, "..")))
+			continue;
+
+		usage = get_memcg_usage(buf, false);
+		usage_with_swap = get_memcg_usage(buf, true);
+		/* It is posible by rounding errors to get negative value */
+		usage_swap = usage_with_swap - usage;
+		if (usage_swap < 0)
+			usage_swap = 0;
+
+		/* Case of root cgroup in hierarchy */
+		if (!strcmp(entry->d_name, "."))
+			_I("%13s Mem %3ld MB (%6ld kB), Mem+Swap %3ld MB (%6ld kB), Swap %3ld MB (%6ld kB) \n",
+				MEMCG_PATH, BYTE_TO_MBYTE(usage),
+				BYTE_TO_KBYTE(usage),
+				BYTE_TO_MBYTE(usage_with_swap),
+				BYTE_TO_KBYTE(usage_with_swap),
+				BYTE_TO_MBYTE(usage_swap),
+				BYTE_TO_KBYTE(usage_swap));
+		else
+			_I("memcg: %13s  Mem %3ld MB (%6ld kB), Mem+Swap %3ld MB (%6ld kB), Swap %3ld MB (%6ld kB)",
+				entry->d_name, BYTE_TO_MBYTE(usage),
+				BYTE_TO_KBYTE(usage),
+				BYTE_TO_MBYTE(usage_with_swap),
+				BYTE_TO_KBYTE(usage_with_swap),
+				BYTE_TO_MBYTE(usage_swap),
+				BYTE_TO_KBYTE(usage_swap));
+
+	}
+}
+
+static void get_mem_info(void)
+{
+	struct meminfo mi;
+	int r;
+
+	unsigned int free = 0;
 	unsigned int total_mem = 0, available = 0, used;
-	unsigned int swap_total = 0, swap_free = 0, swap_used;
+	unsigned int swap_total = 0, swap_free = 0, zram_used, swap_used;
 	unsigned int used_ratio;
 
-	if (output_fp == NULL)
-		return;
-
-	fp = fopen("/proc/meminfo", "r");
-
-	if (!fp) {
-		fprintf(stderr, "%s open failed, %p", buf, fp);
+	r = proc_get_meminfo(&mi,
+			     (MEMINFO_MASK_MEM_TOTAL |
+			      MEMINFO_MASK_MEM_FREE |
+			      MEMINFO_MASK_MEM_AVAILABLE |
+			      MEMINFO_MASK_CACHED |
+			      MEMINFO_MASK_SWAP_TOTAL |
+			      MEMINFO_MASK_SWAP_FREE));
+	if (r < 0) {
+		_E("Failed to get meminfo");
 		return;
 	}
 
-	while (fgets(buf, PATH_MAX, fp) != NULL) {
-		if ((idx = strstr(buf, "MemTotal:"))) {
-			idx += strlen("Memtotal:");
-			while (*idx < '0' || *idx > '9')
-				idx++;
-			total_mem = atoi(idx);
-		} else if ((idx = strstr(buf, "MemFree:"))) {
-			idx += strlen("MemFree:");
-			while (*idx < '0' || *idx > '9')
-				idx++;
-			free = atoi(idx);
-		} else if ((idx = strstr(buf, "MemAvailable:"))) {
-			idx += strlen("MemAvailable:");
-			while (*idx < '0' || *idx > '9')
-				idx++;
-			available = atoi(idx);
-		} else if((idx = strstr(buf, "Cached:")) && !strstr(buf, "Swap")) {
-			idx += strlen("Cached:");
-			while (*idx < '0' || *idx > '9')
-				idx++;
-			cached = atoi(idx);
-		} else if((idx = strstr(buf, "SwapTotal:"))) {
-			idx += strlen("SwapTotal:");
-			while (*idx < '0' || *idx > '9')
-				idx++;
-			swap_total = atoi(idx);
-		} else if((idx = strstr(buf, "SwapFree:"))) {
-			idx += strlen("SwapFree");
-			while (*idx < '0' || *idx > '9')
-				idx++;
-			swap_free = atoi(idx);
-			break;
-		}
-	}
+	total_mem = mi.value[MEMINFO_ID_MEM_TOTAL];
+	free = mi.value[MEMINFO_ID_MEM_FREE];
+	available = mi.value[MEMINFO_ID_MEM_AVAILABLE];
+	swap_total = mi.value[MEMINFO_ID_SWAP_TOTAL];
+	swap_free = mi.value[MEMINFO_ID_SWAP_FREE];
 
-	if (available == 0)
-		available = free + cached;
+	if (total_mem == 0)
+		return;
+
 	used = total_mem - available;
 	used_ratio = used * 100 / total_mem;
 	swap_used = swap_total - swap_free;
 
-	fprintf(output_fp,
-		"====================================================================\n");
+	if (fread_uint(ZRAM_USED_PATH, &zram_used) != RESOURCED_ERROR_NONE)
+		zram_used = 0;
+
+	_I("====================================================================");
 
 
-	fprintf(output_fp, "Total RAM size: \t%15d MB( %6d kB)\n",
-			total_mem >> 10, total_mem);
+	_I( "Total RAM size: \t%15d MB( %6d kB)",
+	    KBYTE_TO_MBYTE(total_mem), total_mem);
 
-	fprintf(output_fp, "Used (Mem+Reclaimable): %15d MB( %6d kB)\n",
-			(total_mem - free) >> 10, total_mem - free);
+	_I( "Used (Mem+Reclaimable): %15d MB( %6d kB)",
+	    KBYTE_TO_MBYTE(total_mem - free), total_mem - free);
 
-	fprintf(output_fp, "Used (Mem+Swap): \t%15d MB( %6d kB)\n",
-			used >> 10, used);
+	_I( "Used (Mem+Swap): \t%15d MB( %6d kB)",
+	    KBYTE_TO_MBYTE(used), used);
 
-	fprintf(output_fp, "Used (Mem):  \t\t%15d MB( %6d kB)\n",
-			used >> 10, used);
+	_I( "Used (Mem):  \t\t%15d MB( %6d kB)",
+	    KBYTE_TO_MBYTE(used), used);
 
-	fprintf(output_fp, "Used (Swap): \t\t%15d MB( %6d kB)\n",
-			swap_used >> 10, swap_used);
+	_I( "Used (Swap): \t\t%15d MB( %6d kB)",
+	    KBYTE_TO_MBYTE(swap_used), swap_used);
 
-	fprintf(output_fp, "Used Ratio: \t\t%15d  %%\n", used_ratio);
+	_I( "Used (Zram block device): %13d MB( %6d kB)",
+	    BYTE_TO_MBYTE(zram_used), BYTE_TO_KBYTE(zram_used));
 
-	fprintf(output_fp, "Mem Free:\t\t%15d MB( %6d kB)\n",
-			free >> 10, free);
+	_I( "Used Ratio: \t\t%15d  %%", used_ratio);
 
-	fprintf(output_fp, "Available (Free+Reclaimable):%10d MB( %6d kB)\n",
-			available >> 10,
-			available);
-	fclose(fp);
+	_I( "Mem Free:\t\t%15d MB( %6d kB)",
+	    KBYTE_TO_MBYTE(free), free);
+
+	_I( "Available (Free+Reclaimable):%10d MB( %6d kB)",
+	    KBYTE_TO_MBYTE(available), available);
 }
 
-static int get_tmpfs_info(FILE *output_fp)
+static int get_tmpfs_info(void)
 {
-	FILE *fp;
+	_cleanup_fclose_ FILE *fp = NULL;
 	char line[BUF_MAX];
 	char tmpfs_mp[NAME_MAX];	/* tmpfs mount point */
 	struct statfs tmpfs_info;
-
-	if (output_fp == NULL)
-		return -1;
 
 	fp = fopen("/etc/mtab", "r");
 	if (fp == NULL)
 		return -1;
 
-	fprintf(output_fp,
-		"====================================================================\n");
-	fprintf(output_fp, "TMPFS INFO\n");
+	_I("====================================================================");
+	_I( "TMPFS INFO");
 
 	while (fgets(line, BUF_MAX, fp) != NULL) {
 		if (sscanf(line, "tmpfs %s tmpfs", tmpfs_mp) == 1) {
 			statfs(tmpfs_mp, &tmpfs_info);
-			fprintf(output_fp,
-				"tmpfs %16s  Total %8ld KB, Used %8ld, Avail %8ld\n",
-				tmpfs_mp,
-				/* 1 block is 4 KB */
-				tmpfs_info.f_blocks * 4,
-				(tmpfs_info.f_blocks - tmpfs_info.f_bfree) * 4,
-				tmpfs_info.f_bfree * 4);
+			_I("tmpfs %16s  Total %8ld KB, Used %8ld, Avail %8ld",
+			   tmpfs_mp,
+			   /* 1 block is 4 KB */
+			   tmpfs_info.f_blocks * 4,
+			   (tmpfs_info.f_blocks - tmpfs_info.f_bfree) * 4,
+			   tmpfs_info.f_bfree * 4);
 		}
 	}
-	fclose(fp);
+
 	return 0;
-}
-
-mapinfo *load_maps(int pid)
-{
-	char* smaps;
-	char tmp[128];
-	mapinfo *milist = 0;
-	mapinfo *mi;
-
-	sprintf(tmp, "/proc/%d/smaps", pid);
-	smaps = cread(tmp);
-	if (smaps == NULL)
-		return 0;
-
-	while ((mi = read_mapinfo(&smaps, ignore_smaps_field)) != 0) {
-		if (milist) {
-			if ((!strcmp(mi->name, milist->name)
-			     && (mi->name[0] != '['))) {
-				milist->size += mi->size;
-				milist->rss += mi->rss;
-				milist->pss += mi->pss;
-				milist->shared_clean += mi->shared_clean;
-				milist->shared_dirty += mi->shared_dirty;
-				milist->private_clean += mi->private_clean;
-				milist->private_dirty += mi->private_dirty;
-
-				milist->perm[0] = mi->perm[0];
-				milist->perm[1] = mi->perm[1];
-				milist->perm[2] = mi->perm[2];
-				milist->perm[3] = mi->perm[3];
-				milist->end = mi->end;
-				strncpy(milist->perm, mi->perm, 4);
-				free(mi);
-				continue;
-			}
-		}
-		mi->next = milist;
-		milist = mi;
-	}
-
-	return milist;
 }
 
 static geminfo *find_geminfo(unsigned int tgid, geminfo *gilist)
@@ -563,6 +423,7 @@ static void init_trib_mapinfo(trib_mapinfo *tmi)
 	tmi->shared_dirty = 0;
 	tmi->private_clean = 0;
 	tmi->private_dirty = 0;
+	tmi->swap = 0;
 	tmi->shared_clean_pss = 0;
 	tmi->shared_dirty_pss = 0;
 	tmi->rss = 0;
@@ -577,54 +438,51 @@ static void init_trib_mapinfo(trib_mapinfo *tmi)
 }
 
 static int
-get_trib_mapinfo(unsigned int tgid, mapinfo *milist,
+get_trib_mapinfo(unsigned int tgid, struct smaps *maps,
 		 geminfo *gilist, trib_mapinfo *result)
 
 {
-	mapinfo *mi;
-	mapinfo *temp = NULL;
 	geminfo *gi;
+
+	int i;
 
 	if (!result)
 		return -EINVAL;
 
 	init_trib_mapinfo(result);
-	for (mi = milist; mi;) {
-		if (strstr(mi->name, STR_SGX_PATH)) {
-			result->graphic_3d += mi->pss;
-		} else if (strstr(mi->name, STR_3D_PATH1) ||
-			strstr(mi->name, STR_3D_PATH2)) {
-			result->graphic_3d += mi->size;
-		} else if (mi->rss != 0 && mi->pss == 0
-			   && mi->shared_clean == 0
-			   && mi->shared_dirty == 0
-			   && mi->private_clean == 0
-			   && mi->private_dirty == 0) {
-			result->other_devices += mi->size;
-		} else if (!strncmp(mi->name, STR_DRM_PATH1,
-				sizeof(STR_DRM_PATH1)) ||
-				!strncmp(mi->name, STR_DRM_PATH2,
-				sizeof(STR_DRM_PATH2))) {
-			result->gem_mmap += mi->rss;
+
+	for (i = 0; i < maps->n_map; i++) {
+		if (strstr(maps->maps[i]->name, STR_SGX_PATH)) {
+			result->graphic_3d += maps->maps[i]->value[SMAPS_ID_PSS];
+		} else if (strstr(maps->maps[i]->name, STR_3D_PATH1) ||
+			strstr(maps->maps[i]->name, STR_3D_PATH2)) {
+			result->graphic_3d += maps->maps[i]->value[SMAPS_ID_SIZE];
+		} else if (maps->maps[i]->value[SMAPS_ID_RSS] != 0 &&
+			   maps->maps[i]->value[SMAPS_ID_PSS] == 0 &&
+			   maps->maps[i]->value[SMAPS_ID_SHARED_CLEAN] == 0 &&
+			   maps->maps[i]->value[SMAPS_ID_SHARED_DIRTY] == 0 &&
+			   maps->maps[i]->value[SMAPS_ID_PRIVATE_CLEAN] == 0 &&
+			   maps->maps[i]->value[SMAPS_ID_PRIVATE_DIRTY] == 0 &&
+			   maps->maps[i]->value[SMAPS_ID_SWAP] == 0) {
+			result->other_devices += maps->maps[i]->value[SMAPS_ID_SIZE];
+		} else if (!strncmp(maps->maps[i]->name, STR_DRM_PATH1, sizeof(STR_DRM_PATH1)) ||
+			   !strncmp(maps->maps[i]->name, STR_DRM_PATH2, sizeof(STR_DRM_PATH2))) {
+			result->gem_mmap += maps->maps[i]->value[SMAPS_ID_RSS];
 		} else {
-			result->shared_clean += mi->shared_clean;
-			result->shared_dirty += mi->shared_dirty;
-			result->private_clean += mi->private_clean;
-			result->private_dirty += mi->private_dirty;
-			result->rss += mi->rss;
-			result->pss += mi->pss;
-			result->size += mi->size;
+			result->shared_clean += maps->maps[i]->value[SMAPS_ID_SHARED_CLEAN];
+			result->shared_dirty += maps->maps[i]->value[SMAPS_ID_SHARED_DIRTY];
+			result->private_clean += maps->maps[i]->value[SMAPS_ID_PRIVATE_CLEAN];
+			result->private_dirty += maps->maps[i]->value[SMAPS_ID_PRIVATE_DIRTY];
+			result->swap += maps->maps[i]->value[SMAPS_ID_SWAP];
+			result->rss += maps->maps[i]->value[SMAPS_ID_RSS];
+			result->pss += maps->maps[i]->value[SMAPS_ID_PSS];
+			result->size += maps->maps[i]->value[SMAPS_ID_SIZE];
 
-			if(mi->shared_clean != 0)
-				result->shared_clean_pss += mi->pss;
-			else if (mi->shared_dirty != 0)
-				result->shared_dirty_pss += mi->pss;
+			if(maps->maps[i]->value[SMAPS_ID_SHARED_CLEAN] != 0)
+				result->shared_clean_pss += maps->maps[i]->value[SMAPS_ID_PSS];
+			else if (maps->maps[i]->value[SMAPS_ID_SHARED_DIRTY] != 0)
+				result->shared_dirty_pss += maps->maps[i]->value[SMAPS_ID_PSS];
 		}
-
-		temp = mi;
-		mi = mi->next;
-		free(temp);
-		temp = NULL;
 	}
 
 	result->peak_rss = get_peak_rss(tgid);
@@ -644,32 +502,26 @@ get_trib_mapinfo(unsigned int tgid, mapinfo *milist,
 
 static int get_cmdline(unsigned int pid, char *cmdline)
 {
-	FILE *fp;
+	_cleanup_fclose_ FILE *fp = NULL;
 	char buf[NAME_MAX] = {0, };
-	int ret = -1;
 
-	sprintf(buf, "/proc/%d/cmdline", pid);
+	snprintf(buf, sizeof(buf), "/proc/%d/cmdline", pid);
 	fp = fopen(buf, "r");
 	if (fp == 0) {
-		fprintf(stderr, "cannot file open %s\n", buf);
-		return ret;
+		_E("cannot file open %s", buf);
+		return RESOURCED_ERROR_FAIL;
 	}
-	if ((ret = fscanf(fp, "%s", cmdline)) < 1) {
-		fclose(fp);
-		return ret;
-	}
-	fclose(fp);
 
-	return ret;
+	return fscanf(fp, "%s", cmdline);
 }
 
 static int get_oomscoreadj(unsigned int pid)
 {
-	FILE *fp;
+	_cleanup_fclose_ FILE *fp = NULL;
 	char tmp[256];
 	int oomadj_val;
 
-	sprintf(tmp, "/proc/%d/oom_score_adj", pid);
+	snprintf(tmp, sizeof(tmp), "/proc/%d/oom_score_adj", pid);
 	fp = fopen(tmp, "r");
 
 	if (fp == NULL) {
@@ -678,74 +530,57 @@ static int get_oomscoreadj(unsigned int pid)
 	}
 	if (fgets(tmp, sizeof(tmp), fp) == NULL) {
 		oomadj_val = -100;
-		fclose(fp);
 		return oomadj_val;
 	}
 
 	oomadj_val = atoi(tmp);
 
-	fclose(fp);
 	return oomadj_val;
 }
 
 static void get_rss(pid_t pid, unsigned int *result)
 {
-	FILE *fp;
+	_cleanup_fclose_ FILE *fp = NULL;
 	char proc_path[PATH_MAX];
 	int rss = 0;
 
 	*result = 0;
 
-	sprintf(proc_path, "/proc/%d/statm", pid);
+	snprintf(proc_path, sizeof(proc_path), "/proc/%d/statm", pid);
 	fp = fopen(proc_path, "r");
 	if (fp == NULL)
 		return;
 
-	if (fscanf(fp, "%*s %d", &rss) < 1) {
-		fclose(fp);
+	if (fscanf(fp, "%*s %d", &rss) < 1)
 		return;
-	}
-
-	fclose(fp);
 
 	/* convert page to Kb */
 	*result = rss * 4;
 	return;
 }
 
-static void show_rss(int output_type, char *output_path)
+static void show_rss(void)
 {
-	DIR *pDir = NULL;
-	struct dirent *curdir;
+	_cleanup_closedir_ DIR *pDir = NULL;
+	struct dirent curdir;
+	struct dirent *result;
 	pid_t pid;
 	char cmdline[PATH_MAX];
-	FILE *output_file = NULL;
+	_cleanup_fclose_ FILE *output_file = NULL;
 	int oom_score_adj;
 	unsigned int rss;
+	int ret;
 
 	pDir = opendir("/proc");
 	if (pDir == NULL) {
-		fprintf(stderr, "cannot read directory /proc.\n");
+		_E("cannot read directory /proc.");
 		return;
 	}
 
-	if (output_type == OUTPUT_FILE && output_path) {
-		output_file = fopen(output_path, "w+");
-		if (!output_file) {
-			fprintf(stderr, "cannot open output file(%s)\n",
-				output_path);
-			closedir(pDir);
-			exit(1);
-		}
-	} else
-		output_file = stdout;
+	_I("     PID    RSS    OOM_SCORE    COMMAND");
 
-
-	fprintf(output_file,
-			"     PID    RSS    OOM_SCORE    COMMAND\n");
-
-	while ((curdir = readdir(pDir)) != NULL) {
-		pid = atoi(curdir->d_name);
+	while (!(ret = readdir_r(pDir, &curdir, &result)) && result != NULL) {
+		pid = atoi(curdir.d_name);
 		if (pid < 1 || pid > 32768 || pid == getpid())
 			continue;
 
@@ -754,32 +589,28 @@ static void show_rss(int output_type, char *output_path)
 		get_rss(pid, &rss);
 		oom_score_adj = get_oomscoreadj(pid);
 
-		fprintf(output_file,
-				"%8d %8u %8d          %s\n",
-				pid,
-				rss,
-				oom_score_adj,
-				cmdline);
+		_I("%8d %8u %8d          %s",
+		   pid,
+		   rss,
+		   oom_score_adj,
+		   cmdline);
 
 
 	} /* end of while */
 
-	get_tmpfs_info(output_file);
-	get_mem_info(output_file);
-
-	fclose(output_file);
-	closedir(pDir);
+	get_tmpfs_info();
+	get_mem_info();
 
 	return;
 }
 
-static int show_map_all_new(int output_type, char *output_path)
+static int show_map_all_new(void)
 {
-	DIR *pDir = NULL;
-	struct dirent *curdir;
+	_cleanup_closedir_ DIR *pDir = NULL;
+	struct dirent curdir;
+	struct dirent *result;
 	unsigned int pid;
-	mapinfo *milist;
-	geminfo *glist;
+	_cleanup_free_ geminfo *glist = NULL;
 	unsigned total_pss = 0;
 	unsigned total_private = 0;
 	unsigned total_private_code = 0;
@@ -788,6 +619,7 @@ static int show_map_all_new(int output_type, char *output_path)
 	unsigned total_shared_data = 0;
 	unsigned total_shared_code_pss = 0;
 	unsigned total_shared_data_pss = 0;
+	unsigned total_swap = 0;
 	unsigned total_rss = 0;
 	unsigned total_graphic_3d = 0;
 	unsigned total_gem_rss = 0;
@@ -796,83 +628,78 @@ static int show_map_all_new(int output_type, char *output_path)
 	unsigned total_allocated_gem = 0;
 	trib_mapinfo tmi;
 	char cmdline[PATH_MAX];
-	FILE *output_file = NULL;
-	int oom_score_adj;
+	_cleanup_fclose_ FILE *output_file = NULL;
+
+	int r;
 
 	pDir = opendir("/proc");
 	if (pDir == NULL) {
-		fprintf(stderr, "cannot read directory /proc.\n");
+		_E("cannot read directory /proc.");
 		return 0;
 	}
 
-	if (output_type == OUTPUT_FILE && output_path) {
-		output_file = fopen(output_path, "w+");
-		if (!output_file) {
-			fprintf(stderr, "cannot open output file(%s)\n",
-				output_path);
-			closedir(pDir);
-			exit(1);
-		}
-	} else
-		output_file = stdout;
-
 	glist = load_geminfo();
 
-	if (!sum) {
-		if (verbos)
-			fprintf(output_file,
-					"     PID  S(CODE)  S(DATA)  P(CODE)  P(DATA)"
-					"     PEAK      PSS       3D"
-					"     GEM(PSS)  GEM(RSS)"
-					" OOM_SCORE_ADJ    COMMAND\n");
+	if (!arg_sum) {
+		if (arg_verbose)
+			_I("     PID  S(CODE)  S(DATA)  P(CODE)  P(DATA)"
+			   "     PEAK      PSS       3D"
+			   "     GEM(PSS)  GEM(RSS)    SWAP"
+			   "     OOM_SCORE_ADJ    COMMAND");
 		else
-			fprintf(output_file,
-					"     PID     CODE     DATA     PEAK     PSS"
-					"     3D      GEM(PSS)      COMMAND\n");
+			_I("     PID     CODE     DATA     PEAK     PSS"
+			   "     3D      GEM(PSS)      SWAP      COMMAND");
 	}
 
-	while ((curdir = readdir(pDir)) != NULL) {
-		pid = atoi(curdir->d_name);
+	while (!(r = readdir_r(pDir, &curdir, &result)) && result != NULL) {
+		_cleanup_smaps_free_ struct smaps *maps = NULL;
+		char *base_name = NULL;
+
+		pid = atoi(curdir.d_name);
 		if (pid < 1 || pid > 32768 || pid == getpid())
 			continue;
 
 		if (get_cmdline(pid, cmdline) < 0)
 			continue;
 
-		milist = load_maps(pid);
-		if (milist == 0)
+		base_name = basename(cmdline);
+		if (base_name && !strcmp(base_name, "mem-stress"))
 			continue;
 
-		/* get classified map info */
-		get_trib_mapinfo(pid, milist, glist, &tmi);
-		oom_score_adj = get_oomscoreadj(pid);
+		r = smaps_get(pid, &maps, SMAPS_MASK_DEFAULT);
+		if (r < 0) {
+			_E("cannot get smaps of pid %d", pid);
+			continue;
+		}
 
-		if (!sum) {
-			if (verbos)
-				fprintf(output_file,
-					"%8d %8d %8d %8d %8d %8d %8d %8d %8d %8d"
-					" %8d \t\t%s\n",
-					pid,
-					tmi.shared_clean, tmi.shared_dirty,
-					tmi.private_clean, tmi.private_dirty,
-					tmi.peak_rss, tmi.pss, tmi.graphic_3d,
-					tmi.gem_pss, tmi.gem_rss, oom_score_adj, cmdline);
+		/* get classified map info */
+		get_trib_mapinfo(pid, maps, glist, &tmi);
+
+		if (!arg_sum) {
+			if (arg_verbose)
+				_I("%8d %8d %8d %8d %8d %8d %8d %8d %8d %8d %8d"
+				   " %8d \t\t%s",
+				   pid,
+				   tmi.shared_clean, tmi.shared_dirty,
+				   tmi.private_clean, tmi.private_dirty,
+				   tmi.peak_rss, tmi.pss, tmi.graphic_3d,
+				   tmi.gem_pss, tmi.gem_rss, tmi.swap,
+				   get_oomscoreadj(pid), cmdline);
 			else
-				fprintf(output_file,
-					"%8d %8d %8d %8d %8d %8d %8d      %s\n",
-					pid,
-					tmi.shared_clean +
-					tmi.private_clean,
-					tmi.shared_dirty + tmi.private_dirty,
-					tmi.peak_rss,
-					tmi.pss,
-					tmi.graphic_3d,
-					tmi.gem_pss, cmdline);
+				_I("%8d %8d %8d %8d %8d %8d %8d %8d      %s",
+				   pid,
+				   tmi.shared_clean +
+				   tmi.private_clean,
+				   tmi.shared_dirty + tmi.private_dirty,
+				   tmi.peak_rss,
+				   tmi.pss,
+				   tmi.graphic_3d,
+				   tmi.gem_pss,
+				   tmi.swap, cmdline);
 
 			if (tmi.other_devices != 0)
-				fprintf(output_file,
-					"%s(%d) %d KB may mapped by device(s).\n",
-					cmdline, pid, tmi.other_devices);
+				_I("%s(%d) %d KB may mapped by device(s).",
+				   cmdline, pid, tmi.other_devices);
 		}
 
 		total_private += (tmi.private_clean + tmi.private_dirty);
@@ -883,251 +710,210 @@ static int show_map_all_new(int output_type, char *output_path)
 		total_gem_pss += tmi.gem_pss;
 		total_private_code += tmi.private_clean;
 		total_private_data += tmi.private_dirty;
+		total_swap += tmi.swap;
 		total_shared_code += tmi.shared_clean;
 		total_shared_data += tmi.shared_dirty;
 		total_peak_rss += tmi.peak_rss;
 
 		total_shared_code_pss += tmi.shared_clean_pss;
 		total_shared_data_pss += tmi.shared_dirty_pss;
+
 	} /* end of while */
 
-	total_allocated_gem = KB(total_gem_memory());
-	fprintf(output_file,
-			"==============================================="
-			"===============================================\n");
-	if (verbos) {
-		fprintf(output_file,
-				"TOTAL:      S(CODE) S(DATA) P(CODE)  P(DATA)"
-				"    PEAK     PSS       3D    "
-				"GEM(PSS) GEM(RSS) GEM(ALLOC) TOTAL(KB)\n");
-		fprintf(output_file,
-			"         %8d %8d %8d %8d %8d %8d %8d"
-			" %8d %8d %8d %8d\n",
-			total_shared_code, total_shared_data,
-			total_private_code, total_private_data,
-			total_peak_rss,	total_pss, total_graphic_3d,
-			total_gem_pss, total_gem_rss,
-			total_allocated_gem,
-			total_pss + total_graphic_3d +
-			total_allocated_gem);
+	total_allocated_gem = BYTE_TO_KBYTE(total_gem_memory());
+	_I("==============================================="
+	   "===============================================");
+	if (arg_verbose) {
+		_I("TOTAL:      S(CODE) S(DATA) P(CODE)  P(DATA)"
+		   "    PEAK     PSS       3D    "
+		   "GEM(PSS) GEM(RSS) GEM(ALLOC) SWAP TOTAL(KB)");
+		_I("         %8d %8d %8d %8d %8d %8d %8d"
+		   " %8d %8d %8d %8d %8d",
+		   total_shared_code, total_shared_data,
+		   total_private_code, total_private_data,
+		   total_peak_rss,	total_pss, total_graphic_3d,
+		   total_gem_pss, total_gem_rss,
+		   total_allocated_gem, total_swap,
+		   total_pss + total_graphic_3d +
+		   total_allocated_gem);
 	} else {
-		fprintf(output_file,
-			"TOTAL:        CODE     DATA    PEAK     PSS     "
-			"3D    GEM(PSS) GEM(ALLOC)     TOTAL(KB)\n");
-		fprintf(output_file, "         %8d %8d %8d %8d %8d %8d %7d %8d\n",
-			total_shared_code + total_private_code,
-			total_shared_data + total_private_data,
-			total_peak_rss, total_pss,
-			total_graphic_3d, total_gem_pss,
-			total_allocated_gem,
-			total_pss + total_graphic_3d +
-			total_allocated_gem);
+		_I("TOTAL:        CODE     DATA    PEAK     PSS     "
+		   "3D    GEM(PSS) GEM(ALLOC)     TOTAL(KB)");
+		_I("         %8d %8d %8d %8d %8d %8d %7d %8d %8d",
+		   total_shared_code + total_private_code,
+		   total_shared_data + total_private_data,
+		   total_peak_rss, total_pss,
+		   total_graphic_3d, total_gem_pss,
+		   total_allocated_gem, total_swap,
+		   total_pss + total_graphic_3d +
+		   total_allocated_gem);
 
 	}
 
-	if (verbos)
-		fprintf(output_file,
-			"* S(CODE): shared clean memory, it includes"
-			" duplicated memory\n"
-			"* S(DATA): shared dirty memory, it includes"
-			" duplicated memory\n"
-			"* P(CODE): private clean memory\n"
-			"* P(DATA): private dirty memory\n"
-			"* PEAK: peak memory usage of S(CODE) + S(DATA)"
-			" + P(CODE) + P(DATA)\n"
-			"* PSS: Proportional Set Size\n"
-			"* 3D: memory allocated by GPU driver\n"
-			"* GEM(PSS): GEM memory devided by # of sharers\n"
-			"* GEM(RSS): GEM memory including duplicated memory\n"
-			"* GEM(ALLOC): sum of unique gem memory in the system\n"
-			"* TOTAL: PSS + 3D + GEM(ALLOC) \n");
+	if (arg_verbose)
+		_I("* S(CODE): shared clean memory, it includes"
+		   " duplicated memory\n"
+		   "* S(DATA): shared dirty memory, it includes"
+		   " duplicated memory\n"
+		   "* P(CODE): private clean memory\n"
+		   "* P(DATA): private dirty memory\n"
+		   "* PEAK: peak memory usage of S(CODE) + S(DATA)"
+		   " + P(CODE) + P(DATA)\n"
+		   "* PSS: Proportional Set Size\n"
+		   "* 3D: memory allocated by GPU driver\n"
+		   "* GEM(PSS): GEM memory devided by # of sharers\n"
+		   "* GEM(RSS): GEM memory including duplicated memory\n"
+		   "* GEM(ALLOC): sum of unique gem memory in the system\n"
+		   "* TOTAL: PSS + 3D + GEM(ALLOC)");
 	else
-		fprintf(output_file,
-			"* CODE: shared and private clean memory\n"
-			"* DATA: shared and private dirty memory\n"
-			"* PEAK: peak memory usage of CODE + DATA\n"
-			"* PSS: Proportional Set Size\n"
-			"* 3D: memory allocated by GPU driver\n"
-			"* GEM(PSS): GEM memory deviced by # of sharers\n"
-			"* GEM(ALLOC): sum of unique GEM memory in the system\n"
-			"* TOTAL: PSS + 3D + GEM(ALLOC)\n");
+		_I("* CODE: shared and private clean memory\n"
+		   "* DATA: shared and private dirty memory\n"
+		   "* PEAK: peak memory usage of CODE + DATA\n"
+		   "* PSS: Proportional Set Size\n"
+		   "* 3D: memory allocated by GPU driver\n"
+		   "* GEM(PSS): GEM memory deviced by # of sharers\n"
+		   "* GEM(ALLOC): sum of unique GEM memory in the system\n"
+		   "* TOTAL: PSS + 3D + GEM(ALLOC)");
 
-	get_tmpfs_info(output_file);
-	get_mem_info(output_file);
+	get_tmpfs_info();
+	get_memcg_info();
+	get_mem_info();
 
-	fclose(output_file);
-	free(glist);
-	closedir(pDir);
 	return 1;
 }
 
 static int show_map_new(int pid)
 {
-	mapinfo *milist;
-	mapinfo *mi;
-	unsigned shared_dirty = 0;
-	unsigned shared_clean = 0;
-	unsigned private_dirty = 0;
-	unsigned private_clean = 0;
-	unsigned pss = 0;
-	unsigned start = 0;
-	unsigned end = 0;
-	unsigned private_clean_total = 0;
-	unsigned private_dirty_total = 0;
-	unsigned shared_clean_total = 0;
-	unsigned shared_dirty_total = 0;
-	int duplication = 0;
+	_cleanup_smaps_free_ struct smaps *maps = NULL;
+	int r, i;
 
-	milist = load_maps(pid);
+	maps = new0(struct smaps, 1);
+	if (!maps)
+		return -ENOMEM;
 
-	if (milist == 0) {
-		fprintf(stderr, "cannot get /proc/smaps for pid %d\n", pid);
-		return 1;
+	r = smaps_get(pid, &maps, SMAPS_MASK_DEFAULT);
+	if (r < 0) {
+		_E("cannot get smaps of pid %d", pid);
+		return r;
 	}
 
-	if (!sum) {
-		printf(" S(CODE)  S(DATA)  P(CODE)  P(DATA)  ADDR(start-end)"
-			"OBJECT NAME\n");
-		printf("-------- -------- -------- -------- -----------------"
-			"------------------------------\n");
+	if (arg_sum) {
+		_I(" S(CODE)  S(DATA)  P(CODE)  P(DATA)  PSS");
+		_I("-------- -------- -------------------"
+		   "------------------");
+
+		_I("%8d %8d %8d %8d %8d %18d",
+		   maps->sum[SMAPS_ID_SHARED_CLEAN],
+		   maps->sum[SMAPS_ID_SHARED_DIRTY],
+		   maps->sum[SMAPS_ID_PRIVATE_CLEAN],
+		   maps->sum[SMAPS_ID_PRIVATE_DIRTY],
+		   maps->sum[SMAPS_ID_SWAP],
+		   maps->sum[SMAPS_ID_PSS]);
 	} else {
-		printf(" S(CODE)  S(DATA)  P(CODE)  P(DATA)  PSS\n");
-		printf("-------- -------- -------------------"
-			"------------------\n");
-	}
-	for (mi = milist; mi; mi = mi->next) {
-		shared_clean += mi->shared_clean;
-		shared_dirty += mi->shared_dirty;
-		private_clean += mi->private_clean;
-		private_dirty += mi->private_dirty;
-		pss += mi->pss;
-
-		shared_clean_total += mi->shared_clean;
-		shared_dirty_total += mi->shared_dirty;
-		private_clean_total += mi->private_clean;
-		private_dirty_total += mi->private_dirty;
-
-		if (!duplication)
-			start = mi->start;
-
-		if ((mi->next && !strcmp(mi->next->name, mi->name)) &&
-		    (mi->next->start == mi->end)) {
-			duplication = 1;
-			continue;
-		}
-		end = mi->end;
-		duplication = 0;
-
-		if (!sum) {
-			printf("%8d %8d %8d %8d %08x-%08x %s\n",
-			       shared_clean, shared_dirty, private_clean, private_dirty,
-			       start, end, mi->name);
-		}
-		shared_clean = 0;
-		shared_dirty = 0;
-		private_clean = 0;
-		private_dirty = 0;
-	}
-	if (sum) {
-		printf("%8d %8d %8d %8d %18d\n",
-		       shared_clean_total,
-		       shared_dirty_total,
-		       private_clean_total,
-		       private_dirty_total,
-		       pss);
+		_I(" S(CODE)  S(DATA)  P(CODE)  P(DATA)  ADDR(start-end)"
+		   "OBJECT NAME");
+		_I("-------- -------- -------- -------- -----------------"
+		   "------------------------------");
+		for (i = 0; i < maps->n_map; i++)
+			_I("%8d %8d %8d %8d %08x-%08x %s",
+			   maps->maps[i]->value[SMAPS_ID_SHARED_CLEAN],
+			   maps->maps[i]->value[SMAPS_ID_SHARED_DIRTY],
+			   maps->maps[i]->value[SMAPS_ID_PRIVATE_CLEAN],
+			   maps->maps[i]->value[SMAPS_ID_PRIVATE_DIRTY],
+			   maps->maps[i]->start,
+			   maps->maps[i]->end,
+			   maps->maps[i]->name);
 	}
 
 	return 1;
 }
 
-void check_kernel_version(void)
+static void memps_show_help(void)
 {
-	struct utsname buf;
-	int ret;
+	_E("memps [-a] | [-v] | [-s] <pid> | [-f] <output file full path>\n"
+	   "\t-s = sum (show only sum of each)\n"
+	   "\t-f = all (show all processes via output file)\n"
+	   "\t-a = all (show all processes)\n"
+	   "\t-v = verbos (show all processes in detail)");
+}
 
-	ret = uname(&buf);
+static int memps_parse_args(int argc, char *argv[])
+{
+	static const struct option long_options[] = {
+		{"sum",			no_argument,		NULL,	's'		},
+		{"file",		required_argument,	NULL,	'f'		},
+		{"all",			no_argument,		NULL,	'a'		},
+		{"rss",			no_argument,		NULL,	'r'		},
+		{"verbose",		no_argument,		NULL,	'v'		},
+		{"help",		no_argument,		NULL,	'h'		},
+		{0, 0, 0, 0}
+	};
+	int c = 0;
 
-	if (!ret) {
-			/* Kernel 4.0 should be the same as kernel >= 3.10 */
-			if (buf.release[0] == '4') {
-				ignore_smaps_field = 8; /* Referenced, Anonymous, AnonHugePages,
-						   Swap, KernelPageSize, MMUPageSize,
-						   Locked, VmFlags */
-			} else if (buf.release[0] == '3') {
-			char *pch;
-			char str[3];
-			int sub_version;
-			pch = strstr(buf.release, ".");
-			if (!pch)
-				return;
+	while (c != -1) {
+		c = getopt_long(argc, argv, "sf:arv", long_options, NULL);
 
-			strncpy(str, pch+1, 2);
-			str[2] = '\0';
-			sub_version = atoi(str);
-
-			if (sub_version >= 10)
-				ignore_smaps_field = 8; /* Referenced, Anonymous, AnonHugePages,
-						   Swap, KernelPageSize, MMUPageSize,
-						   Locked, VmFlags */
-
-			else
-				ignore_smaps_field = 7; /* Referenced, Anonymous, AnonHugePages,
-						   Swap, KernelPageSize, MMUPageSize,
-						   Locked */
-	} else {
-			ignore_smaps_field = 4; /* Referenced, Swap, KernelPageSize,
-						   MMUPageSize */
+		switch (c) {
+		case 's':
+			arg_sum = true;
+			break;
+		case 'f':
+			arg_file = optarg;
+			break;
+		case 'a':
+			arg_all = true;
+			break;
+		case 'r':
+			arg_rss = true;
+			break;
+		case 'v':
+			arg_verbose = true;
+			break;
+		case 'h':
+			break;
+		case '?':
+			return -EINVAL;
 		}
 	}
+
+	if (arg_all || arg_file || arg_verbose || arg_rss) {
+		if ( optind != argc) {
+			_E("Invalid arguments");
+			return -EINVAL;
+		}
+	} else {
+		if (optind + 1 != argc) {
+			_E("Invalid arguments");
+			return -EINVAL;
+		}
+	}
+
+	return 0;
 }
 
 int main(int argc, char *argv[])
 {
-	int usage = 1;
-	sum = 0;
+	int r;
 
-	if (argc > 1) {
-		check_kernel_version();
+	r = memps_parse_args(argc, argv);
+	if (r < 0) {
+		memps_show_help();
+		return EXIT_FAILURE;
+	}
 
-		if (!strcmp(argv[1], "-r")) {
-			if (argc >= 3)
-				show_rss(OUTPUT_FILE, argv[2]);
-			else
-				show_rss(OUTPUT_UART, NULL);
-			usage = 0;
-		} else if (!strcmp(argv[1], "-s")) {
-			sum = 1;
-			if (argc == 3 && atoi(argv[2]) > 0) {
-				show_map_new(atoi(argv[2]));
-				usage = 0;
-			}
-		} else if (!strcmp(argv[1], "-a")) {
-			verbos = 0;
-			show_map_all_new(OUTPUT_UART, NULL);
-			usage = 0;
-		} else if (!strcmp(argv[1], "-v")) {
-			verbos = 1;
-			show_map_all_new(OUTPUT_UART, NULL);
-			usage = 0;
-		} else if (!strcmp(argv[1], "-f")) {
-			if (argc >= 3) {
-				verbos = 1;
-				show_map_all_new(OUTPUT_FILE, argv[2]);
-				usage = 0;
-			}
-		} else if (argc == 2 && atoi(argv[1]) > 0) {
-			show_map_new(atoi(argv[1]));
-			usage = 0;
-		}
-	}
-	if (usage) {
-		fprintf(stderr,
-			"memps [-a] | [-v] | [-s] <pid> | [-f] <output file full path>\n"
-			"	 -s = sum (show only sum of each)\n"
-			"	 -f = all (show all processes via output file)\n"
-			"        -a = all (show all processes)\n"
-			"        -v = verbos (show all processes in detail)\n");
-	}
+	if (arg_file)
+		log_open(LOG_TYPE_FILE, arg_file);
+	else
+		log_open(LOG_TYPE_STANDARD, NULL);
+
+	if (arg_all || arg_verbose)
+		show_map_all_new();
+	else if (arg_rss)
+		show_rss();
+	else
+		show_map_new(atoi(argv[optind]));
+
+	log_close();
 
 	return 0;
 }

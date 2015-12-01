@@ -51,7 +51,7 @@ static resourced_ret_c send_quota_message(const char *interface,
 	int ret, i = 0;
 
 	do {
-		msg = dbus_method_sync(BUS_NAME, RESOURCED_PATH_NETWORK,
+		msg = dbus_method_sync(RESOURCED_DBUS_BUS_NAME, RESOURCED_PATH_NETWORK,
 				       RESOURCED_INTERFACE_NETWORK,
 				       interface,
 				       format_str, params);
@@ -173,6 +173,7 @@ API resourced_ret_c set_datausage_quota(const char *app_id,
 	/* support old behaviour undefined iftype mean all iftype */
 	time_t start_time = 0;
 	data_usage_quota quota_to_send;
+	char buf[28];
 
 	if (!_is_valid_datausage_quota_params(app_id, quota))
 		return RESOURCED_ERROR_INVALID_PARAMETER;
@@ -183,7 +184,11 @@ API resourced_ret_c set_datausage_quota(const char *app_id,
 
 	_SD("quota for app %s set", app_id);
 	_SD("===============================");
-	_SD("quota.start_time = %s", ctime(quota->start_time));
+
+	if (ctime_r(quota->start_time, buf) == NULL)
+		return RESOURCED_ERROR_INVALID_PARAMETER;
+
+	_SD("quota.start_time = %s", buf);
 	_SD("quota.time_period = %d", quota->time_period);
 	_SD("quota.snd_quota = %lld", quota->snd_quota);
 	_SD("quota.rcv_quota = %lld", quota->rcv_quota);

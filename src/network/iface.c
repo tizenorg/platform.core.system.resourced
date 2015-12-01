@@ -1,7 +1,7 @@
 /*
  * resourced
  *
- * Copyright (c) 2014 Samsung Electronics Co., Ltd. All rights reserved.
+ * Copyright (c) 2014 - 2015 Samsung Electronics Co., Ltd. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -37,14 +37,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "config.h"
-#include "config-parser.h"
 #include "const.h"
 #include "iface.h"
 #include "macro.h"
 #include "trace.h"
 
-#define NET_INTERFACE_NAMES_FILE "/etc/resourced/network.conf"
 #define IFACES_TYPE_SECTION "IFACES_TYPE"
 
 static int iface_stat[RESOURCED_IFACE_LAST_ELEM - 1];
@@ -75,6 +72,8 @@ struct iface_status {
 	char ifname[MAX_NAME_LENGTH];
 	resourced_iface_type iftype;
 };
+
+static allowance_cb allow_cb;
 
 static gint compare_int(gconstpointer a, gconstpointer b,
 	gpointer UNUSED userdata)
@@ -191,6 +190,7 @@ static resourced_iface_type read_iftype(const char *iface)
 	char buffer[UNIX_PATH_MAX];
 	char *key_buffer;
 	char *value_buffer;
+	char *saveptr;
 	FILE *uevent;
 	resourced_iface_type ret = RESOURCED_IFACE_UNKNOWN;
 
@@ -203,9 +203,9 @@ static resourced_iface_type read_iftype(const char *iface)
 	while (!feof(uevent)) {
 		if (fgets(buffer, UNIX_PATH_MAX, uevent) == NULL)
 			break;
-		key_buffer = strtok(buffer, UEVENT_DELIM);
-		value_buffer = strtok(NULL, UEVENT_DELIM);
-		if (strcmp(key_buffer, DEVTYPE_KEY) != 0)
+		key_buffer = strtok_r(buffer, UEVENT_DELIM, &saveptr);
+		value_buffer = strtok_r(NULL, UEVENT_DELIM, &saveptr);
+		if (key_buffer && strcmp(key_buffer, DEVTYPE_KEY) != 0)
 			continue;
 		ret = convert_iftype(value_buffer);
 		break;
@@ -241,13 +241,13 @@ bool is_address_exists(const char *name)
 		fd = socket(AF_INET, SOCK_DGRAM, 0);
 
 	memset(&ifr, 0, sizeof(struct ifreq));
-	strcpy(ifr.ifr_name, name);
+	strncpy(ifr.ifr_name, name, sizeof(ifr.ifr_name)-1);
 	return ioctl(fd, SIOCGIFADDR, &ifr) == 0;
 #endif /* SIOCDIFADDR */
 	return true;
 }
 
-static int fill_ifaces_relation(struct parse_result *result,
+int fill_ifaces_relation(struct parse_result *result,
 				void UNUSED *user_data)
 {
 	struct iface_relation *relation;
@@ -268,23 +268,19 @@ static int fill_ifaces_relation(struct parse_result *result,
 
 int init_iftype(void)
 {
-	int i, ret;
+	int i;
 	resourced_iface_type iftype;
 	struct if_nameindex *ids = if_nameindex();
 	GTree *iftypes_next = create_iface_tree();
 
 	if (ids == NULL) {
 		_E("Failed to initialize iftype table! errno: %d, %s",
-			errno, strerror(errno));
+			errno, strerror_r(errno, buf, sizeof(buf)));
 		return RESOURCED_ERROR_FAIL;
 	}
 
 	if (!ifnames_relations) {
-		ret = config_parse(NET_INTERFACE_NAMES_FILE,
-				   fill_ifaces_relation, NULL);
-		if (ret != 0)
-			_D("Can't parse config file %s",
-			   NET_INTERFACE_NAMES_FILE);
+		_D("interface name relations are empty");
 	}
 
 	reset_active_ifnames(ifnames);
@@ -411,22 +407,39 @@ void for_each_ifnames(ifnames_iterator iter_cb, void(*empty_func)(void *),
 		if (!value->active)
 			continue;
 
+		if (!is_counting_allowed(value->iftype) && empty_func) {
+			empty_func(data);
+			continue;
+		}
+
 		if (iter_cb(value->iftype, value->ifname, data) == TRUE)
 			break;
 	}
 
-	if (empty_func)
+	if (!g_slist_length(ifnames) && empty_func)
 		empty_func(data);
 
 }
 
 void set_wifi_allowance(const resourced_option_state wifi_option)
 {
+	int old_allowance = iface_stat[RESOURCED_IFACE_WIFI];
 	iface_stat[RESOURCED_IFACE_WIFI] = wifi_option == RESOURCED_OPTION_ENABLE ? 1 : 0;
+
+	if (old_allowance != iface_stat[RESOURCED_IFACE_WIFI] && allow_cb)
+		allow_cb(RESOURCED_IFACE_WIFI, iface_stat[RESOURCED_IFACE_WIFI]);
 }
 
 void set_datacall_allowance(const resourced_option_state datacall_option)
 {
+	int old_allowance = iface_stat[RESOURCED_IFACE_DATACALL];
+
 	iface_stat[RESOURCED_IFACE_DATACALL] = datacall_option == RESOURCED_OPTION_ENABLE ? 1 : 0;
+	if (old_allowance != iface_stat[RESOURCED_IFACE_DATACALL] && allow_cb)
+		allow_cb(RESOURCED_IFACE_DATACALL, iface_stat[RESOURCED_IFACE_DATACALL]);
 }
 
+void set_change_allow_cb(allowance_cb cb)
+{
+	allow_cb = cb;
+}

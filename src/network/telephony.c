@@ -32,6 +32,7 @@
 #include <vconf/vconf.h>
 #include <vconf/vconf-internal-telephony-keys.h>
 #include <TelSim.h>
+#include <system_info.h>
 
 #include "config.h"
 #include "const.h"
@@ -50,6 +51,7 @@
 #define DBUS_TELEPHONY_SERVICE_NETWORK	DBUS_TELEPHONY_SERVICE".Network"
 #define DBUS_TELEPHONY_SIM_INTERFACE	DBUS_TELEPHONY_SERVICE".Sim"
 
+#define ROAMING_FEATURE	"http://developer.samsung.com/tizen/feature/data_usage.roaming"
 
 /**
  * @brief Definition for the telephony object path.
@@ -97,11 +99,11 @@ struct modem_state {
 static struct modem_state *current_modem;
 static GSList *modems; /* list of available modems with roaming state */
 
-#ifdef DEBUG_ENABLED
+#ifdef NETWORK_DEBUG_ENABLED
 #define _D_DBUS _D
 #else
 #define _D_DBUS(s, args...) ({ do { } while (0); })
-#endif /*DEBUG_ENABLED*/
+#endif /*NETWORK_DEBUG_ENABLED*/
 
 static bool check_current_modem(const char *modem_name, int sim_number)
 {
@@ -143,7 +145,7 @@ static int get_current_sim(void)
 
 	if(sim_slot_count == SIM_SLOT_SINGLE) {
 	       _D("It's single sim model");
-	       return -1;
+	       return current_sim;
 	}
 
 	ret_value_msg_if(vconf_get_int(
@@ -186,11 +188,15 @@ static void init_available_modems(void)
 		const char *name;
 		struct modem_state *state = (struct modem_state *)malloc(
 					      sizeof(struct modem_state));
+		if (!state) {
+			_E("Out of memory.");
+			return;
+		}
 		memset(state, 0, sizeof(struct modem_state));
 		dbus_message_iter_get_basic (&iter_array, &name);
 		_D("modem name %s", name);
 		dbus_message_iter_next (&iter_array);
-		state->name = strdup(name);
+		state->name = strndup(name, strlen(name));
 		state->roaming = false;
 		modems = g_slist_prepend(modems, state);
 		if (check_current_modem(state->name, current_sim))
@@ -218,7 +224,7 @@ static void hash_imsi(struct modem_state *modem)
 	}
 	_SD("make hash for imsi %s", modem->imsi);
 	for (i = 0; i < SHA256_DIGEST_LENGTH; i++)
-		sprintf(modem->imsi_hash + (i * 2), "%02x", md[i]);
+		snprintf(modem->imsi_hash + (i * 2), 2, "%02x", md[i]);
 }
 
 static void fill_modem_imsi(struct modem_state *modem)
@@ -262,6 +268,8 @@ static void fill_modem_imsi(struct modem_state *modem)
 	plmn_len = strlen(plmn);
 	dbus_message_iter_next(&iter);
 	dbus_message_iter_get_basic (&iter, &msin);
+	dbus_message_unref(msg);
+	dbus_error_free(&err);
 	_D_DBUS("msin value %d", msin);
 	msin_len = strlen(msin);
 	if (!modem->imsi) { /* it's reinit case */
@@ -324,6 +332,8 @@ static void fill_modem_state(struct modem_state *modem)
 		"Return for %s isn't boolean type as expected", DBUS_FREEDESKTOP_PROPERTIES);
 
 	dbus_message_iter_get_basic (&var, &modem->roaming);
+	dbus_message_unref(msg);
+	dbus_error_free(&err);
 	_D("modem roaming value %d", modem->roaming);
 }
 
@@ -366,6 +376,8 @@ static void fill_protocol(struct modem_state *modem)
 		"Return for %s isn't int type as expected", DBUS_FREEDESKTOP_PROPERTIES);
 
 	dbus_message_iter_get_basic (&var, &modem->protocol);
+	dbus_message_unref(msg);
+	dbus_error_free(&err);
 	_D("modem roaming value %d", modem->protocol);
 }
 
@@ -473,14 +485,21 @@ static void regist_telephony_callbacks(void)
 	GSList *iter;
 	gslist_for_each_item(iter, modems) {
 		struct modem_state *modem = (struct modem_state *)iter->data;
-		modem->path = (char *)malloc(sizeof(DBUS_TELEPHONY_DEFAULT_PATH) + strlen(modem->name) + 2);
-		sprintf(modem->path, "%s/%s", DBUS_TELEPHONY_DEFAULT_PATH, modem->name);
+		size_t path_size = sizeof(DBUS_TELEPHONY_DEFAULT_PATH) + strlen(modem->name) + 2;
+
+		modem->path = (char *)malloc(path_size);
+		if (!modem->path) {
+			_E("Out of memory, malloc failed");
+			return;
+		}
+		snprintf(modem->path, path_size, "%s/%s", DBUS_TELEPHONY_DEFAULT_PATH, modem->name);
 		ret = register_edbus_signal_handler(modem->path,
 			DBUS_FREEDESKTOP_PROPERTIES,
 			DBUS_TELEPHONY_PROPERTIES_CHANGED,
 			edbus_telephony_changed, modem);
 		if (ret != RESOURCED_ERROR_NONE) {
 			_E("Could not register edbus path %s", modem->path);
+			free(modem->path);
 			modem->path = NULL;
 			continue;
 		}
@@ -514,14 +533,21 @@ static void regist_sim_status_callbacks(void)
 	GSList *iter;
 	gslist_for_each_item(iter, modems) {
 		struct modem_state *modem = (struct modem_state *)iter->data;
-		modem->path = (char *)malloc(sizeof(DBUS_TELEPHONY_DEFAULT_PATH) + strlen(modem->name) + 2);
-		sprintf(modem->path, "%s/%s", DBUS_TELEPHONY_DEFAULT_PATH, modem->name);
+		size_t path_size = sizeof(DBUS_TELEPHONY_DEFAULT_PATH) + strlen(modem->name) + 2;
+
+		modem->path = (char *)malloc(path_size);
+		if (!modem->path) {
+			_E("Out of memory");
+			return;
+		}
+		snprintf(modem->path, path_size, "%s/%s", DBUS_TELEPHONY_DEFAULT_PATH, modem->name);
 		ret = register_edbus_signal_handler(modem->path,
 			DBUS_TELEPHONY_SIM_INTERFACE,
 			DBUS_TELEPHONY_STATUS,
 			edbus_sim_status_changed, modem);
 		if (ret != RESOURCED_ERROR_NONE) {
 			_E("Could not register edbus path %s", modem->path);
+			free(modem->path);
 			modem->path = NULL;
 			continue;
 		}
@@ -530,7 +556,7 @@ static void regist_sim_status_callbacks(void)
 
 static void init_telephony(void)
 {
-	execute_once {
+	if (!modems) {
 		init_available_modems();
 		init_roaming_states();
 		init_modem_imsi();
@@ -542,12 +568,26 @@ static void init_telephony(void)
 
 resourced_roaming_type get_current_roaming(void)
 {
-	init_telephony(); /* one time lazy initialization */
-	ret_value_msg_if(!current_modem, RESOURCED_ROAMING_UNKNOWN,
-		"There is no current modem!");
+	static bool system_info_read = false;
+	static bool roaming = false;
 
-	return current_modem->roaming ? RESOURCED_ROAMING_ENABLE:
-		RESOURCED_ROAMING_DISABLE;
+	/* Just read roaming condition once */
+	if (!system_info_read) {
+		int ret = system_info_get_custom_bool(ROAMING_FEATURE, &roaming);
+		if (ret != SYSTEM_INFO_ERROR_NONE)
+			_E("get %s failed!!!, ret: %d, roaming %d", ROAMING_FEATURE, ret, (int)roaming);
+		system_info_read = true;
+	}
+
+	if (roaming) {
+		init_telephony(); /* one time lazy initialization */
+		ret_value_msg_if(!current_modem, RESOURCED_ROAMING_UNKNOWN,
+			"There is no current modem!");
+		if (current_modem->roaming)
+			return RESOURCED_ROAMING_ENABLE;
+	}
+
+	return RESOURCED_ROAMING_DISABLE;
 }
 
 char *get_imsi_hash(char *imsi)

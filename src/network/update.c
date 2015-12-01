@@ -64,10 +64,10 @@ static dbus_bool_t dbus_call_method(const char *dest, const char *path,
 
 API resourced_ret_c resourced_update_statistics(void)
 {
-	dbus_bool_t ret = dbus_call_method(BUS_NAME,
-					    RESOURCED_PATH_NETWORK,
-					    RESOURCED_INTERFACE_NETWORK,
-					    RESOURCED_NETWORK_UPDATE);
+	dbus_bool_t ret = dbus_call_method(RESOURCED_DBUS_BUS_NAME,
+					   RESOURCED_PATH_NETWORK,
+					   RESOURCED_INTERFACE_NETWORK,
+					   RESOURCED_NETWORK_UPDATE);
 	if (ret == FALSE) {
 		_D("Error resourced update statistics\n");
 		return RESOURCED_ERROR_FAIL;

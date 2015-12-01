@@ -36,6 +36,8 @@
 
 #include "resourced.h"
 
+#define PATH_TO_NET_CGROUP_DIR "/sys/fs/cgroup/net_cls"
+
 typedef GArray int_array;
 
 /**

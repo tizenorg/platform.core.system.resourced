@@ -31,7 +31,7 @@
 #include <stdlib.h>
 #include <sys/socket.h>
 
-struct counter_arg *init_counter_arg(struct daemon_opts *opts)
+struct counter_arg *init_counter_arg(struct net_counter_opts *opts)
 {
 	struct counter_arg *result =
 		(struct counter_arg *)calloc(1, sizeof(struct counter_arg));

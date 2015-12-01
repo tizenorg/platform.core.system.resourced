@@ -35,8 +35,8 @@
 #include "const.h"
 #include "timer-slack.h"
 #include "notifier.h"
-#include "proc-main.h"
-#include "proc-process.h"
+#include "procfs.h"
+#include "proc-common.h"
 
 #include <resourced.h>
 #include <trace.h>
@@ -92,16 +92,14 @@ static int timer_slack_write(char *sub_cgroup, char *node, int val)
 	char path_buf[MAX_PATH_LENGTH];
 	int ret;
 	if (sub_cgroup) {
-		strncpy(path_buf, TIMER_CGROUP_PATH, sizeof(TIMER_CGROUP_PATH));
-		strcat(path_buf, "/");
-		strcat(path_buf, sub_cgroup);
+		snprintf(path_buf, sizeof(path_buf), "%s/%s", TIMER_CGROUP_PATH, sub_cgroup);
 		ret = cgroup_write_node(path_buf, node, val);
 	} else
 		ret = cgroup_write_node(TIMER_CGROUP_PATH, node, val);
 	return ret;
 }
 
-static int launch_service(void *data)
+static int control_timer_state(void *data)
 {
 	struct proc_status *p_data = (struct proc_status*)data;
 	int ret;
@@ -240,7 +238,7 @@ static int resourced_timer_slack_init(void *data)
 
 	timer_slack_cgroup_init();
 
-	register_notifier(RESOURCED_NOTIFIER_SERVICE_LAUNCH, launch_service);
+	register_notifier(RESOURCED_NOTIFIER_SERVICE_LAUNCH, control_timer_state);
 	register_notifier(RESOURCED_NOTIFIER_APP_RESUME, wakeup_timer_state);
 	register_notifier(RESOURCED_NOTIFIER_APP_FOREGRD, wakeup_timer_state);
 	register_notifier(RESOURCED_NOTIFIER_APP_BACKGRD, background_timer_state);
@@ -248,12 +246,14 @@ static int resourced_timer_slack_init(void *data)
 	register_notifier(RESOURCED_NOTIFIER_APP_INACTIVE, inactive_timer_state);
 	register_notifier(RESOURCED_NOTIFIER_LCD_ON, timer_lcd_on);
 	register_notifier(RESOURCED_NOTIFIER_LCD_OFF, timer_lcd_off);
+	register_notifier(RESOURCED_NOTIFIER_WIDGET_FOREGRD, wakeup_timer_state);
+	register_notifier(RESOURCED_NOTIFIER_WIDGET_BACKGRD, control_timer_state);
 	return RESOURCED_ERROR_NONE;
 }
 
 static int resourced_timer_slack_finalize(void *data)
 {
-	unregister_notifier(RESOURCED_NOTIFIER_SERVICE_LAUNCH, launch_service);
+	unregister_notifier(RESOURCED_NOTIFIER_SERVICE_LAUNCH, control_timer_state);
 	unregister_notifier(RESOURCED_NOTIFIER_APP_RESUME, wakeup_timer_state);
 	unregister_notifier(RESOURCED_NOTIFIER_APP_FOREGRD, wakeup_timer_state);
 	unregister_notifier(RESOURCED_NOTIFIER_APP_BACKGRD, background_timer_state);
@@ -261,10 +261,12 @@ static int resourced_timer_slack_finalize(void *data)
 	unregister_notifier(RESOURCED_NOTIFIER_APP_INACTIVE, inactive_timer_state);
 	unregister_notifier(RESOURCED_NOTIFIER_LCD_ON, timer_lcd_on);
 	unregister_notifier(RESOURCED_NOTIFIER_LCD_OFF, timer_lcd_off);
+	unregister_notifier(RESOURCED_NOTIFIER_WIDGET_FOREGRD, wakeup_timer_state);
+	unregister_notifier(RESOURCED_NOTIFIER_WIDGET_BACKGRD, control_timer_state);
 	return RESOURCED_ERROR_NONE;
 }
 
-static const struct module_ops timer_modules_ops = {
+static struct module_ops timer_modules_ops = {
 	.priority = MODULE_PRIORITY_NORMAL,
 	.name = TIMER_MODULE_NAME,
 	.init = resourced_timer_slack_init,

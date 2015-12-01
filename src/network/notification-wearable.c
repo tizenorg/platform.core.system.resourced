@@ -64,6 +64,9 @@ static int show_restriction_popup(const char *value, data_usage_quota *du_quota)
 		return RESOURCED_ERROR_FAIL;
 	}
 
+	if (restriction_read_quota(&quota_limit) < 0)
+		_E("Failed to read a quota value");
+
 	if (quota_limit <= 0) {
 		_D("quota_limit is invalid\n");
 		return RESOURCED_ERROR_FAIL;
@@ -77,7 +80,8 @@ static int show_restriction_popup(const char *value, data_usage_quota *du_quota)
 	pa[2] = NOTI_KEY_LIMIT;
 	pa[3] = buf;
 
-	ret = dbus_method_async(SYSTEM_POPUP_BUS_NAME, SYSTEM_POPUP_PATH_WATCHDOG, SYSTEM_POPUP_IFACE_WATCHDOG, METHOD_CALL_POPUP, "ssss", pa);
+	ret = dbus_method_async(SYSTEM_POPUP_BUS_NAME, SYSTEM_POPUP_PATH_SYSTEM,
+	    SYSTEM_POPUP_IFACE_SYSTEM, METHOD_CALL_POPUP, "ssss", pa);
 	if (ret < 0)
 		_E("no message : failed to setting %d", ret);
 	return ret;

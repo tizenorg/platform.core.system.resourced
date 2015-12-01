@@ -39,7 +39,7 @@ static resourced_ret_c send_join_message(const char *interface,
 	int ret, i = 0;
 
 	do {
-		msg = dbus_method_sync(BUS_NAME, RESOURCED_PATH_NETWORK,
+		msg = dbus_method_sync(RESOURCED_DBUS_BUS_NAME, RESOURCED_PATH_NETWORK,
 				       RESOURCED_INTERFACE_NETWORK,
 				       interface,
 				       format_str, params);

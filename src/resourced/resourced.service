@@ -1,0 +1,13 @@
+[Unit]
+Description=Resource management daemon
+After=wm_ready.service
+
+[Service]
+Type=notify
+ExecStart=/usr/bin/resourced
+MemoryLimit=30M
+Restart=on-failure
+RestartSec=0
+
+[Install]
+WantedBy=multi-user.target
