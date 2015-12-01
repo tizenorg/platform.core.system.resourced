@@ -27,6 +27,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include "smaps.h"
 #include "proc-usage-stats-helper.h"
 #include "macro.h"
 #include "trace.h"
@@ -71,43 +72,28 @@ error:
 
 static int proc_get_smaps_info(int pid, struct process_memory_info_s *mem_info)
 {
-	FILE *smaps;
-	char buf[1024];
-	int value;
+	_cleanup_smaps_free_ struct smaps *maps = NULL;
+	int r;
 
-	smaps = NULL;
-
-	if (!mem_info)
-		goto error;
-
-	snprintf(buf, sizeof(buf), "/proc/%d/smaps", pid);
-	smaps = fopen(buf, "r");
-	if (!smaps)
-		goto error;
-
-	while (fgets(buf, sizeof(buf), smaps) != NULL) {
-		if (sscanf(buf, "Rss: %d kB", &value) == 1)
-			mem_info->rss += kBtoKiB(value);
-		else if (sscanf(buf, "Pss: %d kB", &value) == 1)
-			mem_info->pss += kBtoKiB(value);
-		else if (sscanf(buf, "Shared_Clean: %d kB", &value) == 1)
-			mem_info->shared_clean += kBtoKiB(value);
-		else if (sscanf(buf, "Shared_Dirty: %d kB", &value) == 1)
-			mem_info->shared_dirty += kBtoKiB(value);
-		else if (sscanf(buf, "Private_Clean: %d kB", &value) == 1)
-			mem_info->private_clean += kBtoKiB(value);
-		else if (sscanf(buf, "Private_Dirty: %d kB", &value) == 1)
-			mem_info->private_dirty += kBtoKiB(value);
+	r = smaps_get(pid, &maps, (SMAPS_MASK_RSS |
+				   SMAPS_MASK_PSS |
+				   SMAPS_MASK_SHARED_CLEAN |
+				   SMAPS_MASK_SHARED_DIRTY |
+				   SMAPS_MASK_PRIVATE_CLEAN |
+				   SMAPS_MASK_PRIVATE_DIRTY));
+	if (r < 0) {
+		_E("error reading /proc/%d/smaps file", pid);
+		return RESOURCED_ERROR_FAIL;
 	}
-	fclose(smaps);
+
+	mem_info->rss = maps->sum[SMAPS_ID_RSS];
+	mem_info->pss = maps->sum[SMAPS_ID_PSS];
+	mem_info->shared_clean = maps->sum[SMAPS_ID_SHARED_CLEAN];
+	mem_info->shared_dirty = maps->sum[SMAPS_ID_SHARED_DIRTY];
+	mem_info->private_clean = maps->sum[SMAPS_ID_PRIVATE_CLEAN];
+	mem_info->private_dirty = maps->sum[SMAPS_ID_PRIVATE_DIRTY];
 
 	return RESOURCED_ERROR_NONE;
-
-error:
-	if (smaps)
-		fclose(smaps);
-	_E("error reading /proc/%d/smaps file", pid);
-	return RESOURCED_ERROR_FAIL;
 }
 
 /* Helper functions to get the needed memory usage info. */
@@ -247,8 +233,10 @@ void proc_free_runtime_info_task(struct runtime_info_task *rt_task)
 	if (rt_task->usage_info_list)
 		free(rt_task->usage_info_list);
 
-	close(rt_task->pipe_fds[0]);
-	close(rt_task->pipe_fds[1]);
+	if (rt_task->pipe_fds[0] >= 0)
+		close(rt_task->pipe_fds[0]);
+	if (rt_task->pipe_fds[1] >= 0)
+		close(rt_task->pipe_fds[1]);
 
 	dbus_message_unref(rt_task->task_msg);
 

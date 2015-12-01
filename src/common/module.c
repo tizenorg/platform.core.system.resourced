@@ -26,6 +26,7 @@
 #include "module.h"
 #include "resourced.h"
 #include "trace.h"
+#include "edbus-handler.h"
 
 #include <glib.h>
 
@@ -58,13 +59,13 @@ const struct module_ops *find_module(const char *name)
 	return NULL;
 }
 
-void modules_check_runtime_support(void *data)
+void modules_check_runtime_support(void UNUSED *data)
 {
-	GSList *iter;
+	GSList *iter, *next;
 	const struct module_ops *module;
 	int ret_code = RESOURCED_ERROR_NONE;
 
-	gslist_for_each_item(iter, modules_list) {
+	gslist_for_each_safe(modules_list, iter, next, module) {
 		module = (const struct module_ops *)iter->data;
 		_D("check runtime support [%s] module\n", module->name);
 
@@ -80,35 +81,56 @@ void modules_check_runtime_support(void *data)
 	}
 }
 
-void modules_init(void *data)
+static void module_initcall_level(void *data, int priority)
 {
 	GSList *iter;
-	const struct module_ops *module;
+	struct module_ops *module;
 	int ret_code = RESOURCED_ERROR_NONE;
 
 	gslist_for_each_item(iter, modules_list) {
 		module = (struct module_ops *)iter->data;
-		_D("Initialize [%s] module\n", module->name);
-		if (module->init)
+		if (priority != MODULE_PRIORITY_ALL &&
+		    module->priority != priority)
+			continue;
+		if (module->init && !module->initalized) {
+			_D("Initialized [%s] module\n", module->name);
 			ret_code = module->init(data);
+			module->initalized = MODULE_INITIALIZED;
+		}
 		if (ret_code < 0)
 			_E("Fail to initialize [%s] module\n", module->name);
 	}
 }
 
+void modules_init(void *data)
+{
+	module_initcall_level(data, MODULE_PRIORITY_ALL);
+}
+
+void modules_early_init(void *data)
+{
+	module_initcall_level(data, MODULE_PRIORITY_EARLY);
+}
+
+void modules_late_init(void *data)
+{
+	module_initcall_level(data, MODULE_PRIORITY_HIGH);
+	module_initcall_level(data, MODULE_PRIORITY_NORMAL);
+}
+
 void modules_exit(void *data)
 {
 	GSList *iter;
-	/* Deinitialize in reverse order */
-	GSList *reverse_list = g_slist_reverse(modules_list);
-	const struct module_ops *module;
+	struct module_ops *module;
 	int ret_code = RESOURCED_ERROR_NONE;
 
-	gslist_for_each_item(iter, reverse_list) {
+	gslist_for_each_item(iter, modules_list) {
 		module = (struct module_ops *)iter->data;
 		_D("Deinitialize [%s] module\n", module->name);
-		if (module->exit)
+		if (module->exit) {
 			ret_code = module->exit(data);
+			module->initalized = MODULE_NONINITIALIZED;
+		}
 		if (ret_code < 0)
 			_E("Fail to deinitialize [%s] module\n", module->name);
 	}
@@ -125,4 +147,52 @@ void modules_dump(FILE *fp, int mode)
 		if (module->dump)
 			module->dump(fp, mode, module->dump_data);
 	}
+}
+
+static DBusMessage *edbus_list_active_modules_handler(E_DBus_Object *obj, DBusMessage *msg)
+{
+	DBusMessage *reply;
+	DBusMessageIter iter, array_iter;
+	struct module_ops *module;
+	GSList *list_iter;
+
+	reply = dbus_message_new_method_return(msg);
+	dbus_message_iter_init_append(reply, &iter);
+	if (!dbus_message_iter_open_container(&iter,
+					      DBUS_TYPE_ARRAY,
+					      DBUS_TYPE_STRING_AS_STRING,
+					      &array_iter)) {
+		_E("Failed to open DBus container");
+		goto finish;
+	}
+
+	gslist_for_each_item(list_iter, modules_list) {
+		module = (struct module_ops *)list_iter->data;
+
+		if (!dbus_message_iter_append_basic(&array_iter,
+						    DBUS_TYPE_STRING,
+						    &module->name)) {
+			_E("Failed to append string to DBus container");
+			goto finish;
+		}
+	}
+
+	if (!dbus_message_iter_close_container(&iter, &array_iter))
+		_E("Failed to close DBus container");
+
+finish:
+	return reply;
+}
+
+static struct edbus_method resourced_module_methods[] = {
+	{ "ListActiveModuels",	NULL,	"as",	edbus_list_active_modules_handler	},
+	{ NULL,			NULL,	NULL,	NULL					},
+	/* Add methods here */
+};
+
+int modules_add_methods(void)
+{
+	return edbus_add_methods(RESOURCED_DBUS_OBJECT_PATH,
+				 resourced_module_methods,
+				 ARRAY_SIZE(resourced_module_methods));
 }

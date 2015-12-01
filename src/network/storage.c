@@ -63,9 +63,18 @@ static void handle_on_iface(const int ifindex, resourced_option_state state)
 	iftype = get_iftype(ifindex);
 	_D("Handling network interface ifindex:%d, state: %d, iftype: %d",
 			ifindex, state, iftype);
-	sqlite3_bind_int(update_iface_query, 1, iftype);
-	sqlite3_bind_int(update_iface_query, 2, state);
-
+	if (sqlite3_bind_int(update_iface_query, 1, iftype)
+	    != SQLITE_OK) {
+		_E("Can not bind iftype:%d for preparing statement",
+			iftype);
+		return;
+	}
+	if (sqlite3_bind_int(update_iface_query, 2, state)
+	    != SQLITE_OK) {
+		_E("Can not bind state:%d for preparing statement",
+			state);
+		return;
+	}
 	if (sqlite3_step(update_iface_query) != SQLITE_DONE)
 		_E("Failed to record iface state. %s",
 			sqlite3_errmsg(resourced_get_database()));

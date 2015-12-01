@@ -6,7 +6,8 @@ PROJECT(${PROJECT})
 IF("${NETWORK_MODULE}" STREQUAL "OFF")
 	INCLUDE_DIRECTORIES(${INCLUDE_PUBLIC_DIR}
 			${INCLUDE_COMMON_DIR})
-	SET(SOURCES ${NETWORK_SOURCE_DIR}/join-dummy.c)
+	SET(SOURCES ${NETWORK_SOURCE_DIR}/join-dummy.c
+		    ${NETWORK_SOURCE_DIR}/network-dummy.c)
 	ADD_LIBRARY(${PROJECT} SHARED ${SOURCES})
 	TARGET_LINK_LIBRARIES(${PROJECT} ${shared_pkgs_LDFLAGS})
 
@@ -17,6 +18,7 @@ IF("${NETWORK_MODULE}" STREQUAL "OFF")
 			CLEAN_DIRECT_OUTPUT 1
 	)
 
+	INSTALL(FILES ${INCLUDE_PUBLIC_DIR}/data_usage.h DESTINATION include/system)
 	INSTALL(TARGETS ${PROJECT} DESTINATION ${LIB_INSTALL_DIR})
 
 	RETURN()
@@ -25,6 +27,8 @@ ENDIF()
 INCLUDE_DIRECTORIES(${INCLUDE_PUBLIC_DIR}
 		${NETWORK_SOURCE_DIR}/include
 		${RESOURCED_INCLUDEDIR}
+		${RESOURCED_SOURCE_DIR}
+		${INCLUDE_MEMORY_DIR}
 	)
 
 SET (REQUIRES_LIST dlog
@@ -35,6 +39,7 @@ SET (REQUIRES_LIST dlog
 		   edbus
 		   openssl
 		   tapi
+		   capi-system-info
 )
 
 INCLUDE(FindPkgConfig)
@@ -44,9 +49,7 @@ FOREACH(flag ${pkgs_${NETWORK}_CFLAGS})
     SET(EXTRA_CFLAGS "${EXTRA_CFLAGS} ${flag}")
 ENDFOREACH(flag)
 
-SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${EXTRA_CFLAGS} -fPIC -Wall -Werror")
-SET(CMAKE_C_FLAGS_DEBUG "-O0 -g")
-
+SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${EXTRA_CFLAGS} -fPIC")
 
 IF("${ARCH}" STREQUAL "arm")
     ADD_DEFINITIONS("-DTARGET")
@@ -110,6 +113,7 @@ TARGET_LINK_LIBRARIES(app-stat net-cls)
 
 ADD_LIBRARY(net-iface STATIC
   ${net-iface_SOURCES})
+TARGET_LINK_LIBRARIES(net-iface resourced_shared)
 
 ADD_LIBRARY(telephony STATIC
   ${telephony_SOURCES})
@@ -137,18 +141,20 @@ SET(${PROJECT}_HEADERS
   )
 
 SET(${PROJECT}_SOURCES
+  ${COMMON_SOURCE_DIR}/trace.c
   ${COMMON_SOURCE_DIR}/cgroup.c
   ${COMMON_SOURCE_DIR}/appid-helper.c
   ${COMMON_SOURCE_DIR}/file-helper.c
   ${NETWORK_SOURCE_DIR}/foreach.c
   ${NETWORK_SOURCE_DIR}/join.c
-  ${NETWORK_SOURCE_DIR}/options.c
+  ${NETWORK_SOURCE_DIR}/options-public.c
   ${NETWORK_SOURCE_DIR}/reset.c
   ${NETWORK_SOURCE_DIR}/restriction.c
   ${NETWORK_SOURCE_DIR}/update.c
   ${NETWORK_SOURCE_DIR}/main.c
   ${NETWORK_SOURCE_DIR}/nl-helper.c
   ${NETWORK_SOURCE_DIR}/restriction-helper.c
+  ${NETWORK_SOURCE_DIR}/iptables-rule.c
   ${quota_SOURCES}
   )
 
@@ -174,7 +180,6 @@ FOREACH(flag ${shared_pkgs_CFLAGS})
 ENDFOREACH(flag)
 
 SET(EXTRA_CFLAGS "${EXTRA_CFLAGS} -fPIC")
-
 SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${EXTRA_CFLAGS}")
 
 ADD_LIBRARY(${PROJECT} SHARED
@@ -191,11 +196,12 @@ SET_TARGET_PROPERTIES(${PROJECT}
      CLEAN_DIRECT_OUTPUT 1
 )
 
-ADD_EXECUTABLE(datausagetool ${UTILS_SOURCE_DIR}/datausage-tool.c)
+ADD_EXECUTABLE(datausagetool
+	${UTILS_SOURCE_DIR}/datausage-tool.c
+	)
 TARGET_LINK_LIBRARIES(datausagetool
 		      ${PROJECT}
-		      ${COMMON_SOURCE_DIR}/config-parser.c
-		      #	      ${NETWORK_SOURCE_DIR}/app-stat.c
+		      resourced_shared
 		      net-iface
 		      )
 INSTALL(TARGETS datausagetool

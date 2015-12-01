@@ -35,6 +35,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#define NFACCT_NAME_MAX 32
+
 typedef enum {
 	NFACCT_COUNTER_UNKNOWN,
 	NFACCT_COUNTER_IN = (1 << 1),
@@ -82,7 +84,7 @@ enum nfnl_acct_flags {
  * But ANSI C doesn't support inheritance.
  */
 struct nfacct_rule {
-	char name[MAX_NAME_LENGTH];
+	char name[NFACCT_NAME_MAX];
 	char ifname[MAX_IFACE_LENGTH];
 
 	pid_t pid;
@@ -96,6 +98,12 @@ struct nfacct_rule {
 	int quota_id;
 	resourced_roaming_type roaming;
 	resourced_restriction_state rst_state;
+
+	/*
+	 * in most cases jump is evalutation based
+	 * on intend, but not always
+	 * */
+	nfacct_rule_jump jump;
 };
 
 struct counter_arg;

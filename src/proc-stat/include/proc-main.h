@@ -27,71 +27,31 @@
 
 #include <unistd.h>
 #include <glib.h>
+#include <string.h>
 
-#include "daemon-options.h"
+#include "proc-common.h"
 #include "resourced.h"
 #include "const.h"
-#include "memcontrol.h"
+#include "proc_stat.h"
 
-#define PROC_BUF_MAX 64
-#define PROC_NAME_MAX 1024
-
-typedef GSList *pid_info_list;
-
-enum application_type {
-	PROC_TYPE_UNKNOWN,
-	PROC_TYPE_GUI,
-	PROC_TYPE_SERVICE,
-	PROC_TYPE_GROUP,
+struct proc_module_ops {
+	char *name;
+	int (*init) (void *data);
+	int (*exit) (void *data);
 };
 
-struct pid_info_t {
-	pid_t pid;
-	enum application_type type; /* not so fancy */
-};
+#define PROC_MODULE_REGISTER(module) \
+static void __attribute__ ((constructor)) module_init(void) \
+{ \
+	proc_module_add(module); \
+} \
+static void __attribute__ ((destructor)) module_exit(void) \
+{ \
+	proc_module_remove(module); \
+}
 
-struct proc_process_info_t {
-	char appid[MAX_PATH_LENGTH];
-	char pkgname[MAX_PATH_LENGTH];
-	pid_t main_pid;
-	pid_info_list pids;
-	int proc_exclude;
-	int runtime_exclude;
-	int memcg_idx;
-	struct memcg_info_t *memcg_info;
-	int type;
-};
-
-struct proc_status {
-	pid_t pid;
-	char* appid;
-	struct proc_process_info_t *ppi;
-};
-
-enum proc_exclude_type {
-	PROC_EXCLUDE,
-	PROC_INCLUDE,
-};
-
-enum {
-	LCD_STATE_ON,
-	LCD_STATE_OFF,
-};
-
-enum proc_prelaunch_flags {
-	PROC_NONE	= 0x00u,
-	PROC_LARGEMEMORY	= 0x01u,	/* for mark large memory */
-	PROC_SIGTERM	= 0x02u,	/* for make killer kill victim by SIGTERM */
-	PROC_WEBAPP	= 0x04u,	/* for checking webapp */
-};
-
-extern int current_lcd_state;
-extern GSList *proc_process_list;
-
-
-void proc_add_pid_list(struct proc_process_info_t *ppi, int pid, enum application_type type);
-
-int resourced_proc_init(const struct daemon_opts *opts);
+void proc_module_add(const struct proc_module_ops *mod);
+void proc_module_remove(const struct proc_module_ops *mod);
 
 /**
  * @desc This function handle PROC_ typs @see
@@ -100,21 +60,28 @@ int resourced_proc_action(int type, int argnum, char **arg);
 
 int resourced_proc_excluded(const char *app_name);
 
-int resourced_proc_status_change(int type, pid_t pid, char* app_name,  char* pkg_name);
+int resourced_proc_status_change(int status, pid_t pid, char* app_name,  char* pkg_name, int apptype);
 
 void resourced_proc_dump(int type, const char *path);
 
-struct proc_process_info_t *find_process_info(const char *appid, const pid_t pid, const char *pkgid);
-
-struct pid_info_t *new_pid_info(const pid_t pid, const int type);
-
-void proc_set_process_info_memcg(struct proc_process_info_t *ppi,
-	int memcg_idx, struct memcg_info_t *memcg_info);
 resourced_ret_c proc_set_runtime_exclude_list(const int pid, int type);
-struct proc_process_info_t *proc_add_process_list(const int type, const pid_t pid, const char *appid, const char *pkgid);
-struct proc_process_info_t * proc_create_process_list(const char *appid, const char *pkgid);
-int proc_remove_process_list(const pid_t pid);
-void proc_set_apptype(const char *appid, const char *pkgid, int type);
-int proc_get_apptype(const pid_t pid);
+
+struct proc_app_info *proc_create_app_list(const char *appid, const char *pkgid);
+
+int proc_remove_app_list(const pid_t pid);
+
+char *proc_get_appid_from_pid(const pid_t pid);
+
+void proc_set_group(pid_t onwerpid, pid_t childpid, char *pkgname);
+
+static inline gint compare_pid(gconstpointer a, gconstpointer b)
+{
+	const struct child_pid *pida = (struct child_pid *)a;
+	const struct child_pid *pidb = (struct child_pid *)b;
+	return pida->pid == pidb->pid ? 0 :
+		pida->pid > pidb->pid ? 1 : -1;
+}
+
+int proc_get_state(int type, pid_t pid, char *buf, int len);
 
 #endif /*__PROC_MAIN_H__ */

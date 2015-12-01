@@ -45,7 +45,7 @@ static sqlite3 *database;
 static void librsml_initialize(void)
 {
 	_D("librsml_initialize");
-
+	database = NULL;
 	if (dbus_threads_init_default() != TRUE)
 		_E("Failed to initialize dbus threads support");
 }
@@ -91,6 +91,8 @@ API void libresourced_db_initialize_once(void)
 
 static void librsml_deinitialize(void)
 {
+	if (database == NULL)
+		return;
 	finalize_datausage_reset();
 	finalize_datausage_foreach();
 	finalize_datausage_restriction();

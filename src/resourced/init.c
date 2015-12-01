@@ -29,6 +29,7 @@
 #include "cgroup.h"
 #include "init.h"
 #include "macro.h"
+#include "module.h"
 #include "module-data.h"
 #include "proc-main.h"
 #include "proc-monitor.h"
@@ -40,103 +41,9 @@
 #include <getopt.h>
 #include <signal.h>
 
-static struct daemon_opts opts = { 1,
-				   1,
-				   COUNTER_UPDATE_PERIOD,
-				   FLUSH_PERIOD,
-				   RESOURCED_DEFAULT_STATE,
-				   0};
-
-#define SWAP_MAX_ARG_SIZE 16
-
-static char swap_arg[SWAP_ARG_END][SWAP_MAX_ARG_SIZE] = { "swapoff",
-				    "swapon",};
-
 static void print_root_usage()
 {
 	puts("You must be root to start it.");
-}
-
-static void print_usage()
-{
-	puts("resourced [Options]");
-	puts("       Application options:");
-	printf
-	    ("-u [--update-period] - time interval for updating,"
-	     " %d by default\n", opts.update_period);
-	printf
-	    ("-f [--flush-period] - time interval for storing data at database,"
-	     "%d by default\n", opts.flush_period);
-	printf("-s [--start-daemon] - start as daemon, %d by default\n",
-	       opts.start_daemon);
-	puts("-v [--version] - program version");
-	puts("-h [--help] - application help");
-	printf("-c string [--swapcontrol=string] - control swap policy and "
-	       "select sting %s, %s by default\n",
-	       swap_arg[SWAP_OFF], swap_arg[SWAP_ON]);
-}
-
-static void print_version()
-{
-	printf("Version number: %d.%d.%d\n",
-		MAJOR_VERSION, MINOR_VERSION, PATCH_VERSION);
-}
-
-static int parse_cmd(int argc, char **argv)
-{
-	const char *optstring = ":hvu:s:f:cw";
-	const struct option options[] = {
-		{"help", no_argument, 0, 'h'},
-		{"version", no_argument, 0, 'v'},
-		{"update-period", required_argument, 0, 'u'},
-		{"flush-period", required_argument, 0, 'f'},
-		{"start-daemon", required_argument, 0, 's'},
-		{"swapcontrol", required_argument, 0, 'c'},
-		{"enable-watchodg", no_argument, 0, 'w'},
-		{0, 0, 0, 0}
-	};
-	int longindex, retval, i;
-
-	while ((retval =
-		getopt_long(argc, argv, optstring, options, &longindex)) != -1)
-		switch (retval) {
-		case 'h':
-		case '?':
-			print_usage();
-			return RESOURCED_ERROR_FAIL;
-		case 'v':
-			print_version();
-			return RESOURCED_ERROR_FAIL;
-		case 'u':
-			opts.update_period = atoi(optarg);
-			break;
-		case 'f':
-			opts.flush_period = atoi(optarg);
-			break;
-		case 's':
-			opts.start_daemon = atoi(optarg);
-			break;
-		case 'c':
-			for (i = 0; i < SWAP_ARG_END; i++)
-				if (optarg && !strncmp(optarg, swap_arg[i],
-						       SWAP_MAX_ARG_SIZE)) {
-					opts.enable_swap = i;
-					_D("argment swaptype = %s",
-					   swap_arg[i]);
-					break;
-				}
-			break;
-		case 'o':
-			break;
-		case 'w':
-			proc_set_watchdog_state(PROC_WATCHDOG_ENABLE);
-			break;
-		default:
-			printf("Unknown option %c\n", (char)retval);
-			print_usage();
-			return RESOURCED_ERROR_FAIL;
-		}
-	return RESOURCED_ERROR_NONE;
 }
 
 static int assert_root(void)
@@ -150,18 +57,8 @@ static int assert_root(void)
 
 static void sig_term_handler(int sig)
 {
-	struct shared_modules_data *shared_data = get_shared_modules_data();
-
-	_SD("sigterm or sigint received");
-	if (shared_data && shared_data->carg && shared_data->carg->ecore_timer) {
-		SET_BIT(shared_data->carg->opts->state, RESOURCED_FORCIBLY_QUIT_STATE);
-		/* save data on exit, it's impossible to do in fini
-		 * module function, due it executes right after ecore stopped */
-#ifdef NETWORK_MODULE
-		reschedule_count_timer(shared_data->carg, 0);
-#endif
-		ecore_timer_thaw(shared_data->darg->ecore_quit);
-	}
+	_E("sigterm or sigint received");
+	resourced_quit_mainloop();
 }
 
 static void add_signal_handler(void)
@@ -172,27 +69,28 @@ static void add_signal_handler(void)
 
 static Eina_Bool quit_main_loop(void *user_data)
 {
-	_D("Quit main loop");
 	ecore_main_loop_quit();
 	return ECORE_CALLBACK_CANCEL;
 }
 
 int resourced_init(struct daemon_arg *darg)
 {
-	int ret_code;
+	int ret;
 
 	ret_value_msg_if(darg == NULL, RESOURCED_ERROR_INVALID_PARAMETER,
 			 "Invalid daemon argument\n");
-	ret_code = assert_root();
-	ret_value_if(ret_code < 0, RESOURCED_ERROR_FAIL);
+	ret = assert_root();
+	ret_value_if(ret < 0, RESOURCED_ERROR_FAIL);
 	ecore_init();
-	darg->opts = &opts;
-	ret_code = parse_cmd(darg->argc, darg->argv);
-	ret_value_msg_if(ret_code < 0, RESOURCED_ERROR_FAIL,
-			 "Error parse cmd arguments\n");
-	_D("argment swaptype = %s", swap_arg[opts.enable_swap]);
 	add_signal_handler();
 	edbus_init();
+
+	ret = modules_add_methods();
+	if (ret < 0) {
+		_E("Failed to add resourced module DBus method calls");
+		return ret;
+	}
+
 	/* we couldn't create timer in signal callback, due ecore_timer_add
 	 * alocates memory */
 	darg->ecore_quit = ecore_timer_add(TIME_TO_SAFE_DATA, quit_main_loop, NULL);
@@ -201,13 +99,32 @@ int resourced_init(struct daemon_arg *darg)
 	return RESOURCED_ERROR_NONE;
 }
 
-int resourced_deinit(struct daemon_arg *darg)
+int resourced_deinit(void)
 {
 	ecore_shutdown();
 	edbus_exit();
-	ret_value_msg_if(darg == NULL, RESOURCED_ERROR_INVALID_PARAMETER,
-			 "Invalid daemon argument\n");
 	return RESOURCED_ERROR_NONE;
+}
+
+void resourced_quit_mainloop(void)
+{
+	static bool resourced_quit;
+
+	if (resourced_quit)
+		return;
+	resourced_quit = true;
+
+	struct shared_modules_data *shared_data = get_shared_modules_data();
+
+	if (shared_data && shared_data->carg && shared_data->carg->ecore_timer) {
+		SET_BIT(shared_data->carg->opts->state, RESOURCED_FORCIBLY_QUIT_STATE);
+		/* save data on exit, it's impossible to do in fini
+		 * module function, due it executes right after ecore stopped */
+#ifdef NETWORK_MODULE
+		reschedule_count_timer(shared_data->carg, 0);
+#endif
+	}
+	ecore_timer_thaw(shared_data->darg->ecore_quit);
 }
 
 void set_daemon_net_block_state(const enum traffic_restriction_type rst_type,
@@ -217,9 +134,9 @@ void set_daemon_net_block_state(const enum traffic_restriction_type rst_type,
 		"Please provide valid counter arg!");
 
 	if (rst_type == RST_SET)
-		opts.state |= RESOURCED_NET_BLOCKED_STATE; /* set bit */
+		carg->opts->state |= RESOURCED_NET_BLOCKED_STATE; /* set bit */
 	else {
-		opts.state &=(~RESOURCED_NET_BLOCKED_STATE); /* nulify bit */
+		carg->opts->state &=(~RESOURCED_NET_BLOCKED_STATE); /* nulify bit */
 		ecore_timer_thaw(carg->ecore_timer);
 	}
 }

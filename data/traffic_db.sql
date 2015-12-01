@@ -1,4 +1,5 @@
 PRAGMA journal_mode = PERSIST;
+PRAGMA user_version = 1;
 
 CREATE TABLE IF NOT EXISTS statistics (
   binpath TEXT,
@@ -61,7 +62,8 @@ CREATE TABLE IF NOT EXISTS restrictions (
   roaming INT,
   reserved TEXT,
   ifname TEXT,
-  PRIMARY KEY (binpath, iftype, ifname, quota_id)
+  imsi TEXT,
+  PRIMARY KEY (binpath, iftype, ifname, quota_id, imsi)
 );
 
 CREATE INDEX IF NOT EXISTS binpath_restrictions_idx ON restrictions(binpath, iftype, ifname);

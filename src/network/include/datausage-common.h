@@ -35,6 +35,7 @@
 #include "counter.h"
 #include "nfacct-rule.h"
 #include "iface.h"
+#include "proc-common.h"
 
 enum netstat_control_type {
 	NET_CTRL_TYPE_UNKNOWN,
@@ -86,5 +87,19 @@ void foreground_apps(struct counter_arg *carg);
  * @desc move all pids of existing nfacct to background cgroup
  */
 void background_apps(struct counter_arg *carg);
+
+/**
+ * @desc general function to load network's module options,
+ * like update/flush period, wifi alloance
+ * It loads options from VCONF, which should be rewritable or
+ * from network.conf which are RO
+ */
+void load_network_opts(struct net_counter_opts *opts);
+
+/**
+ * @desc  move all pids of main pid to the
+ * to appropriate apps cgroups
+ */
+void move_pids_tree_to_cgroup(struct proc_app_info *pai, const char *pkg_name);
 
 #endif /* __RESOURCED_NETSTAT_COMMON_H__ */

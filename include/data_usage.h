@@ -122,14 +122,15 @@ typedef struct {
 	int rcv_warning_limit;
 	resourced_roaming_type roaming;
 	char *ifname;
+	const char *imsi;
 } resourced_net_restrictions;
 
 /**
  * @brief the same as for restriction
  */
 typedef struct {
-	long incoming_bytes;
-	long outgoing_bytes;
+	long long incoming_bytes;
+	long long outgoing_bytes;
 } resourced_counters;
 
 
@@ -293,7 +294,9 @@ typedef struct {
 	resourced_option_state datacall;
 	time_t datausage_timer;
 	resourced_option_state datacall_logging;
-} resourced_options;
+} resourced_net_options;
+
+#define resourced_options resourced_net_options
 
 /**
  * @brief Structure for information on restrictions.
@@ -310,6 +313,7 @@ typedef struct {
 	int send_limit;
 	int quota_id;
 	resourced_roaming_type roaming;
+	const char *imsi;
 } resourced_restriction_info;
 
 /**
@@ -351,7 +355,11 @@ struct net_activity_info {
 
 typedef resourced_cb_ret(*net_activity_cb)(struct net_activity_info *info);
 
-
+/*
+ * GLOBAL_CONFIG_IMSI is used as a GLOBAL IMSI
+ * for set_net_restriction() and resourced_remove_restriction()
+ */
+#define GLOBAL_CONFIG_IMSI "noneimsi"
 
 /**
  * @desc Set and apply restriction for application.
@@ -374,6 +382,20 @@ resourced_ret_c remove_restriction(const char *app_id);
 
 resourced_ret_c remove_restriction_by_iftype(const char *app_id,
 					     const resourced_iface_type iftype);
+resourced_ret_c remove_restriction_full(const char *app_id,
+					const resourced_net_restrictions *restriction);
+
+
+/**
+ * @desc Remove existing restriction for application
+ *   It will delete restriction rule in kernel
+ * @param app_id[in] - application identifier, it's package name
+ * @param imsi[in] - telephony imsi
+ */
+resourced_ret_c resourced_remove_restriction(const char *app_id, char *imsi);
+
+resourced_ret_c resourced_remove_restriction_by_iftype(const char *app_id,
+					     const resourced_iface_type iftype, char *imsi);
 
 /**
  * @desc Exclude restriction for application

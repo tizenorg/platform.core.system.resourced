@@ -31,6 +31,10 @@
 
 #include <sys/types.h>
 
+#ifndef __cplusplus
+#include <stdbool.h>
+#endif /* !__cplusplus */
+
 #ifdef __cplusplus
 extern "C" {
 #endif /* __cplusplus */
@@ -43,6 +47,7 @@ extern "C" {
  * @brief return code of the rsml's function
  */
 typedef enum {
+	RESOURCED_ERROR_OOM = -10,		/**< Out of memory error, allocation failed */
 	RESOURCED_ERROR_NONMONITOR = -9,		/** < Process don't show watchdog popup */
 	RESOURCED_ERROR_NONFREEZABLE = -8,		/** < Process is nonfrizable */
 	RESOURCED_ERROR_NOTIMPL = -7,		 /**< Not implemented yet error */
@@ -50,7 +55,7 @@ typedef enum {
 					   mounted or daemon not started */
 	RESOURCED_ERROR_NO_DATA = -5,		 /**< Success, but no data */
 	RESOURCED_ERROR_INVALID_PARAMETER = -4,/**< Invalid parameter */
-	RESOURCED_ERROR_OUT_OF_MEMORY = -3,	 /**< Out of memory */
+	RESOURCED_ERROR_OUT_OF_MEMORY = -3,	 /**< DEPRECATED: Out of memory */
 	RESOURCED_ERROR_DB_FAILED = -2,	 /**< Database error */
 	RESOURCED_ERROR_FAIL = -1,		 /**< General error */
 	RESOURCED_ERROR_NONE = 0		 /**< General success */

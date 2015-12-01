@@ -188,7 +188,8 @@ static enum run_rsml_cmd parse_cmd(int argc, char **argv,
 				exit(EXIT_FAILURE);
 			}
 			cmd = RESOURCED_APPLY;
-			param->app_id = strdup(optarg);
+			free(param->app_id);
+			param->app_id = strndup(optarg, strlen(optarg)+1);
 			break;
 		case 'e':
 			if (!optarg) {
@@ -196,7 +197,8 @@ static enum run_rsml_cmd parse_cmd(int argc, char **argv,
 				exit(EXIT_FAILURE);
 			}
 			cmd = RESOURCED_EXCLUDE;
-			param->app_id = strdup(optarg);
+			free(param->app_id);
+			param->app_id = strndup(optarg, strlen(optarg)+1);
 			break;
 		case 'g':
 			cmd = RESOURCED_GET;
@@ -256,8 +258,10 @@ static enum run_rsml_cmd parse_cmd(int argc, char **argv,
 			break;
 		case 'd':
 			cmd = RESOURCED_DATA_USAGE_DETAILS;
-			if (optarg)
-				param->app_id = strdup(optarg);
+			if (optarg) {
+				free(param->app_id);
+				param->app_id = strndup(optarg, strlen(optarg)+1);
+			}
 			break;
 		case 'G':
 			if (!optarg) {
@@ -277,7 +281,8 @@ static enum run_rsml_cmd parse_cmd(int argc, char **argv,
 				exit(EXIT_FAILURE);
 			}
 			cmd = RESOURCED_REVERT;
-			param->app_id = strdup(optarg);
+			free(param->app_id);
+			param->app_id = strndup(optarg, strlen(optarg)+1);
 			break;
 		case 'l':
 			cmd = RESOURCED_GET_RESTRICTIONS;
@@ -313,7 +318,8 @@ static enum run_rsml_cmd parse_cmd(int argc, char **argv,
 				exit(EXIT_FAILURE);
 			}
 			cmd = RESOURCED_SET_QUOTA;
-			param->app_id = strdup(optarg);
+			free(param->app_id);
+			param->app_id = strndup(optarg, strlen(optarg)+1);
 
 			break;
 		case 'Q':
@@ -322,7 +328,8 @@ static enum run_rsml_cmd parse_cmd(int argc, char **argv,
 				exit(EXIT_FAILURE);
 			}
 			cmd = RESOURCED_REMOVE_QUOTA;
-			param->app_id = strdup(optarg);
+			free(param->app_id);
+			param->app_id = strndup(optarg, strlen(optarg)+1);
 			break;
 		case 's':
 			if (!optarg) {
@@ -330,14 +337,15 @@ static enum run_rsml_cmd parse_cmd(int argc, char **argv,
 				exit(EXIT_FAILURE);
 			}
 			cmd = RESOURCED_RESTRICTION_STATE;
-			param->app_id = strdup(optarg);
+			free(param->app_id);
+			param->app_id = strndup(optarg, strlen(optarg)+1);
 			break;
 		case 'I':
 			if (!optarg) {
 				printf("Remove quota option requeres an argument.");
 				exit(EXIT_FAILURE);
 			}
-			param->imsi = strdup(optarg);
+			param->imsi = strndup(optarg, strlen(optarg)+1);
 			break;
 		case 'B':
 			param->ground = RESOURCED_STATE_BACKGROUND;
@@ -384,7 +392,7 @@ resourced_cb_ret data_usage_callback(const data_usage_info *info, void *user_dat
 	} else
 		printf("%35s|", "<entire interval>");
 
-	printf("%10ld|%10ld|%3u|%3u|%10s|%20s\n", info->cnt.incoming_bytes,
+	printf("%10lld|%10lld|%3u|%3u|%10s|%20s\n", info->cnt.incoming_bytes,
 	       info->cnt.outgoing_bytes,
 	       info->roaming, info->hw_net_protocol_type,
 	       info->ifname,
@@ -413,6 +421,7 @@ resourced_cb_ret restriction_callback(const resourced_restriction_info *info,
 const char *state_representation[] = {
 	"UNDEFINDED",
 	"ACTIVATED",
+	"REMOVED",
 	"EXCLUDED",
 };
 
@@ -449,7 +458,14 @@ int main(int argc, char **argv)
 	case RESOURCED_APPLY:
 	{
 		int err = 0;
-		resourced_net_restrictions net_rst = {0,};
+		resourced_net_restrictions net_rst = {
+			.rs_type = param.ground,
+			.iftype = param.du_rule.iftype,
+			.roaming = param.roaming_type,
+			.imsi = param.imsi,
+			.send_limit = param.send_limit,
+			.rcv_limit = param.rcv_limit,
+		};
 
 		if (!param.du_rule.iftype) {
 			fprintf(stderr, "Apply restriction command requires -i\n");
@@ -467,10 +483,6 @@ int main(int argc, char **argv)
 
 		if (err)
 			return err;
-
-		net_rst.send_limit = param.send_limit;
-		net_rst.rcv_limit = param.rcv_limit;
-		net_rst.iftype = param.du_rule.iftype;
 
 		ret_code = set_net_restriction(param.app_id,
 						       &net_rst);
@@ -515,9 +527,16 @@ int main(int argc, char **argv)
 		}
 		break;
 	case RESOURCED_REVERT:
-		if (param.du_rule.iftype)
-			ret_code = remove_restriction_by_iftype(
-				param.app_id, param.du_rule.iftype);
+		if (param.du_rule.iftype) {
+			const resourced_net_restrictions rst = {
+				.rs_type = param.ground,
+				.iftype = param.du_rule.iftype,
+				.roaming = param.roaming_type,
+				.imsi = param.imsi,
+			};
+
+			ret_code = remove_restriction_full(param.app_id, &rst);
+		}
 		else
 			fprintf(stderr, "Revert restriction commands require -i\n");
 		if (ret_code != RESOURCED_ERROR_NONE)

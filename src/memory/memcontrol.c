@@ -31,9 +31,14 @@
 #include "resourced.h"
 #include "trace.h"
 #include "macro.h"
-#include "memcontrol.h"
+#include "memory-common.h"
+#include "cgroup.h"
 
-void memcg_info_set_limit(struct memcg_info_t *mi, float ratio,
+#include <stdlib.h>
+
+#define BUF_MAX				1024
+
+void memcg_info_set_limit(struct memcg_info *mi, float ratio,
 	unsigned int totalram)
 {
 	if (!mi)
@@ -47,13 +52,13 @@ void memcg_info_set_limit(struct memcg_info_t *mi, float ratio,
 	mi->oomleave = mi->limit - mi->threshold_leave;
 }
 
-static struct memcg_info_t *memcg_info_alloc_subcgroup(struct memcg_t *memcg)
+static struct memcg_info *memcg_info_alloc_subcgroup(struct memcg *memcg)
 {
-	struct memcg_info_t *pmi, *mi;
+	struct memcg_info *pmi, *mi;
 	int i;
 	if (!memcg)
 		return NULL;
-	mi = (struct memcg_info_t *)malloc(sizeof(struct memcg_info_t));
+	mi = (struct memcg_info *)malloc(sizeof(struct memcg_info));
 	if (!mi)
 		return NULL;
 	mi->id = memcg->num_subcgroup;
@@ -67,14 +72,15 @@ static struct memcg_info_t *memcg_info_alloc_subcgroup(struct memcg_t *memcg)
 		mi->threshold[i] = pmi->threshold[i];
 	mi->threshold_leave = pmi->threshold_leave;
 	strncpy(mi->event_level, pmi->event_level,
-		MAX_NAME_LENGTH);
+		sizeof(mi->event_level)-1);
+	mi->event_level[sizeof(mi->event_level)-1] = 0;
 	mi->evfd = pmi->evfd;
 	return mi;
 }
 
-static int memcg_add_cgroup(struct memcg_t *memcg)
+static int memcg_add_cgroup(struct memcg *memcg)
 {
-	struct memcg_info_t *mi = NULL;
+	struct memcg_info *mi = NULL;
 	if (!memcg)
 		return RESOURCED_ERROR_FAIL;
 	mi = memcg_info_alloc_subcgroup(memcg);
@@ -84,7 +90,7 @@ static int memcg_add_cgroup(struct memcg_t *memcg)
 	return RESOURCED_ERROR_NONE;
 }
 
-int memcg_add_cgroups(struct memcg_t *memcg, int num)
+int memcg_add_cgroups(struct memcg *memcg, int num)
 {
 	int i, ret = RESOURCED_ERROR_NONE;
 	for (i = 0; i < num; i++) {
@@ -95,7 +101,7 @@ int memcg_add_cgroups(struct memcg_t *memcg, int num)
 	return ret;
 }
 
-static void memcg_info_show(struct memcg_info_t *mi)
+static void memcg_info_show(struct memcg_info *mi)
 {
 	int i;
 	_D("======================================");
@@ -110,18 +116,18 @@ static void memcg_info_show(struct memcg_info_t *mi)
 	_D("memcg_info->evfd = %d", mi->evfd);
 }
 
-void memcg_show(struct memcg_t *memcg)
+void memcg_show(struct memcg *memcg)
 {
 	GSList *iter = NULL;
 	memcg_info_show(memcg->info);
 	gslist_for_each_item(iter, memcg->cgroups) {
-		struct memcg_info_t *mi =
-			(struct memcg_info_t *)(iter->data);
+		struct memcg_info *mi =
+			(struct memcg_info *)(iter->data);
 		memcg_info_show(mi);
 	}
 }
 
-void memcg_info_init(struct memcg_info_t *mi, const char *name)
+void memcg_info_init(struct memcg_info *mi, const char *name)
 {
 	int i;
 	mi->id = 0;
@@ -133,14 +139,93 @@ void memcg_info_init(struct memcg_info_t *mi, const char *name)
 	mi->threshold_leave = 0;
 	mi->evfd = -1;
 	strncpy(mi->event_level, MEMCG_DEFAULT_EVENT_LEVEL,
-		MAX_NAME_LENGTH);
-	strncpy(mi->name, name, MAX_PATH_LENGTH);
+			sizeof(mi->event_level)-1);
+	mi->event_level[sizeof(mi->event_level)-1] = 0;
+	strncpy(mi->name, name, sizeof(mi->name)-1);
+	mi->name[sizeof(mi->name)-1] = 0;
 }
 
-void memcg_init(struct memcg_t *memcg)
+void memcg_init(struct memcg *memcg)
 {
 	memcg->num_subcgroup = MEMCG_DEFAULT_NUM_SUBCGROUP;
 	memcg->use_hierarchy = MEMCG_DEFAULT_USE_HIERARCHY;
 	memcg->info = NULL;
 	memcg->cgroups = NULL;
+}
+
+int memcg_get_anon_usage(struct memcg_info *mi, unsigned int *anon_usage)
+{
+	FILE *f;
+	char buf[BUF_MAX] = {0,};
+	char line[BUF_MAX] = {0, };
+	char name[BUF_MAX] = {0, };
+	unsigned int tmp, active_anon = 0, inactive_anon = 0;
+
+	snprintf(buf, sizeof(buf), "%smemory.stat", mi->name);
+	_I("get mem usage anon from %s", buf);
+
+	f = fopen(buf, "r");
+	if (!f) {
+		_E("%s open failed, %d", buf, f);
+		return RESOURCED_ERROR_FAIL;
+	}
+	while (fgets(line, BUF_MAX, f) != NULL) {
+		if (sscanf(line, "%s %d", name, &tmp)) {
+			if (!strcmp(name, "inactive_anon")) {
+				inactive_anon = tmp;
+			} else if (!strcmp(name, "active_anon")) {
+				active_anon = tmp;
+				break;
+			}
+		}
+	}
+
+	fclose(f);
+	*anon_usage = active_anon + inactive_anon;
+
+	return RESOURCED_ERROR_NONE;
+}
+
+int memcg_get_usage(struct memcg_info *mi, unsigned int *usage_bytes)
+{
+	return cgroup_read_node(mi->name, "memory.usage_in_bytes", usage_bytes);
+}
+
+/*
+ * Usage example:
+ *	int i;
+ *	pid_t pid;
+ *	GArray *pids_array = g_array_new(false, false, sizeof(pid_t));
+ *
+ *	memcg_get_pids(mi, pids_array);
+ *
+ *	for (i=0; i < pids_array->len; i++)
+ *		_D("pid_t: %d", g_array_index(pids_array, pid_t, i));
+ *	g_array_free(pids_array, TRUE);
+ *
+ */
+int memcg_get_pids(struct memcg_info *mi, GArray *pids)
+{
+	FILE *f;
+	pid_t tpid;
+	char buf[MAX_PATH_LENGTH] = {0, };
+
+	if (pids == NULL)
+		return RESOURCED_ERROR_FAIL;
+
+	snprintf(buf, sizeof(buf), "%scgroup.procs", mi->name);
+
+	f = fopen(buf, "r");
+	if (!f) {
+		_E("%s open failed, %d", buf, f);
+		return RESOURCED_ERROR_FAIL;
+	}
+
+	while (fgets(buf, 32, f) != NULL) {
+		tpid = atoi(buf);
+		g_array_append_val(pids, tpid);
+	}
+	fclose(f);
+
+	return RESOURCED_ERROR_NONE;
 }

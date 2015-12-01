@@ -37,27 +37,27 @@
 	"is_roaming, sum(received) as received, "			\
 	"sum(sent) as sent, imsi, ground from statistics "			\
 	"where time_stamp between ? and ? " \
-	"group by binpath, is_roaming, imsi order by received desc"
+	"group by ground, binpath, is_roaming, imsi order by received desc"
 
 #define DATA_USAGE_FOR_PERIOD_IFACE "select binpath, hw_net_protocol_type, " \
 	"is_roaming, sum(received) as received, "			\
 	"sum(sent) as sent, imsi, ground from statistics "			\
 	"where time_stamp between ? and ? " \
-	"and iftype=? group by binpath, is_roaming, imsi order by received desc"
+	"and iftype=? group by ground, binpath, is_roaming, imsi order by received desc"
 
 #define DATA_USAGE_CHUNKS "select binpath, hw_net_protocol_type, "	\
 	"is_roaming, sum(received) as received, "			\
 	"sum(sent) as sent, time_stamp - time_stamp % ? as time_stamp, imsi, "\
 	"ground " \
 	"from statistics where time_stamp between ? and ? " \
-	"group by binpath, time_stamp, imsi order by time_stamp"
+	"group by ground, binpath, time_stamp, imsi order by time_stamp"
 
 #define DATA_USAGE_CHUNKS_IFACE "select binpath, hw_net_protocol_type, " \
 	"is_roaming, sum(received) as received, "			\
 	"sum(sent) as sent, imsi, ground, "			\
 	"time_stamp - time_stamp % ? as time_stamp " \
 	"from statistics where time_stamp between ? and ? and iftype=?" \
-	"group by binpath, time_stamp, imsi order by time_stamp"
+	"group by ground, binpath, time_stamp, imsi order by time_stamp"
 
 #define DATA_USAGE_APP_DETAILS "select iftype, hw_net_protocol_type, "	\
 	"is_roaming, sum(received) as received, sum(sent) as sent, "	\

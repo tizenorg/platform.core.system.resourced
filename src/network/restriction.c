@@ -37,7 +37,7 @@
 #include "trace.h"
 
 #define SELECT_RESTRICTIONS "SELECT binpath, rcv_limit, " \
-	"send_limit, iftype, rst_state, quota_id, roaming FROM restrictions"
+	"send_limit, iftype, rst_state, quota_id, roaming, imsi FROM restrictions"
 
 #define SELECT_RESTRICTION_STATE "SELECT rst_state FROM restrictions " \
 	"WHERE binpath = ? AND iftype = ?"
@@ -75,6 +75,7 @@ static void serialize_restriction(const char *appid,
 	params[6] = (char *)rst->snd_warning_limit;
 	params[7] = (char *)rst->rcv_warning_limit;
 	params[8] = (char *)rst->roaming;
+	params[9] = (char *)rst->imsi;
 }
 
 static resourced_ret_c process_restriction(
@@ -83,7 +84,7 @@ static resourced_ret_c process_restriction(
 {
 	DBusError err;
 	DBusMessage *msg;
-	char *params[9];
+	char *params[10];
 	int i = 0, ret;
 	resourced_ret_c ret_val;
 
@@ -95,10 +96,10 @@ static resourced_ret_c process_restriction(
 	serialize_restriction(app_id, rst_type, rst, params);
 
 	do {
-		msg = dbus_method_sync(BUS_NAME, RESOURCED_PATH_NETWORK,
+		msg = dbus_method_sync(RESOURCED_DBUS_BUS_NAME, RESOURCED_PATH_NETWORK,
 				       RESOURCED_INTERFACE_NETWORK,
 				       RESOURCED_NETWORK_PROCESS_RESTRICTION,
-				       "sdddddddd", params);
+					   "sdddddddds", params);
 		if (msg)
 			break;
 		_E("Re-try to sync DBUS message, err_count : %d", i);
@@ -160,6 +161,8 @@ API resourced_ret_c restrictions_foreach(
 				datausage_restriction_select, 5);
 			data.roaming = sqlite3_column_int(
 				datausage_restriction_select, 6);
+			data.imsi = (char *)sqlite3_column_text(
+			    datausage_restriction_select, 7);
 
 			if (restriction_cb(&data, user_data) == RESOURCED_CANCEL)
 				rc = SQLITE_DONE;
@@ -180,6 +183,10 @@ API resourced_ret_c restrictions_foreach(
 API resourced_ret_c set_net_restriction(const char *app_id,
 					const resourced_net_restrictions *rst)
 {
+	if (!app_id || !rst)
+		return RESOURCED_ERROR_INVALID_PARAMETER;
+	if (rst->imsi == NULL)
+		return RESOURCED_ERROR_INVALID_PARAMETER;
 	return process_restriction(app_id, rst, RST_SET);
 }
 
@@ -188,12 +195,37 @@ API resourced_ret_c remove_restriction(const char *app_id)
 	return remove_restriction_by_iftype(app_id, RESOURCED_IFACE_ALL);
 }
 
+API resourced_ret_c remove_restriction_full(const char *app_id,
+					    const resourced_net_restrictions *rst)
+{
+	return process_restriction(app_id, rst, RST_UNSET);
+}
+
 API resourced_ret_c remove_restriction_by_iftype(
 	const char *app_id, const resourced_iface_type iftype)
 {
 	resourced_net_restrictions rst = { 0 };
 
 	rst.iftype = iftype;
+	return process_restriction(app_id, &rst, RST_UNSET);
+}
+
+API resourced_ret_c resourced_remove_restriction(const char *app_id, char *imsi)
+{
+	return resourced_remove_restriction_by_iftype(app_id, RESOURCED_IFACE_ALL, imsi);
+}
+
+API resourced_ret_c resourced_remove_restriction_by_iftype(
+	const char *app_id, const resourced_iface_type iftype, char *imsi)
+{
+	resourced_net_restrictions rst = { 0 };
+
+	if (!app_id || !imsi)
+		return RESOURCED_ERROR_INVALID_PARAMETER;
+
+	rst.iftype = iftype;
+	rst.imsi = imsi;
+	rst.rs_type = RESOURCED_STATE_BACKGROUND;
 	return process_restriction(app_id, &rst, RST_UNSET);
 }
 
@@ -208,12 +240,17 @@ API resourced_ret_c exclude_restriction_by_iftype(
 	resourced_net_restrictions rst = { 0 };
 
 	rst.iftype = iftype;
+	rst.rs_type = RESOURCED_STATE_BACKGROUND;
 	return process_restriction(app_id, &rst, RST_EXCLUDE);
 }
 
 API resourced_ret_c set_net_exclusion(const char *app_id,
 			const resourced_net_restrictions *rst)
 {
+	if (!app_id || !rst)
+		return RESOURCED_ERROR_INVALID_PARAMETER;
+	if (rst->imsi == NULL)
+		return RESOURCED_ERROR_INVALID_PARAMETER;
 	return process_restriction(app_id, rst, RST_EXCLUDE);
 }
 

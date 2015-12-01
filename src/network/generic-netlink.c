@@ -238,7 +238,7 @@ uint32_t get_family_group_id(int sock, pid_t pid,
 		group_name);
 }
 
-#ifdef DEBUG_ENABLED
+#ifdef NETWORK_DEBUG_ENABLED
 static void show_result(const struct genl *ans)
 {
 	/*parse reply message */

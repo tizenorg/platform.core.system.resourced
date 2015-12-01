@@ -1,0 +1,51 @@
+%{
+#include "procfs.h"
+%}
+meminfo_mapping;
+%language=ANSI-C
+%define slot-name name
+%define hash-function-name meminfo_mapping_hash
+%define lookup-function-name meminfo_mapping_lookup
+%readonly-tables
+%omit-struct-type
+%struct-type
+%includes
+%%
+MemTotal,       MEMINFO_ID_MEM_TOTAL
+MemFree,        MEMINFO_ID_MEM_FREE
+MemAvailable,   MEMINFO_ID_MEM_AVAILABLE
+Buffers,        MEMINFO_ID_BUFFERS
+Cached,         MEMINFO_ID_CACHED
+SwapCached,     MEMINFO_ID_SWAP_CACHED
+Active,         MEMINFO_ID_ACTIVE
+Inactive,       MEMINFO_ID_INACTIVE
+Active(anon),   MEMINFO_ID_ACTIVE_ANON
+Inactive(anon), MEMINFO_ID_INACTIVE_ANON
+Active(file),   MEMINFO_ID_ACTIVE_FILE
+Inactive(file), MEMINFO_ID_INACTIVE_FILE
+Unevictable,    MEMINFO_ID_UNEVICTABLE
+Mlocked,        MEMINFO_ID_MLOCKED
+HighTotal,      MEMINFO_ID_HIGH_TOTAL
+HighFree,       MEMINFO_ID_HIGH_FREE
+LowTotal,       MEMINFO_ID_LOW_TOTAL
+LowFree,        MEMINFO_ID_LOW_FREE
+SwapTotal,      MEMINFO_ID_SWAP_TOTAL
+SwapFree,       MEMINFO_ID_SWAP_FREE
+Dirty,          MEMINFO_ID_DIRTY
+Writeback,      MEMINFO_ID_WRITEBACK
+AnonPages,      MEMINFO_ID_ANON_PAGES
+Mapped,         MEMINFO_ID_MAPPED
+Shmem,          MEMINFO_ID_SHMEM
+Slab,           MEMINFO_ID_SLAB
+SReclaimable,   MEMINFO_ID_SRECLAIMABLE
+SUnreclaim,     MEMINFO_ID_SUNRECLAIM
+KernelStack,    MEMINFO_ID_KERNEL_STACK
+PageTables,     MEMINFO_ID_PAGE_TABLES
+NFS_Unstable,   MEMINFO_ID_NFS_UNSTABLE
+Bounce,         MEMINFO_ID_BOUNCE
+WritebackTmp,   MEMINFO_ID_WRITEBACK_TMP
+CommitLimit,    MEMINFO_ID_COMMIT_LIMIT
+Committed_AS,   MEMINFO_ID_COMMITTED_AS
+VmallocTotal,   MEMINFO_ID_VMALLOC_TOTAL
+VmallocUsed,    MEMINFO_ID_VMALLOC_USED
+VmallocChunk,   MEMINFO_ID_VMALLOC_CHUNK

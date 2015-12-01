@@ -26,6 +26,7 @@
  *
  */
 
+#include <Eina.h>
 #include "trace.h"
 #include "edbus-handler.h"
 #include "macro.h"
@@ -41,10 +42,16 @@ struct edbus_list{
 };
 
 static struct edbus_object edbus_objects[] = {
+	{ RESOURCED_DBUS_OBJECT_PATH, RESOURCED_DBUS_INTERFACE_NAME   , NULL, NULL },
 	{ RESOURCED_PATH_SWAP, RESOURCED_INTERFACE_SWAP   , NULL, NULL },
+	{ RESOURCED_PATH_FREEZER, RESOURCED_INTERFACE_FREEZER, NULL, NULL },
 	{ RESOURCED_PATH_OOM, RESOURCED_INTERFACE_OOM, NULL, NULL },
 	{ RESOURCED_PATH_PROCESS, RESOURCED_INTERFACE_PROCESS, NULL, NULL },
+	{ RESOURCED_PATH_LOGGING, RESOURCED_INTERFACE_LOGGING, NULL, NULL },
 	{ RESOURCED_PATH_NETWORK, RESOURCED_INTERFACE_NETWORK, NULL, NULL },
+	{ RESOURCED_PATH_SLUGGISH, RESOURCED_INTERFACE_SLUGGISH, NULL, NULL },
+	{ RESOURCED_PATH_DBUS,    RESOURCED_INTERFACE_DBUS,    NULL, NULL },
+	{ RESOURCED_PATH_APPOPT, RESOURCED_INTERFACE_APPOPT, NULL, NULL },
 	/* Add new object & interface here*/
 };
 
@@ -151,6 +158,7 @@ DBusMessage *dbus_method_sync(const char *dest, const char *path,
 	msg = dbus_message_new_method_call(dest, path, interface, method);
 	if (!msg) {
 		_E("dbus_message_new_method_call(%s:%s-%s)", path, interface, method);
+		dbus_connection_unref(conn);
 		return NULL;
 	}
 
@@ -159,6 +167,7 @@ DBusMessage *dbus_method_sync(const char *dest, const char *path,
 	if (r < 0) {
 		_E("append_variant error(%d)", r);
 		dbus_message_unref(msg);
+		dbus_connection_unref(conn);
 		return NULL;
 	}
 
@@ -166,10 +175,6 @@ DBusMessage *dbus_method_sync(const char *dest, const char *path,
 
 	reply = dbus_connection_send_with_reply_and_block(conn, msg,
 			DBUS_REPLY_TIMEOUT, &err);
-	if (!reply) {
-		_E("dbus_connection_send error(No reply)");
-	}
-
 	if (dbus_error_is_set(&err)) {
 		_E("dbus_connection_send error(%s:%s)", err.name, err.message);
 		dbus_error_free(&err);
@@ -177,7 +182,72 @@ DBusMessage *dbus_method_sync(const char *dest, const char *path,
 	}
 
 	dbus_message_unref(msg);
+	dbus_connection_unref(conn);
 	return reply;
+}
+
+static int dbus_method_sync_pairs(const char *dest, const char *path,
+		const char *interface, const char *method,
+		int num, va_list args)
+{
+	DBusConnection *conn;
+	DBusMessage *msg;
+	DBusMessage *reply;
+	DBusMessageIter iter;
+	DBusMessageIter aiter, piter;
+	DBusError err;
+	int ret, result, i;
+	char *key, *value;
+
+	conn = dbus_bus_get(DBUS_BUS_SYSTEM, NULL);
+	if (!conn) {
+		_E("dbus_bus_get error");
+		return -EPERM;
+	}
+
+	msg = dbus_message_new_method_call(dest, path, interface, method);
+	if (!msg) {
+		_E("dbus_message_new_method_call(%s:%s-%s)",
+			path, interface, method);
+		return -EBADMSG;
+	}
+
+	dbus_message_iter_init_append(msg, &iter);
+	dbus_message_iter_open_container(&iter, DBUS_TYPE_ARRAY, "{ss}", &aiter);
+
+	for (i = 0 ; i < num ; i = i + 2) {
+		key = va_arg(args, char *);
+		value = va_arg(args, char *);
+		_I("key(%s), value(%s)", key, value);
+		dbus_message_iter_open_container(&aiter, DBUS_TYPE_DICT_ENTRY, NULL, &piter);
+		dbus_message_iter_append_basic (&piter, DBUS_TYPE_STRING, &key);
+		dbus_message_iter_append_basic (&piter, DBUS_TYPE_STRING, &value);
+		dbus_message_iter_close_container(&aiter, &piter);
+	}
+
+	dbus_message_iter_close_container(&iter, &aiter);
+
+	dbus_error_init(&err);
+
+	reply = dbus_connection_send_with_reply_and_block(conn, msg, DBUS_REPLY_TIMEOUT, &err);
+	dbus_message_unref(msg);
+	if (!reply) {
+		_E("dbus_connection_send error(%s:%s) %s %s:%s-%s",
+			err.name, err.message, dest, path, interface, method);
+		dbus_error_free(&err);
+		return -ECOMM;
+	}
+
+	ret = dbus_message_get_args(reply, &err, DBUS_TYPE_INT32, &result, DBUS_TYPE_INVALID);
+	dbus_message_unref(reply);
+	if (!ret) {
+		_E("no message : [%s:%s] %s %s:%s-%s",
+			err.name, err.message, dest, path, interface, method);
+		dbus_error_free(&err);
+		return -ENOMSG;
+	}
+
+	return result;
 }
 
 int dbus_method_async(const char *dest, const char *path,
@@ -330,6 +400,7 @@ static void unregister_edbus_signal_handle(void)
 			e_dbus_signal_handler_del(edbus_conn, entry->handler);
 			edbus_handler_list = eina_list_remove(edbus_handler_list, entry);
 			free(entry->signal_name);
+			free(entry->signal_path);
 			free(entry);
 		}
 	}
@@ -363,14 +434,14 @@ int register_edbus_signal_handler(const char *path, const char *interface,
 		return RESOURCED_ERROR_FAIL;
 	}
 
-	entry->signal_name = strndup(name, strlen(name));
+	entry->signal_name = strndup(name, strlen(name)+1);
 
 	if (!entry->signal_name) {
 		_E("Malloc failed");
 		goto release_entry;
 	}
 
-	entry->signal_path = strndup(path, strlen(path));
+	entry->signal_path = strndup(path, strlen(path)+1);
 	if (!entry->signal_path) {
 		_E("Malloc failed");
 		goto release_name;
@@ -484,6 +555,9 @@ resourced_ret_c edbus_add_methods(const char *path,
 	}
 
 	for (i = 0; i < size; i++) {
+		if (!edbus_methods[i].member || !edbus_methods[i].func)
+			continue;
+
 		ret = e_dbus_interface_method_add(iface,
 				    edbus_methods[i].member,
 				    edbus_methods[i].signature,
@@ -492,6 +566,30 @@ resourced_ret_c edbus_add_methods(const char *path,
 		if (!ret) {
 			_E("Fail to add method %s!\n",
 				edbus_methods[i].member);
+			return RESOURCED_ERROR_FAIL;
+		}
+	}
+
+	return RESOURCED_ERROR_NONE;
+}
+
+resourced_ret_c edbus_add_signals(
+		       const struct edbus_signal *const edbus_signals,
+		       const size_t size)
+{
+	int i;
+	int ret;
+
+	for (i = 0; i < size; i++) {
+		ret = register_edbus_signal_handler(
+				    edbus_signals[i].path,
+				    edbus_signals[i].interface,
+				    edbus_signals[i].name,
+				    edbus_signals[i].func,
+				    edbus_signals[i].user_data);
+		if (ret) {
+			_E("Fail to add signal %s, %s!\n",
+				edbus_signals[i].path, edbus_signals[i].name);
 			return RESOURCED_ERROR_FAIL;
 		}
 	}
@@ -510,6 +608,18 @@ resourced_ret_c edbus_message_send(DBusMessage *msg)
 	}
 
 	return RESOURCED_ERROR_NONE;
+}
+
+int launch_system_app_by_dbus(const char *dest, const char *path,
+    const char *iface, const char *method, int num, ...)
+{
+	int ret;
+	va_list args;
+
+	va_start(args, num);
+	ret = dbus_method_sync_pairs(dest, path, iface, method, num, args);
+	va_end(args);
+	return ret;
 }
 
 static void request_name_cb(void *data, DBusMessage *msg, DBusError *error)
@@ -532,6 +642,50 @@ static void request_name_cb(void *data, DBusMessage *msg, DBusError *error)
 	}
 
 	_I("Request Name reply : %d", val);
+}
+
+int check_dbus_active(void)
+{
+	int ret = FALSE;
+	DBusError err;
+	DBusMessage *msg;
+	DBusMessageIter iter, sub;
+	const char *state;
+	char *pa[2];
+
+	pa[0] = "org.freedesktop.systemd1.Unit";
+	pa[1] = "ActiveState";
+
+	_I("%s %s", pa[0], pa[1]);
+
+	msg = dbus_method_sync("org.freedesktop.systemd1",
+			"/org/freedesktop/systemd1/unit/default_2etarget",
+			"org.freedesktop.DBus.Properties",
+			"Get", "ss", pa);
+	if (!msg)
+		return -EBADMSG;
+
+	dbus_error_init(&err);
+
+	if (!dbus_message_iter_init(msg, &iter) ||
+	    dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_VARIANT)
+		goto out;
+
+	dbus_message_iter_recurse(&iter, &sub);
+
+	if (dbus_message_iter_get_arg_type(&sub) != DBUS_TYPE_STRING) {
+		ret = -EBADMSG;
+		goto out;
+	}
+
+	dbus_message_iter_get_basic(&sub, &state);
+
+	if (strncmp(state, "active", 6) == 0)
+		ret = TRUE;
+out:
+	dbus_message_unref(msg);
+	dbus_error_free(&err);
+	return ret;
 }
 
 void edbus_init(void)
@@ -563,7 +717,7 @@ retry_bus_get:
 
 retry_bus_request:
 	retry = 0;
-	edbus_request_name = e_dbus_request_name(edbus_conn, BUS_NAME,
+	edbus_request_name = e_dbus_request_name(edbus_conn, RESOURCED_DBUS_BUS_NAME,
 			DBUS_NAME_FLAG_REPLACE_EXISTING, request_name_cb, NULL);
 	if (edbus_request_name)
 		goto register_objects;
@@ -596,4 +750,9 @@ void edbus_exit(void)
 	unregister_edbus_signal_handle();
 	e_dbus_connection_close(edbus_conn);
 	e_dbus_shutdown();
+}
+
+E_DBus_Connection *get_resourced_edbus_connection(void)
+{
+	return edbus_conn;
 }

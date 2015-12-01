@@ -32,8 +32,8 @@
 #include <sys/resource.h>
 #include <sys/syscall.h>
 #include "notifier.h"
-#include "proc-main.h"
-#include "proc-process.h"
+#include "procfs.h"
+#include "proc-common.h"
 #include "macro.h"
 #include "module.h"
 #include "module-data.h"
@@ -43,14 +43,30 @@
 #include "cgroup.h"
 #include "config-parser.h"
 #include "const.h"
+#include "file-helper.h"
+
+/*
+ * CPU cgroup had four kinds of directories.
+ * 1. /sys/fs/cgroup/cpu : default group, all system daemons
+ * 2. /sys/fs/cgroup/cpu/background : control cpu.shares value
+ *    preloaded service application, downloadable widget, system services
+ * 3. /sys/fs/cgroup/cpu/download : control cpu.shares and maximum quota
+ *    downloadable service application
+ * 4. /sys/fs/cgroup/cpu/background/quota : control cpu.shares and minimum quota
+ *    all (preloaded and downloadable) background UI application
+ */
 
 #define CPU_DEFAULT_CGROUP "/sys/fs/cgroup/cpu"
 #define CPU_CONTROL_GROUP "/sys/fs/cgroup/cpu/background"
-#define CPU_CONTROL_SERVICE_GROUP "/sys/fs/cgroup/cpu/service"
+#define CPU_CONTROL_DOWNLOAD_GROUP "/sys/fs/cgroup/cpu/background/download"
+#define CPU_CONTROL_CPUQUOTA_GROUP "/sys/fs/cgroup/cpu/background/quota"
+#define CPU_CONTROL_BANDWIDTH	"/cpu.cfs_quota_us"
 #define CPU_CONF_FILE                  "/etc/resourced/cpu.conf"
 #define CPU_CONF_SECTION	"CONTROL"
 #define CPU_CONF_PREDEFINE	"PREDEFINE"
 #define CPU_CONF_BOOTING	"BOOTING_PREDEFINE"
+#define CPU_CONF_SYSTEM	"SYSTEM_PREDEFINE"
+#define CPU_CONF_HOME		"HOME_PREDEFINE"
 #define CPU_CONF_WRT	"WRT_PREDEFINE"
 #define CPU_CONF_LAZY	"LAZY_PREDEFINE"
 #define CPU_SHARE	"/cpu.shares"
@@ -59,25 +75,25 @@
 #define CPU_DEFAULT_PRI 0
 #define CPU_BACKGROUND_PRI 1
 #define CPU_CONTROL_PRI 10
-#define CPU_HIGHAPP_PRI -10
+#define CPU_HIGHAPP_PRI -5
+#define CPU_QUOTA_PERIOD_USEC 1000
 
 static Ecore_Timer *cpu_predefined_timer = NULL;
+static bool bCPUQuota;
 
 static inline int ioprio_set(int which, int who, int ioprio)
 {
 	return syscall(__NR_ioprio_set, which, who, ioprio);
 }
 
-enum
-{
+enum {
 	IOPRIO_CLASS_NONE,
 	IOPRIO_CLASS_RT,
 	IOPRIO_CLASS_BE,
 	IOPRIO_CLASS_IDLE,
 };
 
-enum
-{
+enum {
 	IOPRIO_WHO_PROCESS = 1,
 	IOPRIO_WHO_PGRP,
 	IOPRIO_WHO_USER,
@@ -121,6 +137,22 @@ static int cpu_move_cgroup(pid_t pid, char *path)
 	return cgroup_write_node(path, CGROUP_FILE_NAME, pid);
 }
 
+static bool cpu_quota_enabled(void)
+{
+	return bCPUQuota;
+}
+
+static void cpu_check_cpuquota(void)
+{
+	int ret, node = 0;
+	char buf[MAX_PATH_LENGTH];
+
+	snprintf(buf, sizeof(buf), "%s%s", CPU_DEFAULT_CGROUP, CPU_CONTROL_BANDWIDTH);
+	ret = fread_int(buf, &node);
+	if (!ret)
+		bCPUQuota = true;
+}
+
 static int load_cpu_config(struct parse_result *result, void *user_data)
 {
 	pid_t pid = 0, value;
@@ -144,7 +176,7 @@ static int load_cpu_config(struct parse_result *result, void *user_data)
 			cpu_move_cgroup(pid, CPU_CONTROL_GROUP);
 			def_list.control[def_list.num].pid = pid;
 			def_list.control[def_list.num++].type = SET_BOOTING;
-			setpriority(PRIO_PROCESS, pid, CPU_CONTROL_PRI);
+			setpriority(PRIO_PROCESS, pid, CPU_BACKGROUND_PRI);
 		}
 	} else if (!strcmp(result->name, CPU_CONF_WRT)) {
 		pid = find_pid_from_cmdline(result->value);
@@ -161,57 +193,122 @@ static int load_cpu_config(struct parse_result *result, void *user_data)
 			def_list.control[def_list.num].pid = pid;
 			def_list.control[def_list.num++].type = SET_LAZY;
 		}
+	} else if (!strcmp(result->name, CPU_CONF_SYSTEM)) {
+		pid = find_pid_from_cmdline(result->value);
+		if (pid > 0)
+			cpu_move_cgroup(pid, CPU_CONTROL_GROUP);
+	} else if (!strcmp(result->name, CPU_CONF_HOME)) {
+		pid = find_pid_from_cmdline(result->value);
+		if (pid > 0) {
+			setpriority(PRIO_PROCESS, pid, CPU_HIGHAPP_PRI);
+			def_list.control[def_list.num].pid = pid;
+			def_list.control[def_list.num++].type = SET_BOOTING;
+		}
 	} else if (!strcmp(result->name, "BACKGROUND_CPU_SHARE")) {
 		value = atoi(result->value);
-		if (value)
+		if (value) {
 			cgroup_write_node(CPU_CONTROL_GROUP, CPU_SHARE, value);
-       } else if (!strcmp(result->name, "SERVICE_CPU_SHARE")) {
+			cgroup_write_node(CPU_CONTROL_DOWNLOAD_GROUP, CPU_SHARE, value);
+		}
+		if (cpu_quota_enabled())
+			cgroup_write_node(CPU_CONTROL_CPUQUOTA_GROUP, CPU_SHARE, value);
+	} else if (!strcmp(result->name, "BACKGROUND_CPU_MAX_QUOTA")) {
 		value = atoi(result->value);
-		if (value)
-			cgroup_write_node(CPU_CONTROL_SERVICE_GROUP, CPU_SHARE, value);
-       }
+		if (value && cpu_quota_enabled()) {
+			value *= CPU_QUOTA_PERIOD_USEC;
+			cgroup_write_node(CPU_CONTROL_DOWNLOAD_GROUP,
+				    CPU_CONTROL_BANDWIDTH, value);
+		}
+	} else if (!strcmp(result->name, "BACKGROUND_CPU_MIN_QUOTA")) {
+		value = atoi(result->value);
+		if (value && cpu_quota_enabled()) {
+			value *= CPU_QUOTA_PERIOD_USEC;
+			cgroup_write_node(CPU_CONTROL_CPUQUOTA_GROUP,
+				    CPU_CONTROL_BANDWIDTH, value);
+		}
+	}
        return RESOURCED_ERROR_NONE;
 }
 
-static int cpu_service_launch(void *data)
+static int cpu_service_state(void *data)
 {
-	struct proc_status *p_data = (struct proc_status*)data;
-	_D("cpu_service_launch : pid = %d, appname = %s", p_data->pid, p_data->appid);
-	cpu_move_cgroup(p_data->pid, CPU_CONTROL_SERVICE_GROUP);
+	struct proc_status *ps = (struct proc_status *)data;
+	struct proc_app_info *pai = ps->pai;
+
+	_D("cpu_service_launch : pid = %d, appname = %s", ps->pid, ps->appid);
+	if (pai && CHECK_BIT(pai->categories, PROC_BG_SYSTEM))
+		return RESOURCED_ERROR_NONE;
+	else if (pai && CHECK_BIT(pai->flags, PROC_DOWNLOADAPP))
+		cpu_move_cgroup(ps->pid, CPU_CONTROL_DOWNLOAD_GROUP);
+	else
+		cpu_move_cgroup(ps->pid, CPU_CONTROL_GROUP);
+	return RESOURCED_ERROR_NONE;
+}
+
+static int cpu_widget_state(void *data)
+{
+	struct proc_status *ps = (struct proc_status *)data;
+	struct proc_app_info *pai = ps->pai;
+
+	_D("cpu_widget_background : pid = %d, appname = %s", ps->pid, ps->appid);
+	if (pai && CHECK_BIT(pai->flags, PROC_DOWNLOADAPP))
+		cpu_move_cgroup(ps->pid, CPU_CONTROL_GROUP);
 	return RESOURCED_ERROR_NONE;
 }
 
 static int cpu_foreground_state(void *data)
 {
-	struct proc_status *p_data = (struct proc_status*)data;
+	struct proc_status *ps = (struct proc_status *)data;
 	int pri;
-	_D("cpu_foreground_state : pid = %d, appname = %s", p_data->pid, p_data->appid);
-	pri = getpriority(PRIO_PROCESS, p_data->pid);
+	_D("cpu_foreground_state : pid = %d, appname = %s", ps->pid, ps->appid);
+	pri = getpriority(PRIO_PROCESS, ps->pid);
 	if (pri == -1 || pri > CPU_DEFAULT_PRI)
-		setpriority(PRIO_PGRP, p_data->pid, CPU_DEFAULT_PRI);
-	if (check_predefined(p_data->pid) != SET_DEFAUT)
-		cpu_move_cgroup(p_data->pid, CPU_DEFAULT_CGROUP);
+		setpriority(PRIO_PGRP, ps->pid, CPU_DEFAULT_PRI);
+	if (check_predefined(ps->pid) != SET_DEFAUT)
+		cpu_move_cgroup(ps->pid, CPU_DEFAULT_CGROUP);
 	return RESOURCED_ERROR_NONE;
 }
 
 static int cpu_background_state(void *data)
 {
-	struct proc_status *p_data = (struct proc_status*)data;
-	_D("cpu_background_state : pid = %d, appname = %s", p_data->pid, p_data->appid);
-	setpriority(PRIO_PGRP, p_data->pid, CPU_BACKGROUND_PRI);
-	cpu_move_cgroup(p_data->pid, CPU_CONTROL_SERVICE_GROUP);
+	struct proc_status *ps = (struct proc_status *)data;
+	_D("cpu_background_state : pid = %d, appname = %s", ps->pid, ps->appid);
+	setpriority(PRIO_PGRP, ps->pid, CPU_BACKGROUND_PRI);
+	cpu_move_cgroup(ps->pid, CPU_CONTROL_GROUP);
+	return RESOURCED_ERROR_NONE;
+}
+
+static int cpu_restrict_state(void *data)
+{
+	struct proc_status *ps = (struct proc_status *)data;
+	_D("cpu_restrict_state : pid = %d, appname = %s", ps->pid, ps->appid);
+	if (CHECK_BIT(ps->pai->categories, PROC_BG_MEDIA))
+		return RESOURCED_ERROR_NONE;
+	cpu_move_cgroup(ps->pid, CPU_CONTROL_CPUQUOTA_GROUP);
+	return RESOURCED_ERROR_NONE;
+}
+
+static int cpu_active_state(void *data)
+{
+	struct proc_status *ps = (struct proc_status *)data;
+	int oom_score_adj = 0, ret;
+	_D("cpu_active_state : pid = %d, appname = %s", ps->pid, ps->appid);
+	ret = proc_get_oom_score_adj(ps->pid, &oom_score_adj);
+	if (ret || oom_score_adj < OOMADJ_PREVIOUS_DEFAULT)
+		return RESOURCED_ERROR_NONE;
+	cpu_move_cgroup(ps->pid, CPU_DEFAULT_CGROUP);
 	return RESOURCED_ERROR_NONE;
 }
 
 static int cpu_prelaunch_state(void *data)
 {
-	struct proc_status *p_data = (struct proc_status*)data;
-	struct proc_process_info_t *ppi = p_data->ppi;
+	struct proc_status *ps = (struct proc_status *)data;
+	struct proc_app_info *pai = ps->pai;
 	int i = 0;
-	GSList *iter = NULL;
+
 	if (!cpu_predefined_timer)
 		return RESOURCED_ERROR_NONE;
-	if (ppi->type & PROC_WEBAPP) {
+	if (pai->type & PROC_WEBAPP) {
 		for (i = 0; i < def_list.num; i++) {
 			if (def_list.control[i].type == SET_WRT) {
 				cpu_move_cgroup(def_list.control[i].pid, CPU_DEFAULT_CGROUP);
@@ -220,18 +317,35 @@ static int cpu_prelaunch_state(void *data)
 				return RESOURCED_ERROR_NONE;
 			}
 		}
-	} else {
-		gslist_for_each_item(iter, ppi->pids) {
-			struct pid_info_t *pi = (struct pid_info_t *)(iter->data);
-			if (pi && pi->type == PROC_TYPE_GUI) {
-				if (check_predefined(pi->pid) == SET_BOOTING) {
-					cpu_move_cgroup(p_data->pid, CPU_DEFAULT_CGROUP);
-					setpriority(PRIO_PGRP, p_data->pid, 0);
-					return RESOURCED_ERROR_NONE;
-				}
-			}
-		}
 	}
+	return RESOURCED_ERROR_NONE;
+}
+
+static int cpu_system_state(void *data)
+{
+	struct proc_status *ps = (struct proc_status *)data;
+
+	_D("cpu receive system service : pid = %d", ps->pid);
+	cpu_move_cgroup(ps->pid, CPU_CONTROL_GROUP);
+	return RESOURCED_ERROR_NONE;
+}
+
+static int cpu_terminatestart_state(void *data)
+{
+	struct proc_status *ps = (struct proc_status *)data;
+	cpu_move_cgroup(ps->pid, CPU_DEFAULT_CGROUP);
+	return RESOURCED_ERROR_NONE;
+}
+
+static int cpu_exclude_state(void *data)
+{
+	struct proc_exclude *pe = (struct proc_exclude *)data;
+	if (check_predefined(pe->pid) != SET_DEFAUT)
+		return RESOURCED_ERROR_NONE;
+	if (pe->type == PROC_INCLUDE)
+		cpu_move_cgroup(pe->pid, CPU_CONTROL_GROUP);
+	else
+		cpu_move_cgroup(pe->pid, CPU_DEFAULT_CGROUP);
 	return RESOURCED_ERROR_NONE;
 }
 
@@ -264,28 +378,51 @@ static int resourced_cpu_init(void *data)
 	_D("resourced_cpu_init");
 	ret_code = make_cgroup_subdir(CPU_DEFAULT_CGROUP, "background", NULL);
 	ret_value_msg_if(ret_code < 0, ret_code, "cpu init failed\n");
-	ret_code = make_cgroup_subdir(CPU_DEFAULT_CGROUP, "service", NULL);
-	ret_value_msg_if(ret_code < 0, ret_code, "create service cgroup failed\n");
+	ret_code = make_cgroup_subdir(CPU_CONTROL_GROUP, "download", NULL);
+	ret_value_msg_if(ret_code < 0, ret_code, "cpu init failed\n");
+	cpu_check_cpuquota();
+	if (cpu_quota_enabled()) {
+		ret_code = make_cgroup_subdir(CPU_CONTROL_GROUP, "quota", NULL);
+		ret_value_msg_if(ret_code < 0, ret_code, "create service cgroup failed\n");
+	}
 	config_parse(CPU_CONF_FILE, load_cpu_config, NULL);
 
 	if (def_list.num)
 		cpu_predefined_timer =
 			ecore_timer_add(CPU_TIMER_INTERVAL, cpu_predefined_cb, NULL);
-	register_notifier(RESOURCED_NOTIFIER_SERVICE_LAUNCH, cpu_service_launch);
+	register_notifier(RESOURCED_NOTIFIER_SERVICE_LAUNCH, cpu_service_state);
 	register_notifier(RESOURCED_NOTIFIER_APP_RESUME, cpu_foreground_state);
 	register_notifier(RESOURCED_NOTIFIER_APP_FOREGRD, cpu_foreground_state);
 	register_notifier(RESOURCED_NOTIFIER_APP_BACKGRD, cpu_background_state);
 	register_notifier(RESOURCED_NOTIFIER_APP_PRELAUNCH, cpu_prelaunch_state);
+	register_notifier(RESOURCED_NOTIFIER_SYSTEM_SERVICE, cpu_system_state);
+	register_notifier(RESOURCED_NOTIFIER_APP_TERMINATE_START, cpu_terminatestart_state);
+	register_notifier(RESOURCED_NOTIFIER_CONTROL_EXCLUDE, cpu_exclude_state);
+	register_notifier(RESOURCED_NOTIFIER_WIDGET_FOREGRD, cpu_foreground_state);
+	register_notifier(RESOURCED_NOTIFIER_WIDGET_BACKGRD, cpu_widget_state);
+	register_notifier(RESOURCED_NOTIFIER_APP_ACTIVE, cpu_active_state);
+	if (cpu_quota_enabled())
+		register_notifier(RESOURCED_NOTIFIER_APP_SUSPEND_READY,
+		    cpu_restrict_state);
 	return RESOURCED_ERROR_NONE;
 }
 
 static int resourced_cpu_finalize(void *data)
 {
-	unregister_notifier(RESOURCED_NOTIFIER_SERVICE_LAUNCH, cpu_service_launch);
+	unregister_notifier(RESOURCED_NOTIFIER_SERVICE_LAUNCH, cpu_service_state);
 	unregister_notifier(RESOURCED_NOTIFIER_APP_RESUME, cpu_foreground_state);
 	unregister_notifier(RESOURCED_NOTIFIER_APP_FOREGRD, cpu_foreground_state);
 	unregister_notifier(RESOURCED_NOTIFIER_APP_BACKGRD, cpu_background_state);
 	unregister_notifier(RESOURCED_NOTIFIER_APP_PRELAUNCH, cpu_prelaunch_state);
+	unregister_notifier(RESOURCED_NOTIFIER_SYSTEM_SERVICE, cpu_system_state);
+	unregister_notifier(RESOURCED_NOTIFIER_APP_TERMINATE_START, cpu_terminatestart_state);
+	unregister_notifier(RESOURCED_NOTIFIER_CONTROL_EXCLUDE, cpu_exclude_state);
+	unregister_notifier(RESOURCED_NOTIFIER_WIDGET_FOREGRD, cpu_foreground_state);
+	unregister_notifier(RESOURCED_NOTIFIER_WIDGET_BACKGRD, cpu_widget_state);
+	unregister_notifier(RESOURCED_NOTIFIER_APP_ACTIVE, cpu_active_state);
+	if (cpu_quota_enabled())
+		unregister_notifier(RESOURCED_NOTIFIER_APP_SUSPEND_READY,
+		    cpu_restrict_state);
 	return RESOURCED_ERROR_NONE;
 }
 

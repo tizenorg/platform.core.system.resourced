@@ -140,7 +140,7 @@ static void populate_counters(char *cnt_name,
 		return;
 	}
 	counter.carg = carg;
-	strcpy(counter.name, cnt_name);
+	strncpy(counter.name, cnt_name, sizeof(counter.name)-1);
 	jump = get_counter_jump(counter.intend);
 	_D("counter: %s, classid %u, iftype %u, iotype %d, bytes %lu", cnt_name,
 		counter.classid, counter.iftype,
@@ -154,7 +154,7 @@ static void finalize_response(const char *cnt_name, struct counter_arg *carg)
 {
 	struct nfacct_rule counter = { .carg = carg, 0 };
 
-#ifdef DEBUG_ENABLED
+#ifdef NETWORK_DEBUG_ENABLED
 	_D("cnt_name %s", cnt_name);
 #endif
 	recreate_counter_by_name((char *)cnt_name, &counter);
@@ -252,6 +252,7 @@ static dbus_bool_t deserialize_restriction(
 		DBUS_TYPE_INT32, &(rest->snd_warning_limit),
 		DBUS_TYPE_INT32, &(rest->rcv_warning_limit),
 		DBUS_TYPE_INT32, &(rest->roaming),
+		DBUS_TYPE_STRING, &(rest->imsi),
 		DBUS_TYPE_INVALID);
 
 	if (ret == FALSE) {
@@ -272,8 +273,9 @@ static DBusMessage *edbus_process_restriction(E_DBus_Object *obj,
 	int ret;
 	resourced_ret_c dbus_ret = RESOURCED_ERROR_NONE;
 	char *appid = NULL;
-	resourced_net_restrictions rest;
+	resourced_net_restrictions rest = { 0, };
 	enum traffic_restriction_type rst_type;
+	resourced_restriction_info rst_info = {0,};
 
 	ret = dbus_message_is_method_call(
 	    msg, RESOURCED_INTERFACE_NETWORK,
@@ -291,10 +293,14 @@ static DBusMessage *edbus_process_restriction(E_DBus_Object *obj,
 		dbus_ret = RESOURCED_ERROR_FAIL;
 		goto out;
 	}
+	rest.ifname = get_iftype_name(rest.iftype);
 
+	rst_info.ifname = get_iftype_name(RESOURCED_IFACE_DATACALL);
+	get_restriction_info(appid, RESOURCED_IFACE_DATACALL, &rst_info);
+	/* TODO : 2SIM device with restriction per application */
 	/* restriction is not imsi based */
 	dbus_ret = proc_keep_restriction(appid, NONE_QUOTA_ID, &rest,
-					     rst_type, false);
+					     rst_type, false, rst_info.rst_state);
 out:
 	dbus_message_iter_append_basic(&iter, DBUS_TYPE_INT32, &dbus_ret);
 
@@ -415,12 +421,6 @@ static dbus_bool_t deserialize_quota(
 		goto release;
 	}
 
-	quota->snd_warning_threshold = _evaluate_warning_threshold(
-		quota->snd_quota, quota->time_period,
-		quota->snd_warning_threshold);
-	quota->rcv_warning_threshold = _evaluate_warning_threshold(
-		quota->rcv_quota, quota->time_period,
-		quota->rcv_warning_threshold);
 	_D("calculated snd_warning_threshold %d", quota->snd_warning_threshold);
 	_D("calculated rcv_warning_threshold %d", quota->rcv_warning_threshold);
 
@@ -823,7 +823,9 @@ static DBusMessage *edbus_create_quota(E_DBus_Object *obj, DBusMessage *msg)
 
 	SET_BIT(carg->opts->state, RESOURCED_CHECK_QUOTA);
 	reschedule_count_timer(carg, 0);
+#ifdef DEBUG_ENABLED
 	_SD("Datausage quota changed");
+#endif
 
 update_out:
 	reply = dbus_message_new_method_return(msg);
@@ -940,8 +942,9 @@ static DBusMessage *edbus_get_stats(E_DBus_Object *obj, DBusMessage *msg)
 		ret = RESOURCED_ERROR_INVALID_PARAMETER;
 		goto update_out;
 	}
-
+#ifdef DEBUG_ENABLED
 	_SD("Datausage get stats");
+#endif
 	ctx.msg = msg;
 	deserialize_rule(msg, &rule, &app_id);
 	if (app_id)
@@ -970,17 +973,17 @@ typedef struct {
 	void (*process)(struct nl_family_params *params);
 } nl_serialization_command;
 
-static inline char *_get_public_appid(const uint32_t classid)
+static inline char *get_public_appid(const uint32_t classid)
 {
 	char *appid;
 
 	/* following value for ALL is suitable for using in statistics
 	   what's why it's not in get_app_id_by_classid */
 	if (classid == RESOURCED_ALL_APP_CLASSID)
-		return RESOURCED_ALL_APP;
+		return strdup(RESOURCED_ALL_APP);
 
 	appid = get_app_id_by_classid(classid, true);
-	return !appid ? UNKNOWN_APP : appid;
+	return !appid ? strdup(UNKNOWN_APP) : appid;
 }
 
 static bool need_flush_immediatelly(sig_atomic_t state)
@@ -992,10 +995,14 @@ static bool need_flush_immediatelly(sig_atomic_t state)
 static void free_restriction_info(void *data)
 {
 	resourced_restriction_info *info = (resourced_restriction_info *)data;
+	if (!info)
+		return;
 	if (info->app_id)
 		free((char *)info->app_id);
 	if (info->ifname)
 		free((char *)info->ifname);
+	if (info->imsi)
+		free((char *)info->imsi);
 }
 
 static void store_restrictions(struct counter_arg *arg)
@@ -1027,7 +1034,7 @@ static void store_restrictions(struct counter_arg *arg)
 		update_restriction_db(info->app_id, info->iftype,
 				      info->rcv_limit, info->send_limit,
 				      info->rst_state, info->quota_id,
-				      info->roaming, info->ifname);
+				      info->roaming, info->ifname, GLOBAL_CONFIG_IMSI);
 	}
 
 	g_slist_free_full(rst_list, free_restriction_info);
@@ -1049,7 +1056,7 @@ static Eina_Bool store_and_free_result_cb(void *user_data)
 
 	if (check_flush_time(arg->opts->flush_period, arg->last_run_time) &&
 	    !need_flush_immediatelly(arg->opts->state))
-		return ECORE_CALLBACK_CANCEL;
+		goto quit_counter;
 
 	/* It's dangerouse to store restriction every counting cycle,
 	 * 1. we need to request it without reset cmd
@@ -1079,9 +1086,11 @@ static Eina_Bool store_and_free_result_cb(void *user_data)
 		}
 	}
 
-	arg->store_result_timer = NULL;
 	arg->serialized_counters = 0;
 	time(&(arg->last_run_time));
+
+quit_counter:
+	arg->store_result_timer = NULL;
 
 	/*
 	 * it's latest counter code for async operations,
@@ -1144,7 +1153,9 @@ static void _process_network_counter(struct nl_family_params *params)
 		       RESOURCED_CHECK_QUOTA)) {
 		/* it could be due, 0 value for all counters
 		 * or due 0 payload in netlink response */
+#ifdef NETWORK_DEBUG_ENABLED
 		_D("There is no serialized counters in response");
+#endif
 		return;
 	}
 
@@ -1185,12 +1196,20 @@ static void _process_restriction(struct nl_family_params *cmd)
 		return;
 	}
 
-	app_id = _get_public_appid(restriction.sk_classid);
+	app_id = get_public_appid(restriction.sk_classid);
+	if (!app_id) {
+		_E("Failed to get_public_appid.");
+		return;
+	}
+
 	iftype = get_iftype(restriction.ifindex);
 
 	ret = get_restriction_info(app_id, iftype, &rst_info);
-	ret_msg_if(ret != RESOURCED_ERROR_NONE,
-		"Failed to get restriction info!");
+	if (ret != RESOURCED_ERROR_NONE) {
+		_E("Failed to get restriction info!");
+		free(app_id);
+		return;
+	}
 
 	get_quota_by_id(rst_info.quota_id, &du_quota);
 	_D("quota rcv: %d, send: %d", du_quota.rcv_quota, du_quota.snd_quota);
@@ -1200,13 +1219,14 @@ static void _process_restriction(struct nl_family_params *cmd)
 			send_restriction_notification(app_id, &du_quota);
 		update_restriction_db(app_id, iftype, 0, 0,
 				      RESOURCED_RESTRICTION_ACTIVATED,
-		rst_info.quota_id, rst_info.roaming, rst_info.ifname);
+		rst_info.quota_id, rst_info.roaming, rst_info.ifname, GLOBAL_CONFIG_IMSI);
 	} else if (notification_type == RESTRICTION_NOTI_C_WARNING) {
 		/* nested if due error message correctness */
 		if (rst_info.quota_id != NONE_QUOTA_ID)
 			send_restriction_warn_notification(app_id, &du_quota);
 	} else
 		_E("Unkown restriction notification type");
+	free(app_id);
 }
 
 static resourced_ret_c choose_netlink_process(struct genl *ans,

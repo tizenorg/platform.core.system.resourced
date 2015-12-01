@@ -24,6 +24,7 @@
 #include "cgroup.h"
 #include "const.h"
 #include "macro.h"
+#include "util.h"
 #include "resourced.h"
 #include "trace.h"
 #include "file-helper.h"
@@ -42,7 +43,10 @@
 #include <unistd.h>
 #include <sys/mount.h>
 
-static int is_cgroup_exists(const char *cgroup_full_path)
+#define RELEASE_AGENT	"/release_agent"
+#define NOTIFY_ON_RELEASE  "/notify_on_release"
+
+static bool is_cgroup_exists(const char *cgroup_full_path)
 {
 	struct stat stat_buf;
 	return stat(cgroup_full_path, &stat_buf) == 0;
@@ -64,12 +68,13 @@ static int create_cgroup(const char *cgroup_full_path)
 resourced_ret_c place_pid_to_cgroup_by_fullpath(const char *cgroup_full_path,
 	const int pid)
 {
+	char buf[256];
 	int ret = cgroup_write_node(cgroup_full_path, CGROUP_FILE_NAME,
 		(u_int32_t)pid);
 
 	ret_value_msg_if(ret < 0, RESOURCED_ERROR_FAIL,
 		"Failed place all pid to cgroup %s, error %s",
-			cgroup_full_path, strerror(errno));
+			cgroup_full_path, strerror_r(errno, buf, sizeof(buf)));
 	return RESOURCED_ERROR_NONE;
 }
 
@@ -105,13 +110,19 @@ resourced_ret_c place_pidtree_to_cgroup(const char *cgroup_subsystem,
 	ret_value_msg_if(!f, RESOURCED_ERROR_FAIL, "Failed to get child pids!");
 	while (fgets(pidbuf, sizeof(pidbuf), f) != NULL) {
 		int child_pid = atoi(pidbuf);
-		ret_value_msg_if(child_pid < 0, RESOURCED_ERROR_FAIL,
-				 "Invalid child pid!");
+		if (child_pid < 0) {
+			_E("Invalid child pid!");
+			fclose(f);
+			return RESOURCED_ERROR_FAIL;
+		}
 		resourced_ret_c ret = place_pid_to_cgroup_by_fullpath(buf, child_pid);
-		ret_value_msg_if(ret != RESOURCED_ERROR_NONE, ret,
-	  "Failed to put parent process %d into %s cgroup", pid, cgroup_name);
-
+		if (ret != RESOURCED_ERROR_NONE) {
+			_E("Failed to put parent process %d into %s cgroup", pid, cgroup_name);
+			fclose(f);
+			return ret;
+		}
 	}
+	fclose(f);
 	return RESOURCED_ERROR_NONE;
 }
 
@@ -125,7 +136,7 @@ int cgroup_write_node(const char *cgroup_name,
 }
 
 int cgroup_write_node_str(const char *cgroup_name,
-		const char *file_name, char* string)
+			const char *file_name, const char *string)
 {
 	char buf[MAX_PATH_LENGTH];
 	snprintf(buf, sizeof(buf), "%s%s", cgroup_name, file_name);
@@ -137,15 +148,18 @@ int cgroup_read_node(const char *cgroup_name,
 		const char *file_name, unsigned int *value)
 {
 	char buf[MAX_PATH_LENGTH];
+	int ret;
 	snprintf(buf, sizeof(buf), "%s%s", cgroup_name, file_name);
+	ret = fread_uint(buf, value);
 	_SD("cgroup_buf %s, value %d\n", buf, *value);
-	return fread_int(buf, value);
+	return ret;
 }
 
-int make_cgroup_subdir(char* parentdir, char* cgroup_name, int *exists)
+int make_cgroup_subdir(const char* parentdir, const char* cgroup_name, bool *already)
 {
-	int cgroup_exists = 0, ret = 0;
 	char buf[MAX_PATH_LENGTH];
+	bool cgroup_exists;
+	int ret = 0;
 
 	if (parentdir)
 		ret = snprintf(buf, sizeof(buf), "%s/%s", parentdir, cgroup_name);
@@ -163,8 +177,8 @@ int make_cgroup_subdir(char* parentdir, char* cgroup_name, int *exists)
 				cgroup_name);
 	}
 
-	if (exists)
-		*exists = cgroup_exists;
+	if (already)
+		*already = cgroup_exists;
 
 	return RESOURCED_ERROR_NONE;
 }
@@ -175,3 +189,18 @@ int mount_cgroup_subsystem(char* source, char* mount_point, char* opts)
 		    MS_NODEV | MS_NOSUID | MS_NOEXEC, opts);
 }
 
+int set_release_agent(const char *cgroup_subsys, const char *release_agent)
+{
+	_cleanup_free_ char *buf = NULL;
+	int r;
+
+	r = asprintf(&buf, "%s/%s", DEFAULT_CGROUP, cgroup_subsys);
+	if (r < 0)
+		return -ENOMEM;
+
+	r = cgroup_write_node_str(buf, RELEASE_AGENT, release_agent);
+	if (r < 0)
+		return r;
+
+	return cgroup_write_node_str(buf, NOTIFY_ON_RELEASE, "1");
+}

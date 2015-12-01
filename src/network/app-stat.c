@@ -37,6 +37,8 @@
 #include "macro.h"
 #include "telephony.h"
 #include "trace.h"
+#include "notifier.h"
+#include "proc-common.h"
 #ifdef CONFIG_DATAUSAGE_NFACCT
 #include "nfacct-rule.h"
 #else
@@ -69,9 +71,7 @@ static gint compare_classid(gconstpointer a, gconstpointer b,
 	if (ret)
 		return ret;
 
-	ret = (a_key->ifname && b_key->ifname) ?
-		strcmp(a_key->ifname, b_key->ifname) : 0;
-
+	ret = strcmp(a_key->ifname, b_key->ifname);
 	if (ret)
 		return ret;
 
@@ -82,6 +82,7 @@ static gint compare_classid(gconstpointer a, gconstpointer b,
 struct application_stat_tree *create_app_stat_tree(void)
 {
 	int ret;
+	char buf[256];
 	struct application_stat_tree *app_stat_tree;
 	app_stat_tree =
 		(struct application_stat_tree *) malloc
@@ -98,7 +99,7 @@ struct application_stat_tree *create_app_stat_tree(void)
 	app_stat_tree->last_touch_time = time(0);
 	ret = pthread_rwlock_init(&app_stat_tree->guard, NULL);
 	if (ret != 0) {
-		_E("Could not initialize tree guard %s.", strerror(ret));
+		_E("Could not initialize tree guard %s.", strerror_r(ret, buf, sizeof(buf)));
 		free(app_stat_tree);
 		app_stat_tree = NULL;
 	}
@@ -148,6 +149,7 @@ static void fill_nfacct_counter(struct nfacct_rule *counter, uint64_t bytes)
 	struct application_stat_tree *app_tree =
 		(struct application_stat_tree *)carg->result;
 	struct application_stat *app_stat = NULL;
+	struct proc_status ps = {0};
 
 	search_key.classid = counter->classid;
 	search_key.iftype = counter->iftype;
@@ -176,11 +178,15 @@ static void fill_nfacct_counter(struct nfacct_rule *counter, uint64_t bytes)
 		}
 		memset(app_stat, 0, sizeof(struct application_stat));
 		g_tree_insert((GTree *)app_tree->tree, (gpointer)key, (gpointer)app_stat);
+#ifdef DEBUG_ENABLED
 		_D("new app stat for classid %u\n", counter->classid);
+#endif
 	} else {
+#ifdef DEBUG_ENABLED
 		_D("app stat for classid %d found in tree", search_key.classid);
 		_D("app stats app id %s", app_stat->application_id);
 		_D("counter intend %d", counter->intend);
+#endif
 	}
 
 	if (counter->iotype == NFACCT_COUNTER_IN) {
@@ -200,6 +206,14 @@ static void fill_nfacct_counter(struct nfacct_rule *counter, uint64_t bytes)
 	if (!app_stat->application_id)
 		app_stat->application_id = get_app_id_by_classid(counter->classid, false);
 	app_stat->ground = get_app_ground(counter);
+
+	ps.appid = app_stat->application_id;
+	ps.pai = find_app_info_by_appid(ps.appid);
+
+	if (ps.pai && ps.pai->state == PROC_STATE_SUSPEND) {
+		ps.pid = ps.pai->main_pid;
+		resourced_notify(RESOURCED_NOTIFIER_APP_WAKEUP, &ps);
+	}
 }
 
 static void fill_nfacct_restriction(struct nfacct_rule *counter, uint64_t bytes)
@@ -278,7 +292,9 @@ API void fill_app_stat_result(int ifindex, int classid, uint64_t bytes, int ioty
 		}
 		memset(app_stat, 0, sizeof(struct application_stat));
 		g_tree_insert((GTree *)app_tree->tree, (gpointer)key, (gpointer)app_stat);
+#ifdef DEBUG_ENABLED
 		_D("new app stat for classid %u\n", classid);
+#endif
 	}
 
 	if (iotype == TRAF_STAT_C_GET_CONN_IN) {

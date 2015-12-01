@@ -25,20 +25,28 @@
 #ifndef __SWAP_COMMON_H__
 #define __SWAP_COMMON_H__
 
-enum {
+#include "memory-common.h"
+
+enum swap_state {
+	SWAP_ARG_START = -1,
 	SWAP_OFF,
 	SWAP_ON,
 	SWAP_ARG_END,
 };
 
-#ifdef SWAP_SUPPORT
-int swap_check_swap_pid(int pid);
-#else
-static inline int swap_check_swap_pid(int pid)
-{
-	return RESOURCED_ERROR_FAIL;
-}
-#endif /* SWAP_SUPPORT */
+struct swap_status_msg {
+	enum memcg_type type;
+	struct memcg_info *info;
+	pid_t pid;
+};
 
+enum swap_compact_reason {
+	SWAP_COMPACT_LOWMEM_LOW,
+	SWAP_COMPACT_LOWMEM_MEDIUM,
+	SWAP_COMPACT_SWAP_FULL,
+	SWAP_COMPACT_RESASON_MAX,
+};
+
+enum swap_state swap_get_state(void);
 
 #endif /* __SWAP_COMMON_H__ */

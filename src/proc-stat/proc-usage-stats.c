@@ -50,7 +50,7 @@
 #include <Ecore.h>
 #include <errno.h>
 
-#include "proc-usage-stats.h"
+#include "proc-main.h"
 #include "proc-usage-stats-helper.h"
 #include "resourced.h"
 #include "macro.h"
@@ -187,9 +187,13 @@ static Eina_Bool proc_runtime_info_task_cb(void *data, Ecore_Fd_Handler *fd_hand
 
 error:
 	/* In case of error, return only a failure value in the reply dbus message */
+	if (!rt_task)
+		return ECORE_CALLBACK_CANCEL;
+
 	_D("task %s: error occured in collection of usage info, sending error message", rt_task->task_name);
-	reply = dbus_message_new_method_return(rt_task->task_msg);
+
 	ret = -EREMOTEIO;
+	reply = dbus_message_new_method_return(rt_task->task_msg);
 	dbus_message_iter_init_append(reply, &iter);
 	dbus_message_iter_append_basic(&iter, DBUS_TYPE_INT32, &ret);
 
@@ -282,12 +286,16 @@ static DBusMessage *proc_runtime_info_request_handler(DBusMessage *msg, runtime_
 	}
 
 	/* Create runtime_info_task for current task */
-	rt_task = (struct runtime_info_task *)malloc(sizeof(struct runtime_info_task));
+	rt_task = (struct runtime_info_task *)calloc(1, (sizeof(struct runtime_info_task)));
 	if (!rt_task) {
 		_E("out of memory: not able to create runtime_info_task");
 		ret = -ENOMEM;
 		goto error;
 	}
+
+	rt_task->usage_info_list = NULL;
+	rt_task->pipe_fds[0] = -1;
+	rt_task->pipe_fds[1] = -1;
 
 	/* Populate fields of the runtime_info_task */
 	proc_get_task_name(rt_task->task_name, sizeof(rt_task->task_name),
@@ -309,7 +317,6 @@ static DBusMessage *proc_runtime_info_request_handler(DBusMessage *msg, runtime_
 		goto error;
 	}
 
-	rt_task->usage_info_list = NULL;
 	if (rt_task->task_type == RUNTIME_INFO_TASK_MEMORY)
 		rt_task->usage_info_list = (void *)malloc(sizeof(struct process_memory_info_s) * rt_task->task_size);
 	else
@@ -349,7 +356,8 @@ static DBusMessage *proc_runtime_info_request_handler(DBusMessage *msg, runtime_
 
 error:
 	/* In case of error, return only a failure value in the reply dbus message */
-	_D("task %s: error occured, sending error reply message", rt_task->task_name);
+	if (rt_task)
+		_D("task %s: error occured, sending error reply message", rt_task->task_name);
 	reply = dbus_message_new_method_return(msg);
 	dbus_message_iter_init_append(reply, &iter);
 	dbus_message_iter_append_basic(&iter, DBUS_TYPE_INT32, &ret);
@@ -369,10 +377,20 @@ static DBusMessage *edbus_proc_cpu_usage(E_DBus_Object *obj, DBusMessage *msg)
 	return proc_runtime_info_request_handler(msg, RUNTIME_INFO_TASK_CPU);
 }
 
-resourced_ret_c proc_usage_stats_init(void)
+static int proc_usage_stats_init(void *data)
 {
-	int ret;
-
-	ret = edbus_add_methods(RESOURCED_PATH_PROCESS, edbus_methods, ARRAY_SIZE(edbus_methods));
-	return ret;
+	edbus_add_methods(RESOURCED_PATH_PROCESS, edbus_methods, ARRAY_SIZE(edbus_methods));
+	return RESOURCED_ERROR_NONE;
 }
+
+static int proc_usage_stats_exit(void *data)
+{
+	return RESOURCED_ERROR_NONE;
+}
+
+static const struct proc_module_ops proc_usage_stats_ops = {
+	.name           = "PROC_USAGE_STATS",
+	.init           = proc_usage_stats_init,
+	.exit           = proc_usage_stats_exit,
+};
+PROC_MODULE_REGISTER(&proc_usage_stats_ops)

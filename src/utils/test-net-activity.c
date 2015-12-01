@@ -38,7 +38,7 @@ resourced_cb_ret net_activity_func(struct net_activity_info *info)
 int main(int argc, char **argv)
 {
 	resourced_ret_c ret;
-#ifdef DEBUG_ENABLED
+#ifdef NETWORK_DEBUG_ENABLED
 	mtrace();
 	mcheck(0);
 #endif

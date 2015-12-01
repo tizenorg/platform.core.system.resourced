@@ -31,19 +31,54 @@
 #include <errno.h>
 #include <signal.h>
 #include <stdio.h>
+#include <sys/syslog.h>
+
+#include "macro.h"
 
 #undef LOG_TAG
 #define LOG_TAG "RESOURCED"
 
 #define WALK_TREE(list, func) g_tree_foreach((GTree *)list, func, NULL)
 
-#define _E(fmt, arg...) LOGE("[%s,%d] "fmt, __FUNCTION__, __LINE__, ##arg)
-#define _D(fmt, arg...) LOGD("[%s,%d] "fmt, __FUNCTION__, __LINE__, ##arg)
-#define _I(fmt, arg...) LOGI("[%s,%d] "fmt, __FUNCTION__, __LINE__, ##arg)
+enum log_type {
+	LOG_TYPE_STANDARD = 0,
+	LOG_TYPE_FILE,
+	LOG_TYPE_DLOG,
+	LOG_TYPE_MAX
+};
 
-#define _SE(fmt, arg...) SECURE_LOGE("[%s,%d] "fmt, __FUNCTION__, __LINE__, ##arg)
-#define _SD(fmt, arg...) SECURE_LOGD("[%s,%d] "fmt, __FUNCTION__, __LINE__, ##arg)
-#define _SI(fmt, arg...) SECURE_LOGI("[%s,%d] "fmt, __FUNCTION__, __LINE__, ##arg)
+extern enum log_type logtype;
+
+#define _E(fmt, arg...) do {			\
+	switch (logtype) {				\
+	case LOG_TYPE_DLOG:			\
+		LOGE(fmt, ##arg);		\
+	default:				\
+		log_write(LOG_ERR, fmt, ##arg);	\
+	}					\
+} while (0)
+
+#define _D(fmt, arg...) do {				\
+	switch (logtype) {					\
+	case LOG_TYPE_DLOG:				\
+		LOGD(fmt, ##arg);			\
+	default:					\
+		log_write(LOG_DEBUG, fmt, ##arg);	\
+	}						\
+} while (0)
+
+#define _I(fmt, arg...) do {				\
+	switch (logtype) {					\
+	case LOG_TYPE_DLOG:				\
+		LOGD(fmt, ##arg);			\
+	default:					\
+		log_write(LOG_INFO, fmt, ##arg);	\
+	}						\
+} while (0)
+
+#define _SE(fmt, arg...) SECURE_LOGE(fmt, ##arg)
+#define _SD(fmt, arg...) SECURE_LOGD(fmt, ##arg)
+#define _SI(fmt, arg...) SECURE_LOGI(fmt, ##arg)
 
 #define TRACE_DB_ERR(a) if (a != NULL) { \
 	_D("%s\n", a); \
@@ -51,7 +86,8 @@
 }
 
 #define TRACE_RET_ERRCODE(type, error_code) do { \
-	_##type("errno %d, errmsg %s", error_code, strerror(-error_code)); \
+	char buf[256]; \
+	_##type("errno %d, errmsg %s", error_code, strerror_r(-error_code, buf, sizeof(buf))); \
 } while (0)
 
 #define DTRACE_RET_ERRCODE(error_code) TRACE_RET_ERRCODE(D, error_code)
@@ -59,8 +95,9 @@
 #define ETRACE_RET_ERRCODE(error_code) TRACE_RET_ERRCODE(E, error_code)
 
 #define TRACE_RET_ERRCODE_MSG(type, error_code, fmt, arg...) do { \
+	char buf[256]; \
 	_##type(fmt, ##arg); \
-	_##type("errno %d, errmsg %s", error_code, strerror(-error_code)); \
+	_##type("errno %d, errmsg %s", error_code, strerror_r(-error_code, buf, sizeof(buf))); \
 } while (0)
 
 #define DTRACE_RET_ERRCODE_MSG(error_code, fmt, arg...) \
@@ -82,5 +119,9 @@
 #define LOG_DUMP(fp, fmt, arg...) \
 	if (fp) fprintf(fp, fmt, ##arg); \
 	else _E(fmt, ##arg);
+
+API int log_close(void);
+API int log_open(enum log_type type, const char *path);
+API int log_write(int level, const char *format, ...);
 
 #endif	/* _SYSTEM_RESOURCE_TRACE_H_ */

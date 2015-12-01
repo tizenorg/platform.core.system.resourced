@@ -84,7 +84,7 @@ static resourced_ret_c exclude_net_restriction(struct nfacct_rule *rule)
 	ret_value_msg_if(ret != RESOURCED_ERROR_NONE, ret, "Failed to delete");
 
 	return produce_net_rule(rule, 0, 0,
-		NFACCT_ACTION_INSERT, NFACCT_JUMP_ACCEPT,
+		NFACCT_ACTION_INSERT, NFACCT_JUMP_UNKNOWN,
 		NFACCT_COUNTER_IN | NFACCT_COUNTER_OUT);
 }
 

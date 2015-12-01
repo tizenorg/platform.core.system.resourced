@@ -21,18 +21,6 @@
  * @file swap.c
  * @desc swap process
  */
-
-#include "macro.h"
-#include "module.h"
-#include "module-data.h"
-#include "edbus-handler.h"
-#include "swap-common.h"
-#include "notifier.h"
-#include "proc-process.h"
-#include "proc-main.h"
-#include "config-parser.h"
-
-#include <resourced.h>
 #include <trace.h>
 #include <stdlib.h>
 #include <sys/stat.h>
@@ -44,528 +32,737 @@
 #include <sys/sysinfo.h>
 #include <sys/time.h>
 #include <sys/resource.h>
+#include <memory-common.h>
 
-#define MAX_SWAP_VICTIMS		16
+#include "macro.h"
+#include "module.h"
+#include "module-data.h"
+#include "edbus-handler.h"
+#include "swap-common.h"
+#include "config-parser.h"
+#include "lowmem-handler.h"
+#include "notifier.h"
+#include "procfs.h"
+#include "cgroup.h"
+#include "const.h"
+#include "file-helper.h"
+#include "proc-common.h"
+#include "util.h"
 
-#define MEMCG_PATH			"/sys/fs/cgroup/memory"
-
-#define BACKCG_PATH			MEMCG_PATH"/background"
-#define BACKCG_PROCS		BACKCG_PATH"/cgroup.procs"
-
-#define SWAPCG_PATH			MEMCG_PATH"/swap"
-#define SWAPCG_PROCS			SWAPCG_PATH"/cgroup.procs"
-#define SWAPCG_USAGE			SWAPCG_PATH"/memory.usage_in_bytes"
-#define SWAPCG_LIMIT			SWAPCG_PATH"/memory.limit_in_bytes"
+#define MEMCG_PATH			"/sys/fs/cgroup/memory/"
+#define SWAPCG_RECLAIM			"memory.force_reclaim"
+#define MOVE_CHARGE			"memory.move_charge_at_immigrate"
 
 #define SWAP_ON_EXEC_PATH		"/sbin/swapon"
 #define SWAP_OFF_EXEC_PATH		"/sbin/swapoff"
-
-#define SIGNAL_NAME_SWAP_TYPE		"SwapType"
-#define SIGNAL_NAME_SWAP_START_PID	"SwapStartPid"
-
-#define SWAPFILE_NAME			"/dev/zram0"
+#define SWAP_MKSWAP_EXEC_PATH		"/sbin/mkswap"
 
 #define SWAP_CONF_FILE			"/etc/resourced/swap.conf"
-#define SWAP_CONTROL			"SWAP_CONTROL"
-#define SWAP_HARD_LIMIT			"SWAP_HARD_LIMIT"
-#define SWAP_HARD_LIMIT_DEFAULT		0.5
+#define SWAP_CONTROL_SECTION		"CONTROL"
+#define SWAP_CONF_STREAMS		"MAX_COMP_STREAMS"
+#define SWAP_CONF_ALGORITHM		"COMP_ALGORITHM"
+#define SWAP_CONF_RATIO			"RATIO"
 
-#define SWAP_PATH_MAX			100
+#define SWAP_BACKEND			"zram"
+#define SWAP_ZRAM_NUM_DEVICE		"1"
+#define SWAP_ZRAM_DEVICE		"/dev/zram0"
+#define SWAP_ZRAM_SYSFILE		"/sys/block/zram0/"
+#define SWAP_ZRAM_DISK_SIZE		SWAP_ZRAM_SYSFILE"disksize"
+#define SWAP_ZRAM_MAX_COMP_STREAMS	SWAP_ZRAM_SYSFILE"max_comp_streams"
+#define SWAP_ZRAM_COMP_ALGORITHM	SWAP_ZRAM_SYSFILE"comp_algorithm"
+#define SWAP_ZRAM_COMPACT		SWAP_ZRAM_SYSFILE"compact"
+#define SWAP_ZRAM_MEM_USED_TOTAL	SWAP_ZRAM_SYSFILE"mem_used_total"
 
 #define MBtoB(x)			(x<<20)
 #define MBtoPage(x)			(x<<8)
-
 #define BtoMB(x)			((x) >> 20)
 #define BtoPAGE(x)			((x) >> 12)
 
-#define SWAP_TIMER_INTERVAL		0.5
 #define SWAP_PRIORITY			20
-
 #define SWAP_SORT_MAX			10
-#define SWAP_COUNT_MAX				5
+#define MAX_PIDS			3
+#define SWAP_RATIO			0.5
+#define SWAP_FULLNESS_RATIO		0.8
+#define SWAP_FORCE_RECLAIM_NUM_MAX	5
+#define SWAP_RECLIAM_PAGES_MAX		2560
+#define SWAP_RECLIAM_PAGES_MIN		128
 
-struct task_info {
-	pid_t pid;
-	pid_t pgid;
-	int oom_score_adj;
-	int size;
-	int cgroup_cnt;
+enum swap_thread_op {
+	SWAP_OP_ACTIVATE,
+	SWAP_OP_RECLAIM,
+	SWAP_OP_COMPACT,
+	SWAP_OP_END,
 };
 
-static int swapon;
-static float hard_limit_fraction = SWAP_HARD_LIMIT_DEFAULT;
+struct swap_task {
+	struct proc_app_info *pai;
+	int size;
+};
+
+struct swap_zram_control {
+	int max_comp_streams;
+	char comp_algorithm[5];
+	float ratio;
+	unsigned long swap_size_bytes;
+	unsigned long swap_almost_full_bytes;
+};
+
+struct swap_safe_queue {
+	GQueue *queue;
+	pthread_mutex_t lock;
+};
+
+struct swap_thread_bundle {
+	struct swap_status_msg msg;
+	enum swap_thread_op op;
+};
+
+static struct swap_zram_control swap_control = {
+	.max_comp_streams = -1,
+	.comp_algorithm = "lzo",
+	.ratio = SWAP_RATIO,
+	.swap_size_bytes = 0,
+	.swap_almost_full_bytes = 0,
+};
+
 static pthread_mutex_t swap_mutex;
 static pthread_cond_t swap_cond;
-static Ecore_Timer *swap_timer = NULL;
+static struct swap_safe_queue swap_thread_queue;
+static struct module_ops swap_modules_ops;
+static char *swap_thread_op_names[SWAP_OP_END] = {
+	"ACTIVATE",
+	"RECLAIM",
+	"COMPACT",
+};
 
-static const struct module_ops swap_modules_ops;
-static const struct module_ops *swap_ops;
+static int swap_compact_handler(void *data);
 
-static int swap_get_swap_type(void)
+static const char *compact_reason_to_str(enum swap_compact_reason reason)
+{
+	static const char *reasons_table[] = {"lowmem: low", "lowmem: medium",
+			"swap: zram full"};
+	if (reason >= SWAP_COMPACT_LOWMEM_LOW && reason < SWAP_COMPACT_RESASON_MAX)
+		return reasons_table[reason];
+	return "";
+}
+
+enum swap_state swap_get_state(void)
 {
 	struct shared_modules_data *modules_data = get_shared_modules_data();
 
 	ret_value_msg_if(modules_data == NULL, RESOURCED_ERROR_FAIL,
 			 "Invalid shared modules data\n");
-	return modules_data->swap_data.swaptype;
+
+	return modules_data->swap_data.swap_state;
 }
 
-static void swap_set_swap_type(int type)
+static void swap_set_state(enum swap_state state)
 {
 	struct shared_modules_data *modules_data = get_shared_modules_data();
 
 	ret_msg_if(modules_data == NULL,
 			 "Invalid shared modules data\n");
-	modules_data->swap_data.swaptype = type;
+
+	if ((state != SWAP_ON) && (state != SWAP_OFF))
+		return;
+
+	modules_data->swap_data.swap_state = state;
 }
 
-static unsigned long swap_calculate_hard_limit(unsigned long swap_cg_usage)
+
+static pid_t swap_change_state(enum swap_state state)
 {
-	return (unsigned long)(swap_cg_usage * hard_limit_fraction);
-}
+	int status;
+	pid_t child_pid;
+	pid_t pid = fork();
 
-static int load_swap_config(struct parse_result *result, void *user_data)
-{
-	int limit_value;
-
-	if (!result) {
-		_E("Invalid parameter: result is NULL");
-		return -EINVAL;
-	}
-
-	if (!strncmp(result->section, SWAP_CONTROL, strlen(SWAP_CONTROL))) {
-		if (!strncmp(result->name, SWAP_HARD_LIMIT, strlen(SWAP_CONTROL))) {
-			limit_value = (int)strtoul(result->value, NULL, 0);
-			if (limit_value < 0 || limit_value > 100) {
-				_E("Invalid %s value in %s file, setting %f as default percent value",
-						SWAP_HARD_LIMIT, SWAP_CONF_FILE, SWAP_HARD_LIMIT_DEFAULT);
-				return RESOURCED_ERROR_NONE;
-			}
-
-			hard_limit_fraction = (float)limit_value/100;
-		}
-	}
-	_D("hard limit fraction for swap module is %f", hard_limit_fraction);
-	return RESOURCED_ERROR_NONE;
-}
-
-static int swap_move_to_swap_cgroup(pid_t pid)
-{
-	int size;
-	FILE *f;
-	char buf[SWAP_PATH_MAX] = {0,};
-
-	f = fopen(SWAPCG_PROCS, "w");
-	if (!f) {
-		_E("Fail to %s file open", SWAPCG_PROCS);
+	if (pid < 0) {
+		_E("failed to fork");
 		return RESOURCED_ERROR_FAIL;
 	}
 
-	_D("Moving task %d to swap cgroup", pid);
-	size = sprintf(buf, "%d", pid);
-	if (fwrite(buf, size, 1, f) != 1)
-		_E("fwrite cgroup tasks to swap cgroup failed : %d\n", pid);
-	fclose(f);
+	/* child */
+	if (pid == 0) {
+		if (state == SWAP_ON)
+			execl(SWAP_ON_EXEC_PATH, SWAP_ON_EXEC_PATH, "-d",
+			    SWAP_ZRAM_DEVICE, (char *)NULL);
+		else if (state == SWAP_OFF)
+			execl(SWAP_OFF_EXEC_PATH, SWAP_OFF_EXEC_PATH,
+			    SWAP_ZRAM_DEVICE, (char *)NULL);
+		exit(0);
+	}
 
-	return RESOURCED_ERROR_NONE;
+	/* parent */
+	child_pid = waitpid(pid, &status, 0);
+	if (child_pid < 0) {
+		_E("can't wait for a pid %d %d %s", pid, status, strerror(errno));
+		return child_pid;
+	}
+
+	swap_set_state(state);
+	return pid;
 }
 
-/*
-  * check current mem usage total, and caculate to move swap cgroup
-  */
-static int swap_victims(GArray *victim_candidates)
+static int swap_get_disksize_bytes(void)
 {
-	int i, ret, loop_max;
-	int total_usage = 0;
-	int swap_size = 0;
-	struct sysinfo si;
-	char appname[PROC_NAME_MAX];
+	int ret, disksize = 0;
 
-	if (!sysinfo(&si))
-		total_usage = si.totalram - si.freeram;
+	ret = fread_int(SWAP_ZRAM_DISK_SIZE, &disksize);
+	if (ret == RESOURCED_ERROR_NONE)
+		return disksize;
 
-	if (!total_usage) {
-		_E("sysinfo failed");
+	return ret;
+}
+
+static inline void swap_add_bundle(struct swap_thread_bundle *bundle)
+{
+	pthread_mutex_lock(&swap_thread_queue.lock);
+	g_queue_push_tail(swap_thread_queue.queue, bundle);
+	pthread_mutex_unlock(&swap_thread_queue.lock);
+}
+
+static int swap_move_to_cgroup_by_pid(enum memcg_type type, pid_t pid)
+{
+	int ret;
+	struct memcg *memcg_swap = NULL;
+	struct memcg_info *mi;
+	struct proc_app_info *pai = find_app_info(pid);
+	GSList *iter_child = NULL;
+
+	ret = lowmem_get_memcg(type, &memcg_swap);
+	if (ret != RESOURCED_ERROR_NONE)
 		return RESOURCED_ERROR_FAIL;
+
+	mi = memcg_swap->info;
+	if (!pai)
+		return place_pid_to_cgroup_by_fullpath(mi->name, pid);
+
+	ret = place_pid_to_cgroup_by_fullpath(mi->name, pai->main_pid);
+	gslist_for_each_item(iter_child, pai->childs) {
+		struct child_pid *child;
+
+		child = (struct child_pid *)(iter_child->data);
+		ret= place_pid_to_cgroup_by_fullpath(mi->name, child->pid);
 	}
+	pai->memory.memcg_idx = MEMCG_SWAP;
+	pai->memory.memcg_info = mi;
+	return ret;
+}
 
-	swap_size = total_usage >> 3;
+static int swap_move_to_cgroup(struct memcg_info *info, GArray *candidates)
+{
+	int index;
+	struct swap_task tsk;
+	struct proc_app_info *pai = NULL;
+	GSList *iter_child = NULL;
 
-	if (victim_candidates->len < SWAP_COUNT_MAX)
-		loop_max = victim_candidates->len;
-	else
-		loop_max = SWAP_COUNT_MAX;
+	if (!candidates)
+		return RESOURCED_ERROR_NO_DATA;
 
-	_D("Received %d victims to be moved to swap cgroup. Moving %d tasks", victim_candidates->len, loop_max);
-	for (i=0; i<loop_max; i++) {
-		struct task_info tsk;
+	for (index = 0; index < candidates->len; index++) {
+		tsk = g_array_index(candidates, struct swap_task, index);
+		pai = tsk.pai;
+		place_pid_to_cgroup_by_fullpath(info->name, pai->main_pid);
+		gslist_for_each_item(iter_child, pai->childs) {
+			struct child_pid *child;
 
-		tsk = g_array_index(victim_candidates, struct task_info, i);
-
-		if (i == 0) {
-			ret = proc_get_cmdline(tsk.pid, appname);
-			if (ret == RESOURCED_ERROR_FAIL)
-				continue;
-			/* To DO : kill highest 1 process */
-			kill(tsk.pid, SIGKILL);
-			_E("we killed %d (%s)", tsk.pid, appname);
+			child = (struct child_pid *)(iter_child->data);
+			place_pid_to_cgroup_by_fullpath(info->name, child->pid);
 		}
-
-		swap_move_to_swap_cgroup(tsk.pid);
-		swap_size -= tsk.size;
-
-		if (swap_size < 0)
-			return RESOURCED_ERROR_NONE;
+		pai->memory.memcg_idx = MEMCG_SWAP;
+		pai->memory.memcg_info = info;
 	}
-
 	return RESOURCED_ERROR_NONE;
 }
 
-/*
-  * sorting by mem usage and LRU
-  */
-static int swap_sort_LRU(const struct task_info *ta, const struct task_info *tb)
+static int swap_sort_by_oom(const struct swap_task *ta,
+    const struct swap_task *tb)
 {
-	/* sort by LRU */
+	/* sort by oom score adj */
 	assert(ta != NULL);
 	assert(tb != NULL);
 
-	return ((int)(tb->cgroup_cnt) - (int)(ta->cgroup_cnt));
+	return ((int)(tb->pai->memory.oom_score_adj) -
+		(int)(ta->pai->memory.oom_score_adj));
 }
 
-static int swap_sort_usage(const struct task_info *ta, const struct task_info *tb)
+static int swap_sort_by_vmrss(const struct swap_task *ta,
+    const struct swap_task *tb)
 {
-	/*
-	* sort by task size
-	*/
+	/* sort by task memory usage */
 	assert(ta != NULL);
 	assert(tb != NULL);
 
 	return ((int)(tb->size) - (int)(ta->size));
 }
 
-static bool get_mem_usage_by_pid(pid_t pid, unsigned int *rss)
+static int swap_prepare_victims(GArray *candidates)
 {
-	FILE *fp;
-	char proc_path[SWAP_PATH_MAX];
+	GSList *iter = NULL;
+	struct proc_app_info *pai = NULL;
+	struct swap_task victim;
 
-	sprintf(proc_path, "/proc/%d/statm", pid);
-	fp = fopen(proc_path, "r");
-	if (fp == NULL)
-		return false;
+	/*
+	 * serch victims from proc_app_list
+	 * It was better than searching backround cgroup
+	 * because proc_app_list had already known current state and child processes
+	 */
+	gslist_for_each_item(iter, proc_app_list) {
+		pai = (struct proc_app_info *)iter->data;
+		if (pai->memory.memcg_idx != MEMCG_BACKGROUND)
+			continue;
+		if (pai->lru_state <= PROC_BACKGROUND)
+			continue;
 
-	if (fscanf(fp, "%*s %d", rss) < 1) {
-		fclose(fp);
-		return false;
+		memset(&victim, 0, sizeof(struct swap_task));
+		victim.pai = pai;
+		g_array_append_val(candidates, victim);
 	}
-
-	fclose(fp);
-
-	/* convert page to Kb */
-	*rss *= 4;
-	return true;
+	return candidates->len;
 }
 
-
-/*
-  * check background mem usage.
-  */
-static int swap_check_cgroup_victims(void)
+static int swap_reduce_victims(GArray *candidates, int max)
 {
-	FILE *f = NULL;
-	int i = 0;
-	int cnt = 0;
-	int ret;
-	char buf[SWAP_PATH_MAX] = {0, };
-	GArray *victim_candidates = NULL;
+	int index;
+	struct swap_task tsk;
+	struct proc_app_info *pai = NULL;
+	unsigned int vmrss = 0;
 
-	victim_candidates = g_array_new(false, false, sizeof(struct task_info));
+	if (!candidates)
+		return RESOURCED_ERROR_NO_DATA;
 
-	/* if g_array_new fails, return the current number of victims */
-	if (victim_candidates == NULL) {
-		_E("victim_candidates failed");
-		return RESOURCED_ERROR_OUT_OF_MEMORY;
-	}
+	for (index = 0; index < candidates->len; index++) {
+		tsk = g_array_index(candidates, struct swap_task, index);
+		pai = tsk.pai;
 
-	if (f == NULL) {
-		f = fopen(BACKCG_PROCS, "r");
-		if (f == NULL) {
-			_E("%s open failed", BACKCG_PROCS);
-			return RESOURCED_ERROR_FAIL;
-		}
-	}
-
-	while (fgets(buf, 32, f) != NULL) {
-		struct task_info new_victim;
-		pid_t tpid = 0;
-		int toom = 0;
-		unsigned int tsize = 0;
-
-		tpid = atoi(buf);
-
-		if (proc_get_oom_score_adj(tpid, &toom) < 0) {
-			_D("pid(%d) was already terminated", tpid);
+		/* Measuring VmRSS is OK as it's anonymous + swapcache */
+		if (proc_get_mem_usage(pai->main_pid, NULL, &vmrss) < 0)
 			continue;
-		}
 
-		if (!get_mem_usage_by_pid(tpid, &tsize)) {
-			_D("pid(%d) size is not available\n", tpid);
-			continue;
-		}
+		tsk.size += vmrss;
 
-		for (i = 0; i < victim_candidates->len; i++) {
-			struct task_info *tsk = &g_array_index(victim_candidates,
-							struct task_info, i);
-			if (getpgid(tpid) == tsk->pgid) {
-				tsk->size += tsize;
-				if (tsk->oom_score_adj <= 0 && toom > 0) {
-					tsk->pid = tpid;
-					tsk->oom_score_adj = toom;
-					tsk->cgroup_cnt = cnt;
-				}
-				break;
+		if (pai->childs) {
+			GSList *iter_child = NULL;
+
+			gslist_for_each_item(iter_child, pai->childs) {
+				struct child_pid *child;
+
+				child = (struct child_pid *)(iter_child->data);
+				if (proc_get_mem_usage(child->pid, NULL, &vmrss) < 0)
+					continue;
+				tsk.size += vmrss;
 			}
 		}
-
-		if (i == victim_candidates->len) {
-			new_victim.pid = tpid;
-			new_victim.pgid = getpgid(tpid);
-			new_victim.oom_score_adj = toom;
-			new_victim.size = tsize;
-			new_victim.cgroup_cnt = cnt;
-
-			g_array_append_val(victim_candidates, new_victim);
-		}
-
-		cnt++;
 	}
+	/* sort by oom_score_adj value, older are better candidates */
+	g_array_sort(candidates, (GCompareFunc)swap_sort_by_oom);
 
-	if (victim_candidates->len == 0) {
-		_E("victim_candidates->len = %d", victim_candidates->len);
-		g_array_free(victim_candidates, true);
-		fclose(f);
-		return RESOURCED_ERROR_NO_DATA;
-	}
+	/* sort by memory usage, swapping bigger will free more memory */
+	g_array_sort(candidates, (GCompareFunc)swap_sort_by_vmrss);
 
-	/* sort by mem usage */
-	g_array_sort(victim_candidates, (GCompareFunc)swap_sort_usage);
+	/* limit the number of potential candidates, after sort by oom */
+	g_array_remove_range(candidates, max, candidates->len - max);
 
-	if (victim_candidates->len > SWAP_SORT_MAX)
-		g_array_remove_range(victim_candidates, SWAP_SORT_MAX, victim_candidates->len - SWAP_SORT_MAX);
-
-	/* sort by LRU */
-	g_array_sort(victim_candidates, (GCompareFunc)swap_sort_LRU);
-
-	ret = swap_victims(victim_candidates);
-	if (ret) {
-		_E("swap_victims error");
-		g_array_free(victim_candidates, true);
-		fclose(f);
-		return RESOURCED_ERROR_FAIL;
-	}
-
-	g_array_free(victim_candidates, true);
-
-	fclose(f);
 	return RESOURCED_ERROR_NONE;
 }
 
-static int swap_thread_do(FILE *procs, FILE *usage_in_bytes, FILE *limit_in_bytes)
+static int swap_reclaim_memcg(struct swap_status_msg msg)
 {
-	char buf[SWAP_PATH_MAX] = {0,};
-	int size;
 	int ret;
-	unsigned long usage;
-	unsigned long swap_cg_limit;
+	int try = SWAP_FORCE_RECLAIM_NUM_MAX;
+	unsigned int usage, usage_after_reclaim, nr_to_reclaim;
+	unsigned long swap_usage;
 
-	ret = swap_check_cgroup_victims();
+	/* Test for restarted resourced, where zram already activated */
+	if (swap_control.swap_size_bytes == 0) {
+		swap_control.swap_size_bytes = swap_get_disksize_bytes();
+		swap_control.swap_almost_full_bytes = swap_control.swap_size_bytes * SWAP_FULLNESS_RATIO;
+		swap_change_state(SWAP_ON);
+	}
+	swap_usage = swap_control.swap_size_bytes - KBYTE_TO_BYTE(proc_get_swap_free());
+	if (swap_usage > swap_control.swap_almost_full_bytes) {
+		_D("reclaim omit, almost full swap partition full: %d curr: %d",
+			swap_control.swap_almost_full_bytes, swap_usage);
+		/* Compact swap when we already have full swap partition */
+		swap_compact_handler((void *)SWAP_COMPACT_SWAP_FULL);
+		return RESOURCED_ERROR_NONE;
+	}
 
+	do {
+		ret = memcg_get_usage(msg.info, &usage);
+		if (ret != RESOURCED_ERROR_NONE)
+			usage = 0;
+
+		nr_to_reclaim = BtoPAGE(usage);
+		if (nr_to_reclaim <= SWAP_RECLIAM_PAGES_MIN)
+			break; /* don't reclaim if little gain */
+		if (nr_to_reclaim > SWAP_RECLIAM_PAGES_MAX)
+			nr_to_reclaim = SWAP_RECLIAM_PAGES_MAX;
+
+		ret = cgroup_write_node(msg.info->name, SWAPCG_RECLAIM,
+			nr_to_reclaim);
+		if (ret != RESOURCED_ERROR_NONE)
+			break; /* if we can't reclaim don't continue */
+
+		ret = memcg_get_usage(msg.info, &usage_after_reclaim);
+		if (ret != RESOURCED_ERROR_NONE)
+			usage_after_reclaim = 0;
+
+		if (usage_after_reclaim >= usage)
+			break; /* if we didn't reclaim more, let's stop */
+
+		_D("FORCE_RECLAIM try: %d, before: %d, after: %d",
+				try, usage, usage_after_reclaim);
+		try -= 1;
+	} while ( try > 0 );
+
+	return RESOURCED_ERROR_NONE;
+}
+
+static int swap_compact_zram(void)
+{
+	int ret;
+	unsigned int total;
+	static unsigned int last_total;
+
+	ret = fread_uint(SWAP_ZRAM_MEM_USED_TOTAL, &total);
 	if (ret < 0) {
-		_E("swap_check_cgroup_victims error");
+		_E("fail to read %s", SWAP_ZRAM_MEM_USED_TOTAL);
+		return ret;
+	}
+
+	/*
+	 * Until zram size not increased of at least 1 MB from last compaction
+	 * then it not makes any sense to compact it again.
+	 */
+	if ((total - last_total) < MBtoB(1))
+		return RESOURCED_ERROR_NO_DATA;
+
+	last_total = total;
+	ret = fwrite_int(SWAP_ZRAM_COMPACT, 1);
+	if (ret < 0) {
+		_E("fail to write %s", SWAP_ZRAM_COMPACT);
+		return ret;
+	}
+
+	ret = fread_uint(SWAP_ZRAM_MEM_USED_TOTAL, &total);
+	if (ret < 0) {
+		_E("fail to read %s", SWAP_ZRAM_MEM_USED_TOTAL);
+		return ret;
+	}
+
+	return RESOURCED_ERROR_NONE;
+}
+
+static int swap_move_background_to_swap(struct swap_status_msg *msg)
+{
+	int max_victims, selected;
+	int ret = RESOURCED_ERROR_NONE;
+	GArray *candidates = NULL, *pids_array = NULL;
+	struct memcg *memcg_swap = NULL;
+
+	pids_array = g_array_new(false, false, sizeof(pid_t));
+	if (!pids_array) {
+		_E("failed to allocate memory");
+		ret = RESOURCED_ERROR_OUT_OF_MEMORY;
+		goto out;
+	}
+
+	/* Get procs to check for swap candidates */
+	memcg_get_pids(msg->info, pids_array);
+	if (pids_array->len == 0) {
+		ret = RESOURCED_ERROR_NO_DATA;
+		goto out;
+	}
+	/*
+	 * background cgroup finds victims and moves them to swap group
+	 */
+	ret = lowmem_get_memcg(MEMCG_SWAP, &memcg_swap);
+	if (ret != RESOURCED_ERROR_NONE)
+		return RESOURCED_ERROR_FAIL;
+
+	candidates = g_array_new(false, false, sizeof(struct swap_task));
+	if (!candidates) {
+		_E("failed to allocate memory");
+		ret = RESOURCED_ERROR_OUT_OF_MEMORY;
+		goto out;
+	}
+	/*
+	 * Let's consider 50% of background apps to be swappable. Using ZRAM
+	 * swap makes the operation on swap cheaper. Only anonymous memory
+	 * is swaped so the results are limited by size of allocations.
+	 */
+	max_victims = pids_array->len >> 1;
+	/* It makes no sense if we will have no candidates */
+	if (max_victims == 0) {
+		ret = RESOURCED_ERROR_NO_DATA;
+		goto out;
+	}
+	if (max_victims > SWAP_SORT_MAX)
+		max_victims = SWAP_SORT_MAX;
+
+	selected = swap_prepare_victims(candidates);
+	if (selected == 0) {
+		ret = RESOURCED_ERROR_NO_DATA;
+		_D("no victims from proc_app_list (pids: %d)", max_victims);
+		goto out;
+	} else if (selected > max_victims)
+		swap_reduce_victims(candidates, max_victims);
+
+	/*
+	 * change swap info from background cgroup to swap group
+	 * for using same structure to move and swap it
+	 */
+	msg->info = memcg_swap->info;
+	msg->type = MEMCG_SWAP;
+	swap_move_to_cgroup(msg->info, candidates);
+out:
+	if (candidates)
+		g_array_free(candidates, TRUE);
+	if (pids_array)
+		g_array_free(pids_array, TRUE);
+	return ret;
+
+}
+
+static int swap_size(void)
+{
+	int size; /* size in bytes */
+	unsigned long ktotalram = lowmem_get_ktotalram(); /* size in kilobytes */
+
+	if (ktotalram >= 900000) /* >= 878 MB */
+		size = 268435456; /* 256 MB */
+	else if (ktotalram < 200000) /* < 195 MB */
+		size = 16777216; /* 16 MB */
+	else
+		size = ktotalram * swap_control.ratio * 1024;
+
+	_D("swapfile size = %d", size);
+
+	return size;
+}
+
+static int swap_mkswap(void)
+{
+	pid_t pid = fork();
+
+	if (pid < 0) {
+		_E("fork for mkswap failed");
+		return pid;
+	} else if (pid == 0) {
+		_D("mkswap starts");
+		execl(SWAP_MKSWAP_EXEC_PATH, SWAP_MKSWAP_EXEC_PATH,
+			SWAP_ZRAM_DEVICE, (char *)NULL);
+		exit(0);
+	} else {
+		wait(0);
+		_D("mkswap ends");
+	}
+
+	return pid;
+}
+
+static int swap_zram_activate(void)
+{
+	int ret;
+	unsigned int swap_size_bytes;
+
+	ret = fwrite_int(SWAP_ZRAM_MAX_COMP_STREAMS, swap_control.max_comp_streams);
+	if (ret < 0) {
+		_E("fail to write max_comp_streams");
+		return ret;
+	}
+
+	ret = fwrite_str(SWAP_ZRAM_COMP_ALGORITHM, swap_control.comp_algorithm);
+	if (ret < 0) {
+		_E("fail to write comp_algrithm");
+		return ret;
+	}
+
+	swap_control.swap_size_bytes = swap_size();
+	swap_control.swap_almost_full_bytes = swap_control.swap_size_bytes * SWAP_FULLNESS_RATIO;
+	ret = fwrite_uint(SWAP_ZRAM_DISK_SIZE, swap_control.swap_size_bytes);
+	if (ret < 0) {
+		_E("fail to write disk_size");
+		return ret;
+	}
+
+	ret = fread_uint(SWAP_ZRAM_DISK_SIZE, &swap_size_bytes);
+	if (ret < 0) {
+		_E("fail to read zram disk_size");
+		return ret;
+	}
+
+	/* Check if zram was sucessfully initialized (zcomp rollback case) */
+	if (swap_size_bytes < swap_control.swap_size_bytes)
+		return RESOURCED_ERROR_OOM;
+
+	ret = swap_mkswap();
+	if (ret < 0) {
+		_E("swap mkswap failed, fork error = %d", ret);
 		return RESOURCED_ERROR_FAIL;
 	}
 
-	/* cacluate reclaim size by usage and swap cgroup count */
-	if (fgets(buf, 32, usage_in_bytes) == NULL)
-		return RESOURCED_ERROR_FAIL;
-
-	usage = (unsigned long)atol(buf);
-
-	swap_cg_limit = swap_calculate_hard_limit(usage);
-	_D("swap cgroup usage is %lu, hard limit set to %lu (hard limit fraction %f)",
-			usage, swap_cg_limit, hard_limit_fraction);
-
-	/* set reclaim size */
-	size = sprintf(buf, "%lu", swap_cg_limit);
-	if (fwrite(buf, 1, size, limit_in_bytes) != size)
-		_E("fwrite %s\n", buf);
-
 	return RESOURCED_ERROR_NONE;
+}
+
+static void swap_activate_in_module(void)
+{
+	int disksize;
+
+	if (swap_get_state() == SWAP_ON)
+		return;
+	
+	disksize = swap_get_disksize_bytes();
+	if (disksize <= 0) {
+		if (swap_zram_activate() < 0) {
+			_E("swap cannot be activated");
+			return;
+		}
+	}
+	swap_change_state(SWAP_ON);
+	_D("swap activated");
 }
 
 static void *swap_thread_main(void * data)
 {
-	FILE *procs;
-	FILE *usage_in_bytes;
-	FILE *limit_in_bytes;
+	int is_empty;
+	struct swap_thread_bundle *bundle;
 
 	setpriority(PRIO_PROCESS, 0, SWAP_PRIORITY);
 
-	procs = fopen(SWAPCG_PROCS, "r");
-	if (procs == NULL) {
-		_E("%s open failed", SWAPCG_PROCS);
-		return NULL;
-	}
-
-	usage_in_bytes = fopen(SWAPCG_USAGE, "r");
-	if (usage_in_bytes == NULL) {
-		_E("%s open failed", SWAPCG_USAGE);
-		fclose(procs);
-		return NULL;
-	}
-
-	limit_in_bytes = fopen(SWAPCG_LIMIT, "w");
-	if (limit_in_bytes == NULL) {
-		_E("%s open failed", SWAPCG_LIMIT);
-		fclose(procs);
-		fclose(usage_in_bytes);
-		return NULL;
-	}
-
 	while (1) {
 		pthread_mutex_lock(&swap_mutex);
-		pthread_cond_wait(&swap_cond, &swap_mutex);
+		/* THREAD: WAIT FOR START */
+		pthread_mutex_lock(&swap_thread_queue.lock);
+		is_empty = g_queue_is_empty(swap_thread_queue.queue);
+		pthread_mutex_unlock(&swap_thread_queue.lock);
+		if (is_empty) {
+			/* The queue is empty, wait for thread signal */
+			pthread_cond_wait(&swap_cond, &swap_mutex);
+		}
 
-		/*
-		 * when signalled by main thread, it starts
-		 * swap_thread_do().
-		 */
-		_I("swap thread conditional signal received");
+		/* We're in swap thread, now it's time to dispatch bundles */
+		pthread_mutex_lock(&swap_thread_queue.lock);
+		bundle = g_queue_pop_head(swap_thread_queue.queue);
+		pthread_mutex_unlock(&swap_thread_queue.lock);
 
-		fseek(procs, 0, SEEK_SET);
-		fseek(usage_in_bytes, 0, SEEK_SET);
-		fseek(limit_in_bytes, 0, SEEK_SET);
+		if (!bundle)
+			goto unlock_out;
 
-		_D("swap_thread_do start");
-		swap_thread_do(procs, usage_in_bytes, limit_in_bytes);
-		_D("swap_thread_do end");
+		switch (bundle->op) {
+		/* Swap activation operttion: mkswap, swapon etc. */
+		case SWAP_OP_ACTIVATE:
+			swap_activate_in_module();
+			break;
+		/* Swap reclaim opertation: move to swap, force_reclaim */
+		case SWAP_OP_RECLAIM:
+			swap_reclaim_memcg(bundle->msg);
+			break;
+		/* Swap compact operation of zsmalloc. */
+		case SWAP_OP_COMPACT:
+			swap_compact_zram();
+			break;
+		case SWAP_OP_END:
+		default:
+			_D("wrong swap thread operation selected");
+		}
+
+		free(bundle);
+unlock_out:
 		pthread_mutex_unlock(&swap_mutex);
 	}
-
-	if (procs)
-		fclose(procs);
-	if (usage_in_bytes)
-		fclose(usage_in_bytes);
-	if (limit_in_bytes)
-		fclose(limit_in_bytes);
-
 	return NULL;
 }
 
-static pid_t swap_on(void)
-{
-	pid_t pid = fork();
-
-	if (pid == 0) {
-		execl(SWAP_ON_EXEC_PATH, SWAP_ON_EXEC_PATH, "-d", SWAPFILE_NAME, (char *)NULL);
-		exit(0);
-	}
-	swapon = 1;
-	return pid;
-}
-
-static pid_t swap_off(void)
-{
-	pid_t pid = fork();
-
-	if (pid == 0) {
-		execl(SWAP_OFF_EXEC_PATH, SWAP_OFF_EXEC_PATH, SWAPFILE_NAME, (char *)NULL);
-		exit(0);
-	}
-	swapon = 0;
-	return pid;
-}
-
-static Eina_Bool swap_send_signal(void *data)
+static int swap_start_handler(void *data)
 {
 	int ret;
+	struct swap_thread_bundle *bundle;
 
-	_D("swap timer callback function start");
+	if (!data)
+		return RESOURCED_ERROR_NO_DATA;
 
-	if(!swapon)
-		swap_on();
+	bundle = malloc(sizeof(struct swap_thread_bundle));
+	if (!bundle)
+		return RESOURCED_ERROR_OUT_OF_MEMORY;
 
-	/* signal to swap_start to start swap */
+	bundle->op = SWAP_OP_RECLAIM;
+	memcpy(&(bundle->msg), data, sizeof(struct swap_status_msg));
+
+	if (bundle->msg.type == MEMCG_BACKGROUND) {
+		ret = swap_move_background_to_swap(&(bundle->msg));
+		/* add bundle only if some processes were moved into swap memcg */
+		if (ret) {
+			free(bundle);
+			return RESOURCED_ERROR_NO_DATA;
+		}
+	}
+	swap_add_bundle(bundle);
+
+	/* Try to signal swap thread, that there is some work to do */
 	ret = pthread_mutex_trylock(&swap_mutex);
-
-	if (ret)
-		_E("pthread_mutex_trylock fail : %d, errno : %d", ret, errno);
-	else {
+	if (ret == 0) {
 		pthread_cond_signal(&swap_cond);
-		_I("send signal to swap thread");
 		pthread_mutex_unlock(&swap_mutex);
+		_I("send signal to swap thread");
+		return RESOURCED_ERROR_NONE;
 	}
 
-	_D("swap timer delete");
-
-	ecore_timer_del(swap_timer);
-	swap_timer = NULL;
-
-	return ECORE_CALLBACK_CANCEL;
-}
-
-static int swap_start(void *data)
-{
-	if (swap_timer == NULL) {
-		_D("swap timer start");
-		swap_timer =
-			ecore_timer_add(SWAP_TIMER_INTERVAL, swap_send_signal, (void *)NULL);
+	if (ret && ret == EBUSY) {
+		_D("swap thread already active");
+	} else {
+		_E("pthread_mutex_trylock fail : %d, errno : %d", ret, errno);
+		return RESOURCED_ERROR_FAIL;
 	}
 
 	return RESOURCED_ERROR_NONE;
 }
 
-static int swap_thread_create(void)
+static int swap_simple_bundle_sender(enum swap_thread_op operation)
 {
-	int ret = RESOURCED_ERROR_NONE;
-	pthread_t pth;
+	int ret;
+	struct swap_thread_bundle *bundle;
 
-	pthread_mutex_init(&swap_mutex, NULL);
-	pthread_cond_init(&swap_cond, NULL);
+	bundle = malloc(sizeof(struct swap_thread_bundle));
+	if (!bundle)
+		return RESOURCED_ERROR_OUT_OF_MEMORY;
 
-	ret = pthread_create(&pth, NULL, &swap_thread_main, (void*)NULL);
-	if (ret) {
-		_E("pthread creation for swap_thread failed\n");
-		return ret;
-	} else {
-		pthread_detach(pth);
+	bundle->op = operation;
+	swap_add_bundle(bundle);
+
+	if (operation >= 0 && operation < SWAP_OP_END)
+		_D("added %s operation to swap queue",
+				swap_thread_op_names[operation]);
+
+	/* Try to signal swap thread, that there is some work to do */
+	ret = pthread_mutex_trylock(&swap_mutex);
+	if (ret == 0) {
+		pthread_cond_signal(&swap_cond);
+		pthread_mutex_unlock(&swap_mutex);
+		_I("send signal to swap thread");
+		return RESOURCED_ERROR_NONE;
 	}
 
-	return ret;
-}
-
-int swap_check_swap_pid(int pid)
-{
-	char buf[SWAP_PATH_MAX] = {0,};
-	int swappid;
-	int ret = 0;
-	FILE *f;
-
-	f = fopen(SWAPCG_PROCS, "r");
-	if (!f) {
-		_E("%s open failed", SWAPCG_PROCS);
+	if (ret && ret == EBUSY) {
+		_D("swap thread already active");
+	} else {
+		_E("pthread_mutex_trylock fail : %d, errno : %d", ret, errno);
 		return RESOURCED_ERROR_FAIL;
 	}
+	return RESOURCED_ERROR_NONE;
+}
 
-	while (fgets(buf, SWAP_PATH_MAX, f) != NULL) {
-		swappid = atoi(buf);
-		if (swappid == pid) {
-			ret = swappid;
-			break;
-		}
-	}
-	fclose(f);
-	return ret;
+static int swap_activate_handler(void *data)
+{
+	return swap_simple_bundle_sender(SWAP_OP_ACTIVATE);
+}
+
+static int swap_compact_handler(void *data)
+{
+	_I("compaction request. Reason: %s",
+			compact_reason_to_str((enum swap_compact_reason)data));
+	return swap_simple_bundle_sender(SWAP_OP_COMPACT);
 }
 
 static void swap_start_pid_edbus_signal_handler(void *data, DBusMessage *msg)
@@ -573,6 +770,8 @@ static void swap_start_pid_edbus_signal_handler(void *data, DBusMessage *msg)
 	DBusError err;
 	int ret;
 	pid_t pid;
+	struct memcg *memcg_swap;
+	struct swap_status_msg ss_msg;
 
 	ret = dbus_message_is_signal(msg, RESOURCED_INTERFACE_SWAP, SIGNAL_NAME_SWAP_START_PID);
 	if (ret == 0) {
@@ -587,57 +786,45 @@ static void swap_start_pid_edbus_signal_handler(void *data, DBusMessage *msg)
 		return;
 	}
 
+	ret = lowmem_get_memcg(MEMCG_SWAP, &memcg_swap);
+	if (ret != RESOURCED_ERROR_NONE)
+		return;
+	swap_move_to_cgroup_by_pid(MEMCG_SWAP, pid);
+	ss_msg.pid = pid;
+	ss_msg.type = MEMCG_SWAP;
+	ss_msg.info = memcg_swap->info;
+	swap_start_handler(&ss_msg);
 	_I("swap cgroup entered : pid : %d", (int)pid);
-	swap_move_to_swap_cgroup(pid);
-
-	swap_start(NULL);
 }
 
 static void swap_type_edbus_signal_handler(void *data, DBusMessage *msg)
 {
 	DBusError err;
-	int type;
+	enum swap_state state;
 
 	if (dbus_message_is_signal(msg, RESOURCED_INTERFACE_SWAP, SIGNAL_NAME_SWAP_TYPE) == 0) {
-		_D("there is no swap type signal");
+		_D("there is no swap state signal");
 		return;
 	}
 
 	dbus_error_init(&err);
 
-	if (dbus_message_get_args(msg, &err, DBUS_TYPE_INT32, &type, DBUS_TYPE_INVALID) == 0) {
+	if (dbus_message_get_args(msg, &err, DBUS_TYPE_INT32, &state, DBUS_TYPE_INVALID) == 0) {
 		_D("there is no message");
 		return;
 	}
 
-	switch (type) {
-	case 0:
-		if (swap_get_swap_type() != SWAP_OFF) {
-			if (swapon)
-				swap_off();
-			swap_set_swap_type(type);
-		}
-		break;
-	case 1:
-		if (swap_get_swap_type() != SWAP_ON) {
-			if (!swapon)
-				swap_on();
-			swap_set_swap_type(type);
-		}
-		break;
-	default:
-		_D("It is not valid swap type : %d", type);
-		break;
-	}
+	if (swap_get_state() != state)
+		swap_change_state(state);
 }
 
 static DBusMessage *edbus_getswaptype(E_DBus_Object *obj, DBusMessage *msg)
 {
 	DBusMessageIter iter;
 	DBusMessage *reply;
-	int state;
+	enum swap_state state;
 
-	state = swap_get_swap_type();
+	state = swap_get_state();
 
 	reply = dbus_message_new_method_return(msg);
 	dbus_message_iter_init_append(reply, &iter);
@@ -651,16 +838,19 @@ static struct edbus_method edbus_methods[] = {
 	/* Add methods here */
 };
 
+static const struct edbus_signal edbus_signals[] = {
+	/* RESOURCED DBUS */
+	{RESOURCED_PATH_SWAP, RESOURCED_INTERFACE_SWAP,
+	    SIGNAL_NAME_SWAP_TYPE, swap_type_edbus_signal_handler, NULL},
+	{RESOURCED_PATH_SWAP, RESOURCED_INTERFACE_SWAP,
+	    SIGNAL_NAME_SWAP_START_PID, swap_start_pid_edbus_signal_handler, NULL},
+};
+
 static void swap_dbus_init(void)
 {
 	resourced_ret_c ret;
 
-	register_edbus_signal_handler(RESOURCED_PATH_SWAP, RESOURCED_INTERFACE_SWAP,
-			SIGNAL_NAME_SWAP_TYPE,
-		    (void *)swap_type_edbus_signal_handler, NULL);
-	register_edbus_signal_handler(RESOURCED_PATH_SWAP, RESOURCED_INTERFACE_SWAP,
-			SIGNAL_NAME_SWAP_START_PID,
-		    (void *)swap_start_pid_edbus_signal_handler, NULL);
+	edbus_add_signals(edbus_signals, ARRAY_SIZE(edbus_signals));
 
 	ret = edbus_add_methods(RESOURCED_PATH_SWAP, edbus_methods,
 			  ARRAY_SIZE(edbus_methods));
@@ -670,18 +860,89 @@ static void swap_dbus_init(void)
 			RESOURCED_PATH_SWAP);
 }
 
+static int load_swap_config(struct parse_result *result, void *user_data)
+{
+	if (!result)
+		return -EINVAL;
+
+	if (strcmp(result->section, SWAP_CONTROL_SECTION))
+		return RESOURCED_ERROR_NO_DATA;
+
+	if (!strcmp(result->name, SWAP_CONF_STREAMS)) {
+		int value = atoi(result->value);
+		if (value > 0) {
+			swap_control.max_comp_streams = value;
+			_D("max_comp_streams of swap_control is %d",
+				swap_control.max_comp_streams);
+		}
+	} else if (!strcmp(result->name, SWAP_CONF_ALGORITHM)) {
+		if (!strcmp(result->value, "lzo") ||
+		    !strcmp(result->value, "lz4")) {
+			strncpy(swap_control.comp_algorithm, result->value,
+				strlen(result->value) + 1);
+			_D("comp_algorithm of swap_control is %s",
+				result->value);
+		}
+	} else if (!strcmp(result->name, SWAP_CONF_RATIO)) {
+		float ratio = atof(result->value);
+		swap_control.ratio = ratio;
+		_D("swap disk size ratio is %.2f", swap_control.ratio);
+	}
+
+	if (swap_control.max_comp_streams < 0) {
+		int cpu = proc_get_cpu_number();
+		if (cpu > 0) {
+			if (cpu > 4)
+				/*
+				 * On big.LITLLE we can have 8 cores visible
+				 * but there can be used 4. Let's limit it to 4
+				 * if there is no specified value in .conf file.
+				 */
+				cpu = 4;
+			swap_control.max_comp_streams = cpu;
+		} else
+			swap_control.max_comp_streams = 1;
+	}
+
+	return RESOURCED_ERROR_NONE;
+}
+
+static int swap_thread_create(void)
+{
+	int ret = 0;
+	pthread_t pth;
+
+	pthread_mutex_init(&swap_mutex, NULL);
+	pthread_cond_init(&swap_cond, NULL);
+	pthread_mutex_init(&(swap_thread_queue.lock), NULL);
+	swap_thread_queue.queue = g_queue_new();
+
+	if (!swap_thread_queue.queue) {
+		_E("fail to allocate swap thread queue");
+		return RESOURCED_ERROR_FAIL;
+	}
+
+	ret = pthread_create(&pth, NULL, &swap_thread_main, (void *)NULL);
+	if (ret) {
+		_E("pthread creation for swap_thread failed\n");
+		return ret;
+	} else {
+		pthread_detach(pth);
+	}
+
+	return RESOURCED_ERROR_NONE;
+}
+
 static int swap_init(void)
 {
 	int ret;
 
+	config_parse(SWAP_CONF_FILE, load_swap_config, NULL);
 	ret = swap_thread_create();
 	if (ret) {
 		_E("swap thread create failed");
 		return ret;
 	}
-
-	_I("swap_init : %d", swap_get_swap_type());
-
 	swap_dbus_init();
 
 	return ret;
@@ -689,33 +950,14 @@ static int swap_init(void)
 
 static int swap_check_node(void)
 {
-	FILE *procs;
-	FILE *usage_in_bytes;
-	FILE *limit_in_bytes;
+	FILE *fp;
 
-	procs = fopen(SWAPCG_PROCS, "r");
-	if (procs == NULL) {
-		_E("%s open failed", SWAPCG_PROCS);
+	fp = fopen(SWAP_ZRAM_DEVICE, "w");
+	if (fp == NULL) {
+		_E("%s open failed", SWAP_ZRAM_DEVICE);
 		return RESOURCED_ERROR_NO_DATA;
 	}
-
-	fclose(procs);
-
-	usage_in_bytes = fopen(SWAPCG_USAGE, "r");
-	if (usage_in_bytes == NULL) {
-		_E("%s open failed", SWAPCG_USAGE);
-		return RESOURCED_ERROR_NO_DATA;
-	}
-
-	fclose(usage_in_bytes);
-
-	limit_in_bytes = fopen(SWAPCG_LIMIT, "w");
-	if (limit_in_bytes == NULL) {
-		_E("%s open failed", SWAPCG_LIMIT);
-		return RESOURCED_ERROR_NO_DATA;
-	}
-
-	fclose(limit_in_bytes);
+	fclose(fp);
 
 	return RESOURCED_ERROR_NONE;
 }
@@ -725,35 +967,83 @@ static int resourced_swap_check_runtime_support(void *data)
 	return swap_check_node();
 }
 
+/*
+ * Quote from: kernel Documentation/cgroups/memory.txt
+ *
+ * Each bit in move_charge_at_immigrate has its own meaning about what type of
+ * charges should be moved. But in any case, it must be noted that an account of
+ * a page or a swap can be moved only when it is charged to the task's current
+ * (old) memory cgroup.
+ *
+ *  bit | what type of charges would be moved ?
+ * -----+------------------------------------------------------------------------
+ *   0  | A charge of an anonymous page (or swap of it) used by the target task.
+ *      | You must enable Swap Extension (see 2.4) to enable move of swap charges.
+ * -----+------------------------------------------------------------------------
+ *   1  | A charge of file pages (normal file, tmpfs file (e.g. ipc shared memory)
+ *      | and swaps of tmpfs file) mmapped by the target task. Unlike the case of
+ *      | anonymous pages, file pages (and swaps) in the range mmapped by the task
+ *      | will be moved even if the task hasn't done page fault, i.e. they might
+ *      | not be the task's "RSS", but other task's "RSS" that maps the same file.
+ *      | And mapcount of the page is ignored (the page can be moved even if
+ *      | page_mapcount(page) > 1). You must enable Swap Extension (see 2.4) to
+ *      | enable move of swap charges.
+ * quote end.
+ *
+ * In our case it's better to set only the bit number 0 to charge only
+ * anon pages. Therefore file pages etc. will be managed directly by
+ * kernel reclaim mechanisms.
+ * That will help focus us only on swapping the memory that we actually
+ * can swap - anonymous pages.
+ * This will prevent from flushing file pages from memory - causing
+ * slowdown when re-launching applications.
+ */
+static void resourced_swap_change_memcg_settings(enum memcg_type type)
+{
+	int ret;
+	struct memcg *memcg_swap = NULL;
+
+	ret = lowmem_get_memcg(type, &memcg_swap);
+	if (ret != RESOURCED_ERROR_NONE)
+		return;
+
+	cgroup_write_node(memcg_swap->info->name, MOVE_CHARGE, 1);
+}
+
 static int resourced_swap_init(void *data)
 {
-	struct modules_arg *marg = (struct modules_arg *)data;
-	struct daemon_opts *dopt = marg->opts;
 	int ret;
 
-	ret = config_parse(SWAP_CONF_FILE, load_swap_config, NULL);
+	make_cgroup_subdir(MEMCG_PATH, "swap", NULL);
+	resourced_swap_change_memcg_settings(MEMCG_SWAP);
+	resourced_swap_change_memcg_settings(MEMCG_FAVORITE);
+	resourced_swap_change_memcg_settings(MEMCG_PLATFORM);
+	swap_set_state(SWAP_OFF);
 
-	if (ret < 0)
+	ret = swap_init();
+	if (ret != RESOURCED_ERROR_NONE)
 		return ret;
 
-	swap_ops = &swap_modules_ops;
+	register_notifier(RESOURCED_NOTIFIER_SWAP_START, swap_start_handler);
+	register_notifier(RESOURCED_NOTIFIER_SWAP_ACTIVATE, swap_activate_handler);
+	register_notifier(RESOURCED_NOTIFIER_BOOTING_DONE, swap_activate_handler);
+	register_notifier(RESOURCED_NOTIFIER_SWAP_COMPACT, swap_compact_handler);
 
-	if (dopt->enable_swap)
-		swap_set_swap_type(dopt->enable_swap);
-
-	register_notifier(RESOURCED_NOTIFIER_SWAP_START, swap_start);
-
-	return swap_init();
+	return ret;
 }
 
 static int resourced_swap_finalize(void *data)
 {
-	unregister_notifier(RESOURCED_NOTIFIER_SWAP_START, swap_start);
+	unregister_notifier(RESOURCED_NOTIFIER_SWAP_START, swap_start_handler);
+	unregister_notifier(RESOURCED_NOTIFIER_SWAP_ACTIVATE, swap_activate_handler);
+	unregister_notifier(RESOURCED_NOTIFIER_BOOTING_DONE, swap_activate_handler);
+	unregister_notifier(RESOURCED_NOTIFIER_SWAP_COMPACT, swap_compact_handler);
+	g_queue_free(swap_thread_queue.queue);
 
 	return RESOURCED_ERROR_NONE;
 }
 
-static const struct module_ops swap_modules_ops = {
+static struct module_ops swap_modules_ops = {
 	.priority = MODULE_PRIORITY_NORMAL,
 	.name = "swap",
 	.init = resourced_swap_init,

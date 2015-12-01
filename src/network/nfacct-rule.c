@@ -150,12 +150,16 @@ static resourced_ret_c nfacct_send_new(struct nfacct_rule *counter)
 
 	prepare_netlink_msg(&req, NFNL_MSG_ACCT_NEW, NLM_F_CREATE | NLM_F_ACK);
 	add_string_attr(&req, counter->name, NFACCT_NAME);
+#ifdef DEBUG_ENABLED
 	_D("counter name %s", counter->name);
+#endif
 	/* padding */
 	add_uint64_attr(&req, 0, NFACCT_PKTS);
 	add_uint64_attr(&req, 0, NFACCT_BYTES);
 	if (counter->quota) {
+#ifdef DEBUG_ENABLED
 		_D("quota bytes %"PRId64, counter->quota);
+#endif
 		add_uint32_attr(&req, htobe32(NFACCT_F_QUOTA_BYTES), NFACCT_FLAGS);
 		add_uint64_attr(&req, htobe64(counter->quota), NFACCT_QUOTA);
 	}
@@ -167,7 +171,7 @@ resourced_ret_c nfacct_send_del(struct nfacct_rule *counter)
 {
 	struct genl req;
 
-#ifdef DEBUG_ENABLED
+#ifdef NETWORK_DEBUG_ENABLED
 	_D("send remove request for %s", counter->name);
 #endif
 	prepare_netlink_msg(&req, NFNL_MSG_ACCT_DEL, NLM_F_ACK);
@@ -254,9 +258,11 @@ bool recreate_counter_by_name(char *cnt_name, struct nfacct_rule *cnt)
 	char *classid_part;
 	char *io_part;
 	char *ifname_part;
-	char name[MAX_NAME_LENGTH]; /* parse buffer to avoid cnt_name modification */
+	char *saveptr;
+	char name[NFACCT_NAME_MAX] = {0}; /* parse buffer to avoid cnt_name modification */
 
-	strncpy(name, cnt_name, sizeof(name));
+	strncpy(name, cnt_name, sizeof(name)-1);
+	name[NFACCT_NAME_MAX-1] = 0;
 
 	switch (name[0]) {
 	case 'c':
@@ -292,15 +298,18 @@ bool recreate_counter_by_name(char *cnt_name, struct nfacct_rule *cnt)
 		iface = get_iftype_by_name(ifname_buf);
 		/* check first part is it datacall */
 		if (iface == RESOURCED_IFACE_DATACALL) {
-			strcpy(cnt->ifname, ifname_buf);
+			strncpy(cnt->ifname, ifname_buf, sizeof(cnt->ifname)-1);
+			cnt->ifname[sizeof(cnt->ifname)-1] = 0;
 			cnt->iotype = NFACCT_COUNTER_IN;
 		} else {
-			strcpy(ifname_buf, iftype_part + 1); /* +1, due : symbol and
+			strncpy(ifname_buf, iftype_part + 1, sizeof(ifname_buf)-1); /* +1, due : symbol and
 								til the end of cnt_name */
+			ifname_buf[MAX_IFACE_LENGTH-1] = 0;
 			iface = get_iftype_by_name(ifname_buf);
 			if (iface == RESOURCED_IFACE_DATACALL) {
 				cnt->iotype = NFACCT_COUNTER_OUT;
-				strcpy(cnt->ifname, ifname_buf);
+				strncpy(cnt->ifname, ifname_buf, sizeof(cnt->ifname)-1);
+				cnt->ifname[sizeof(cnt->ifname)-1] = 0;
 			}
 		}
 
@@ -313,19 +322,19 @@ bool recreate_counter_by_name(char *cnt_name, struct nfacct_rule *cnt)
 		return true;
 	}
 
-	io_part = strtok(name, "_");
+	io_part = strtok_r(name, "_", &saveptr);
 	if (io_part != NULL)
 		cnt->iotype = convert_to_iotype(atoi(io_part + 1));
 	else
 		return false;
 
-	iftype_part = strtok(NULL, "_");
+	iftype_part = strtok_r(NULL, "_", &saveptr);
 	if (iftype_part != NULL)
 		cnt->iftype = convert_to_iftype(atoi(iftype_part));
 	else
 		return false;
 
-	classid_part = strtok(NULL, "_");
+	classid_part = strtok_r(NULL, "_", &saveptr);
 	if (classid_part != NULL)
 		cnt->classid = atoi(classid_part);
 	else {
@@ -333,7 +342,7 @@ bool recreate_counter_by_name(char *cnt_name, struct nfacct_rule *cnt)
 		return cnt->intend == NFACCT_BLOCK ? true : false;
 	}
 
-	ifname_part = strtok(NULL, "\0");
+	ifname_part = strtok_r(NULL, "\0", &saveptr);
 	if (ifname_part != NULL)
 		STRING_SAVE_COPY(cnt->ifname, ifname_part);
 	else
@@ -403,13 +412,16 @@ static void wait_for_rule_cmd(pid_t pid)
 {
 	int status;
 	pid_t ret_pid;
+	char buf[256];
+
 	if (!pid) {
 		_D("no need to wait");
 		return;
 	}
 	ret_pid = waitpid(pid, &status, 0);
-	if (ret_pid < 0)
-		_D("can't wait for a pid %d %d %s", pid, status, strerror(errno));
+	if (ret_pid < 0) {
+		_D("can't wait for a pid %d %d %s", pid, status, strerror_r(errno, buf, sizeof(buf)));
+	}
 }
 
 static char* get_cmd_pos(const char *cmd_buf)
@@ -438,7 +450,9 @@ static bool is_rule_exists(const char *cmd_buf)
 	strncpy(exec_buf, cmd_buf, buf_len);
 	strncpy(exec_buf + (cmd_pos - cmd_buf), IPTABLES_CHECK,
 		sizeof(IPTABLES_CHECK) - 1);
+#ifdef NETWORK_DEBUG_ENABLED
 	_D("check rule %s", exec_buf);
+#endif
 	ret = system(exec_buf) == 0;
 	free(exec_buf);
 	return ret;
@@ -450,12 +464,16 @@ resourced_ret_c exec_iptables_cmd(const char *cmd_buf, pid_t *cmd_pid)
 
 	if (pid == 0) {
 		char *cmd;
+		char *saveptr;
 		unsigned int i;
 		const size_t args_number = get_args_number(cmd_buf);
 		char *args[args_number + 2];
 		int ret;
+		char buf[256];
 
+#ifdef DEBUG_ENABLED
 		_D("executing iptables cmd %s in forked process", cmd_buf);
+#endif
 		ret_value_msg_if(args_number == 0, RESOURCED_ERROR_FAIL, "no arguments");
 
 		if (is_rule_exists(cmd_buf)) {
@@ -463,16 +481,18 @@ resourced_ret_c exec_iptables_cmd(const char *cmd_buf, pid_t *cmd_pid)
 			exit(0);
 		}
 		args[0] = "iptables";
-		cmd = strtok((char *)cmd_buf, " ");
+		cmd = strtok_r((char *)cmd_buf, " ", &saveptr);
+		ret_value_msg_if(cmd == NULL, RESOURCED_ERROR_FAIL, "no arguments");
 		for (i = 1; i <= args_number; ++i) {
-			args[i] = strtok(NULL, " ");
+			args[i] = strtok_r(NULL, " ", &saveptr);
 		}
 		args[i] = NULL;
 
 		ret = execv(cmd, args);
-		if (ret)
+		if (ret) {
 			_E("Can't execute %s: %s",
-				cmd_buf, strerror(errno));
+				cmd_buf, strerror_r(errno, buf, sizeof(buf)));
+		}
 		exit(ret);
 	}
 
@@ -496,7 +516,7 @@ static resourced_ret_c exec_iface_cmd(const char *pattern, const char *cmd,
 	ret_value_msg_if(iftype_name == NULL, RESOURCED_ERROR_FAIL,
 		"Invalid network interface name argument");
 
-	ret = sprintf(block_buf, pattern, IPTABLES, cmd, chain,
+	ret = snprintf(block_buf, sizeof(block_buf), pattern, IPTABLES, cmd, chain,
 		iftype_name, nfacct, jump);
 	ret_value_msg_if(ret > sizeof(block_buf), RESOURCED_ERROR_FAIL,
 		"Not enough buffer");
@@ -512,7 +532,7 @@ static resourced_ret_c exec_app_cmd(const char *pattern, const char *cmd,
 	int ret;
 	ret_value_msg_if(iftype_name == NULL, RESOURCED_ERROR_FAIL,
 		"Invalid network interface name argument");
-	ret = sprintf(block_buf, pattern, IPTABLES, cmd,
+	ret = snprintf(block_buf, sizeof(block_buf), pattern, IPTABLES, cmd,
 		iftype_name, classid, nfacct, jump);
 	ret_value_msg_if(ret > sizeof(block_buf), RESOURCED_ERROR_FAIL,
 		"Not enough buffer");
@@ -789,7 +809,7 @@ void generate_counter_name(struct nfacct_rule *counter)
 		warn_symbol = 'w';
 	else if (counter->intend  == NFACCT_BLOCK)
 		warn_symbol = 'r';
-	snprintf(counter->name, MAX_NAME_LENGTH, "%c%d_%d_%d_%s",
+	snprintf(counter->name, NFACCT_NAME_MAX, "%c%d_%d_%d_%s",
 			warn_symbol, counter->iotype, counter->iftype,
 			counter->classid, counter->ifname);
 }

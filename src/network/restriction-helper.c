@@ -104,5 +104,9 @@ int check_restriction_arguments(const char *appid,
 	ret_value_msg_if(rst->roaming >= RESOURCED_ROAMING_LAST_ELEM,
 		RESOURCED_ERROR_INVALID_PARAMETER,
 		"roaming is not valid %d", rst->roaming);
+	/* check imsi */
+	ret_value_msg_if(rst->imsi == NULL,
+		RESOURCED_ERROR_INVALID_PARAMETER,
+		"imsi is not valid");
 	return RESOURCED_ERROR_NONE;
 }
