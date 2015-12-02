@@ -50,7 +50,7 @@
 #include "util.h"
 
 #define MEMCG_PATH			"/sys/fs/cgroup/memory/"
-#define SWAPCG_RECLAIM			"memory.force_reclaim"
+#define MEMCG_SIZE_LIMIT		"memory.limit_in_bytes"
 #define MOVE_CHARGE			"memory.move_charge_at_immigrate"
 
 #define SWAP_ON_EXEC_PATH		"/sbin/swapon"
@@ -62,6 +62,7 @@
 #define SWAP_CONF_STREAMS		"MAX_COMP_STREAMS"
 #define SWAP_CONF_ALGORITHM		"COMP_ALGORITHM"
 #define SWAP_CONF_RATIO			"RATIO"
+#define SWAP_HARD_LIMIT			"SWAP_HARD_LIMIT"
 
 #define SWAP_BACKEND			"zram"
 #define SWAP_ZRAM_NUM_DEVICE		"1"
@@ -83,9 +84,7 @@
 #define MAX_PIDS			3
 #define SWAP_RATIO			0.5
 #define SWAP_FULLNESS_RATIO		0.8
-#define SWAP_FORCE_RECLAIM_NUM_MAX	5
-#define SWAP_RECLIAM_PAGES_MAX		2560
-#define SWAP_RECLIAM_PAGES_MIN		128
+#define SWAP_HARD_LIMIT_DEFAULT		0.5
 
 enum swap_thread_op {
 	SWAP_OP_ACTIVATE,
@@ -134,6 +133,7 @@ static char *swap_thread_op_names[SWAP_OP_END] = {
 	"RECLAIM",
 	"COMPACT",
 };
+static float swap_hard_limit_fraction = SWAP_HARD_LIMIT_DEFAULT;
 
 static int swap_compact_handler(void *data);
 
@@ -144,16 +144,6 @@ static const char *compact_reason_to_str(enum swap_compact_reason reason)
 	if (reason >= SWAP_COMPACT_LOWMEM_LOW && reason < SWAP_COMPACT_RESASON_MAX)
 		return reasons_table[reason];
 	return "";
-}
-
-enum swap_state swap_get_state(void)
-{
-	struct shared_modules_data *modules_data = get_shared_modules_data();
-
-	ret_value_msg_if(modules_data == NULL, RESOURCED_ERROR_FAIL,
-			 "Invalid shared modules data\n");
-
-	return modules_data->swap_data.swap_state;
 }
 
 static void swap_set_state(enum swap_state state)
@@ -201,6 +191,11 @@ static pid_t swap_change_state(enum swap_state state)
 
 	swap_set_state(state);
 	return pid;
+}
+
+static unsigned int swap_calculate_hard_limit_in_bytes(unsigned int mem_subcg_usage)
+{
+	return (unsigned int)((float)mem_subcg_usage * swap_hard_limit_fraction);
 }
 
 static int swap_get_disksize_bytes(void)
@@ -369,9 +364,8 @@ static int swap_reduce_victims(GArray *candidates, int max)
 static int swap_reclaim_memcg(struct swap_status_msg msg)
 {
 	int ret;
-	int try = SWAP_FORCE_RECLAIM_NUM_MAX;
-	unsigned int usage, usage_after_reclaim, nr_to_reclaim;
 	unsigned long swap_usage;
+	unsigned int usage, memcg_limit;
 
 	/* Test for restarted resourced, where zram already activated */
 	if (swap_control.swap_size_bytes == 0) {
@@ -388,35 +382,18 @@ static int swap_reclaim_memcg(struct swap_status_msg msg)
 		return RESOURCED_ERROR_NONE;
 	}
 
-	do {
-		ret = memcg_get_usage(msg.info, &usage);
-		if (ret != RESOURCED_ERROR_NONE)
-			usage = 0;
+	ret = memcg_get_usage(msg.info, &usage);
+	if (ret != RESOURCED_ERROR_NONE)
+		usage = 0;
 
-		nr_to_reclaim = BtoPAGE(usage);
-		if (nr_to_reclaim <= SWAP_RECLIAM_PAGES_MIN)
-			break; /* don't reclaim if little gain */
-		if (nr_to_reclaim > SWAP_RECLIAM_PAGES_MAX)
-			nr_to_reclaim = SWAP_RECLIAM_PAGES_MAX;
+	memcg_limit = swap_calculate_hard_limit_in_bytes(usage);
+	_D("Swap request: %s cgroup usage is %lu, hard limit set to %lu (hard limit fraction %f)",
+			msg.info->name, usage, memcg_limit, swap_hard_limit_fraction);
+	ret = cgroup_write_node(msg.info->name, MEMCG_SIZE_LIMIT, memcg_limit);
+	if (ret != RESOURCED_ERROR_NONE)
+		_E("Not able to set hard limit of %s memory cgroup", msg.info->name);
 
-		ret = cgroup_write_node(msg.info->name, SWAPCG_RECLAIM,
-			nr_to_reclaim);
-		if (ret != RESOURCED_ERROR_NONE)
-			break; /* if we can't reclaim don't continue */
-
-		ret = memcg_get_usage(msg.info, &usage_after_reclaim);
-		if (ret != RESOURCED_ERROR_NONE)
-			usage_after_reclaim = 0;
-
-		if (usage_after_reclaim >= usage)
-			break; /* if we didn't reclaim more, let's stop */
-
-		_D("FORCE_RECLAIM try: %d, before: %d, after: %d",
-				try, usage, usage_after_reclaim);
-		try -= 1;
-	} while ( try > 0 );
-
-	return RESOURCED_ERROR_NONE;
+	return ret;
 }
 
 static int swap_compact_zram(void)
@@ -765,6 +742,25 @@ static int swap_compact_handler(void *data)
 	return swap_simple_bundle_sender(SWAP_OP_COMPACT);
 }
 
+/* This function is callback function for the notifier RESOURCED_NOTIFIER_SWAP_UNSET_LIMIT.
+ * This notifier is notified from normal_act function of vmpressure module whenever the
+ * memory state changes to normal.
+ * This function resets the hard limit of the swap subcgroup to -1 (unlimited) */
+static int swap_cgroup_reset_limit(void *data)
+{
+	int ret, limit;
+	struct swap_status_msg *msg = data;
+
+	limit = -1;
+	ret = cgroup_write_node(msg->info->name, MEMCG_SIZE_LIMIT, limit);
+	if (ret != RESOURCED_ERROR_NONE)
+		_E("Failed to change hard limit of %s cgroup to -1", msg->info->name);
+	else
+		_D("changed hard limit of %s cgroup to -1", msg->info->name);
+
+	return ret;
+}
+
 static void swap_start_pid_edbus_signal_handler(void *data, DBusMessage *msg)
 {
 	DBusError err;
@@ -862,6 +858,8 @@ static void swap_dbus_init(void)
 
 static int load_swap_config(struct parse_result *result, void *user_data)
 {
+	int limit_value;
+
 	if (!result)
 		return -EINVAL;
 
@@ -887,6 +885,16 @@ static int load_swap_config(struct parse_result *result, void *user_data)
 		float ratio = atof(result->value);
 		swap_control.ratio = ratio;
 		_D("swap disk size ratio is %.2f", swap_control.ratio);
+	} else if (!strncmp(result->name, SWAP_HARD_LIMIT, strlen(SWAP_HARD_LIMIT))) {
+		limit_value = (int)strtoul(result->value, NULL, 0);
+		if (limit_value < 0 || limit_value > 100)
+			_E("Invalid %s value in %s file, setting %f as default percent value",
+						SWAP_HARD_LIMIT, SWAP_CONF_FILE,
+						SWAP_HARD_LIMIT_DEFAULT);
+		else {
+			swap_hard_limit_fraction = (float)limit_value/100;
+			_D("hard limit fraction for swap module is %f", swap_hard_limit_fraction);
+		}
 	}
 
 	if (swap_control.max_comp_streams < 0) {
@@ -1028,6 +1036,7 @@ static int resourced_swap_init(void *data)
 	register_notifier(RESOURCED_NOTIFIER_SWAP_ACTIVATE, swap_activate_handler);
 	register_notifier(RESOURCED_NOTIFIER_BOOTING_DONE, swap_activate_handler);
 	register_notifier(RESOURCED_NOTIFIER_SWAP_COMPACT, swap_compact_handler);
+	register_notifier(RESOURCED_NOTIFIER_SWAP_UNSET_LIMIT, swap_cgroup_reset_limit);
 
 	return ret;
 }
@@ -1038,6 +1047,8 @@ static int resourced_swap_finalize(void *data)
 	unregister_notifier(RESOURCED_NOTIFIER_SWAP_ACTIVATE, swap_activate_handler);
 	unregister_notifier(RESOURCED_NOTIFIER_BOOTING_DONE, swap_activate_handler);
 	unregister_notifier(RESOURCED_NOTIFIER_SWAP_COMPACT, swap_compact_handler);
+	unregister_notifier(RESOURCED_NOTIFIER_SWAP_UNSET_LIMIT, swap_cgroup_reset_limit);
+
 	g_queue_free(swap_thread_queue.queue);
 
 	return RESOURCED_ERROR_NONE;
