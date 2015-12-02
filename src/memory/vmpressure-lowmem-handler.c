@@ -249,6 +249,8 @@ static const char *memcg_name[MEMCG_MAX] = {
 	"swap",
 };
 
+static bool memcg_swap_status[MEMCG_MAX] = {false, };
+
 enum memory_level {
 	MEMORY_LEVEL_NORMAL,
 	MEMORY_LEVEL_LOW,
@@ -1117,6 +1119,7 @@ static void lowmem_swap_memory(enum memcg_type type, struct memcg_info *mi)
 	    available <= memcg_root->threshold[LOWMEM_SWAP])
 		swap_act();
 
+	memcg_swap_status[type] = true;
 	msg.type = type;
 	msg.info = mi;
 	resourced_notify(RESOURCED_NOTIFIER_SWAP_START, &msg);
@@ -1169,6 +1172,8 @@ static void memory_level_send_system_event(int lv)
 static void normal_act(void)
 {
 	int ret, status;
+	int index;
+	struct swap_status_msg msg;
 
 	ret = vconf_get_int(VCONFKEY_SYSMAN_LOW_MEMORY, &status);
 	if (ret)
@@ -1180,7 +1185,16 @@ static void normal_act(void)
 	}
 
 	change_lowmem_state(LOWMEM_NORMAL);
-	resourced_notify(RESOURCED_NOTIFIER_SWAP_UNSET_LIMIT, NULL);
+	for (index = 0; index < MEMCG_MAX; ++index) {
+		if (!memcg_swap_status[index])
+			continue;
+
+		msg.type = index;
+		msg.info = memcg_tree[index]->info;
+		resourced_notify(RESOURCED_NOTIFIER_SWAP_UNSET_LIMIT, &msg);
+		memcg_swap_status[index] = false;
+	}
+
 	if (proc_get_freezer_status() == CGROUP_FREEZER_PAUSED)
 		resourced_notify(RESOURCED_NOTIFIER_FREEZER_CGROUP_STATE,
 			 (void *)CGROUP_FREEZER_ENABLED);

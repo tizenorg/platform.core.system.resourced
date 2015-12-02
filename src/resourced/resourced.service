@@ -3,7 +3,7 @@ Description=Resource management daemon
 After=wm_ready.service
 
 [Service]
-Type=notify
+Type=simple
 ExecStart=/usr/bin/resourced
 MemoryLimit=30M
 Restart=on-failure

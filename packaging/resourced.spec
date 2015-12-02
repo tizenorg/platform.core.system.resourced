@@ -11,7 +11,12 @@ Source2:    resourced-cpucgroup.service
 %define vip_agent_module ON
 %define timer_slack OFF
 
-%define heart_module ON
+%ifarch aarch64
+	%define heart_module OFF
+%else
+	%define heart_module ON
+%endif
+
 
 %define memory_module ON
 %define block_module ON
@@ -37,7 +42,7 @@ Source2:    resourced-cpucgroup.service
 
 %if "%{?profile}" == "wearable"
 	%define freezer_module ON
-	%define swap_module ON
+	%define swap_module OFF
 	%define network_state OFF
 	%define tethering_feature OFF
 	%define wearable_noti ON
