@@ -21,6 +21,8 @@ Source2:    resourced-cpucgroup.service
 
 %define tests_module OFF
 
+%define debug_log OFF
+
 %if "%{?tizen_profile_name}" == "mobile"
 	%define swap_module ON
 	%define freezer_module ON
@@ -151,7 +153,8 @@ export FFLAGS="$FFLAGS -DTIZEN_DEBUG_ENABLE"
 	 -DMEMORY_MODULE=%{memory_module} \
 	 -DWEARABLE_NOTI=%{wearable_noti} \
 	 -DBLOCK_MODULE=%{block_module} \
-	 -DTESTS_MODULE=%{tests_module}
+	 -DTESTS_MODULE=%{tests_module} \
+	 -DDEBUG_LOG=%{debug_log}
 
 make %{?jobs:-j%jobs}
 

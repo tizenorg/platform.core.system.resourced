@@ -1078,7 +1078,9 @@ static Eina_Bool logging_send_signal_to_data(void *data)
 {
 	int ret;
 
+#ifdef LOGGING_DEBUG
 	_D("logging timer callback function start");
+#endif
 
 	/* signal to logging data thread for start logging */
 	ret = pthread_mutex_trylock(&logging_data_mutex);
@@ -1087,7 +1089,9 @@ static Eina_Bool logging_send_signal_to_data(void *data)
 		_E("pthread_mutex_trylock fail : %d, errno : %d", ret, errno);
 	else {
 		pthread_cond_signal(&logging_data_cond);
+#ifdef LOGGING_DEBUG
 		_I("send signal to logging data thread");
+#endif
 		pthread_mutex_unlock(&logging_data_mutex);
 	}
 
@@ -1158,7 +1162,9 @@ static Eina_Bool logging_send_signal_to_update(void *data)
 		}
 	}
 
+#ifdef LOGGING_DEBUG
 	_D("logging timer callback function start");
+#endif
 
 	/* signal to logging update thread for start update */
 	ret = pthread_mutex_trylock(&logging_update_mutex);
@@ -1167,7 +1173,9 @@ static Eina_Bool logging_send_signal_to_update(void *data)
 		_E("pthread_mutex_trylock fail : %d, errno : %d", ret, errno);
 	else {
 		pthread_cond_signal(&logging_update_cond);
+#ifdef LOGGING_DEBUG
 		_I("send signal to logging update thread");
+#endif
 		pthread_mutex_unlock(&logging_update_mutex);
 	}
 

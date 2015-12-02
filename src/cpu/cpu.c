@@ -235,7 +235,7 @@ static int cpu_service_state(void *data)
 	struct proc_status *ps = (struct proc_status *)data;
 	struct proc_app_info *pai = ps->pai;
 
-	_D("cpu_service_launch : pid = %d, appname = %s", ps->pid, ps->appid);
+	_D("service launch: pid = %d, appname = %s", ps->pid, ps->appid);
 	if (pai && CHECK_BIT(pai->categories, PROC_BG_SYSTEM))
 		return RESOURCED_ERROR_NONE;
 	else if (pai && CHECK_BIT(pai->flags, PROC_DOWNLOADAPP))
@@ -250,7 +250,7 @@ static int cpu_widget_state(void *data)
 	struct proc_status *ps = (struct proc_status *)data;
 	struct proc_app_info *pai = ps->pai;
 
-	_D("cpu_widget_background : pid = %d, appname = %s", ps->pid, ps->appid);
+	_D("widget background: pid = %d, appname = %s", ps->pid, ps->appid);
 	if (pai && CHECK_BIT(pai->flags, PROC_DOWNLOADAPP))
 		cpu_move_cgroup(ps->pid, CPU_CONTROL_GROUP);
 	return RESOURCED_ERROR_NONE;
@@ -260,7 +260,7 @@ static int cpu_foreground_state(void *data)
 {
 	struct proc_status *ps = (struct proc_status *)data;
 	int pri;
-	_D("cpu_foreground_state : pid = %d, appname = %s", ps->pid, ps->appid);
+	_D("app foreground: pid = %d, appname = %s", ps->pid, ps->appid);
 	pri = getpriority(PRIO_PROCESS, ps->pid);
 	if (pri == -1 || pri > CPU_DEFAULT_PRI)
 		setpriority(PRIO_PGRP, ps->pid, CPU_DEFAULT_PRI);
@@ -272,7 +272,7 @@ static int cpu_foreground_state(void *data)
 static int cpu_background_state(void *data)
 {
 	struct proc_status *ps = (struct proc_status *)data;
-	_D("cpu_background_state : pid = %d, appname = %s", ps->pid, ps->appid);
+	_D("app background: pid = %d, appname = %s", ps->pid, ps->appid);
 	setpriority(PRIO_PGRP, ps->pid, CPU_BACKGROUND_PRI);
 	cpu_move_cgroup(ps->pid, CPU_CONTROL_GROUP);
 	return RESOURCED_ERROR_NONE;
@@ -281,7 +281,7 @@ static int cpu_background_state(void *data)
 static int cpu_restrict_state(void *data)
 {
 	struct proc_status *ps = (struct proc_status *)data;
-	_D("cpu_restrict_state : pid = %d, appname = %s", ps->pid, ps->appid);
+	_D("app suspend: pid = %d, appname = %s", ps->pid, ps->appid);
 	if (CHECK_BIT(ps->pai->categories, PROC_BG_MEDIA))
 		return RESOURCED_ERROR_NONE;
 	cpu_move_cgroup(ps->pid, CPU_CONTROL_CPUQUOTA_GROUP);
@@ -292,7 +292,7 @@ static int cpu_active_state(void *data)
 {
 	struct proc_status *ps = (struct proc_status *)data;
 	int oom_score_adj = 0, ret;
-	_D("cpu_active_state : pid = %d, appname = %s", ps->pid, ps->appid);
+	_D("app active : pid = %d, appname = %s", ps->pid, ps->appid);
 	ret = proc_get_oom_score_adj(ps->pid, &oom_score_adj);
 	if (ret || oom_score_adj < OOMADJ_PREVIOUS_DEFAULT)
 		return RESOURCED_ERROR_NONE;
@@ -325,7 +325,7 @@ static int cpu_system_state(void *data)
 {
 	struct proc_status *ps = (struct proc_status *)data;
 
-	_D("cpu receive system service : pid = %d", ps->pid);
+	_D("system service : pid = %d", ps->pid);
 	cpu_move_cgroup(ps->pid, CPU_CONTROL_GROUP);
 	return RESOURCED_ERROR_NONE;
 }

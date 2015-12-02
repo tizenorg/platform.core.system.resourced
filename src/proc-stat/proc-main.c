@@ -873,7 +873,11 @@ int resourced_proc_status_change(int status, pid_t pid, char *app_name, char *pk
 	ps.pai = NULL;
 	switch (status) {
 	case PROC_CGROUP_SET_FOREGRD:
-		_SD("set foreground : %d", pid);
+		if (app_name)
+			_SD("set foreground: app %s, pid %d", app_name, pid);
+		else
+			_SD("set foreground: pid %d", pid);
+
 		ps.pai = find_app_info(pid);
 		if (apptype == PROC_TYPE_WIDGET || apptype == PROC_TYPE_WATCH) {
 			if (!ps.pai)
@@ -903,12 +907,15 @@ int resourced_proc_status_change(int status, pid_t pid, char *app_name, char *pk
 	case PROC_CGROUP_SET_LAUNCH_REQUEST:
 		proc_set_oom_score_adj(pid, OOMADJ_INIT);
 		if (!app_name) {
-			_E("need application name!pid = %d", pid);
+			_E("launch request: need app name! pid %d", pid);
 			return RESOURCED_ERROR_NO_DATA;
 		}
-		_SD("launch request %s, %d", app_name, pid);
+
 		if (pkg_name)
-			_SD("launch request %s with pkgname", pkg_name);
+			_SD("launch request: app %s, pkg %s, pid %d", app_name, pkg_name, pid);
+		else
+			_SD("launch request: app %s, pid %d", app_name, pid);
+
 		ps.pai = proc_add_app_list(apptype, pid, app_name, pkg_name);
 		ret = resourced_proc_excluded(app_name);
 		if (!ps.pai || ret)
@@ -920,7 +927,6 @@ int resourced_proc_status_change(int status, pid_t pid, char *app_name, char *pk
 		if (ps.pai->categories)
 			proc_set_runtime_exclude_list(pid, PROC_EXCLUDE);
 		resourced_notify(RESOURCED_NOTIFIER_APP_LAUNCH, &ps);
-		_D("available memory = %u", proc_get_mem_available());
 		if (proc_get_freezer_status() == CGROUP_FREEZER_DISABLED)
 			break;
 		ppi = ps.pai->program;
@@ -929,12 +935,14 @@ int resourced_proc_status_change(int status, pid_t pid, char *app_name, char *pk
 		break;
 	case PROC_CGROUP_SET_SERVICE_REQUEST:
 		if (!app_name) {
-			_E("need application name!pid = %d", pid);
+			_E("service launch request: need app name! pid = %d", pid);
 			return RESOURCED_ERROR_NO_DATA;
 		}
-		_SD("service launch request %s, %d", app_name, pid);
 		if (pkg_name)
-			_SD("launch request %s with pkgname", pkg_name);
+			_SD("service launch request: app %s, pkg %s, pid %d", app_name, pkg_name, pid);
+		else
+			_SD("service launch request: app %s, pid %d", app_name, pid);
+
 		ps.pai = proc_add_app_list(PROC_TYPE_SERVICE,
 				    pid, app_name, pkg_name);
 		if (!ps.pai)
@@ -946,12 +954,12 @@ int resourced_proc_status_change(int status, pid_t pid, char *app_name, char *pk
 			proc_set_runtime_exclude_list(pid, PROC_EXCLUDE);
 		break;
 	case PROC_CGROUP_SET_RESUME_REQUEST:
-		_SD("resume request %d", pid);
 		/* init oom_score_value */
 		if (!app_name) {
-			_E("need application name!pid = %d", pid);
+			_E("resume request: need app name! pid = %d", pid);
 			return RESOURCED_ERROR_NO_DATA;
 		}
+		_SD("resume request: app %s, pid %d", app_name, pid);
 
 		ps.pai = find_app_info(pid);
 		if (!ps.pai && ! resourced_proc_excluded(app_name))
@@ -966,7 +974,6 @@ int resourced_proc_status_change(int status, pid_t pid, char *app_name, char *pk
 			resourced_notify(RESOURCED_NOTIFIER_APP_RESUME, &ps);
 			proc_set_oom_score_adj(pid, OOMADJ_INIT);
 		}
-		_D("available memory = %u", proc_get_mem_available());
 		if (proc_get_freezer_status() == CGROUP_FREEZER_DISABLED)
 			break;
 		if (apptype == PROC_TYPE_GUI)
@@ -975,6 +982,11 @@ int resourced_proc_status_change(int status, pid_t pid, char *app_name, char *pk
 			resourced_notify(RESOURCED_NOTIFIER_SERVICE_WAKEUP, &ps);
 		break;
 	case PROC_CGROUP_SET_TERMINATE_REQUEST:
+		if (app_name)
+			_SD("terminate request: app %s, pid %d", app_name, pid);
+		else
+			_SD("terminate request: pid %d", pid);
+
 		ps.pai = find_app_info(pid);
 		ps.pid = pid;
 		resourced_notify(RESOURCED_NOTIFIER_APP_TERMINATE_START, &ps);
@@ -984,9 +996,15 @@ int resourced_proc_status_change(int status, pid_t pid, char *app_name, char *pk
 		ret = proc_set_active(pid, oom_score_adj);
 		if (ret != RESOURCED_ERROR_OK)
 			break;
+
 		resourced_notify(RESOURCED_NOTIFIER_APP_ACTIVE, &ps);
 		break;
 	case PROC_CGROUP_SET_BACKGRD:
+		if (app_name)
+			_SD("set background: app %s, pid %d", app_name, pid);
+		else
+			_SD("set background: pid %d", pid);
+
 		if (apptype == PROC_TYPE_WIDGET  || apptype == PROC_TYPE_WATCH) {
 			ps.pai = find_app_info(pid);
 			if (!ps.pai)
@@ -1024,7 +1042,7 @@ int resourced_proc_status_change(int status, pid_t pid, char *app_name, char *pk
 			break;
 		ps.pai = find_app_info_by_appid(app_name);
 		if (!ps.pai) {
-			_D("didn't have proc app list %s", app_name);
+			_E("set noti request: no entry for %s in app list!", app_name);
 			break;
 		}
 		ps.pid = ps.pai->main_pid;

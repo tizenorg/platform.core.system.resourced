@@ -54,11 +54,11 @@ int main(int argc, char **argv)
 	init_modules_arg(&darg);
 	modules_check_runtime_support(NULL);
 	if (check_dbus_active()) {
-		_I("notify relaunch");
+		_I("launching all modules (relaunch detected)");
 		modules_init(NULL);
 		resourced_notify(RESOURCED_NOTIFIER_BOOTING_DONE, NULL);
 	} else {
-		_I("lauch resourced at first");
+		_I("launch high priority modules");
 		modules_early_init(NULL);
 	}
 	sd_notify(0, "READY=1");

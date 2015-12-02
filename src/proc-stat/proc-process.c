@@ -102,7 +102,7 @@ static int proc_backgrd_manage(int currentpid, int active, int oom_score_adj)
 	struct proc_app_info *pai = find_app_info(currentpid);
 
 	if (!pai || pai->proc_exclude) {
-		_D("BACKGRD MANAGE : don't manage background application by %d", currentpid);
+		_D("pid %d wont be managed", currentpid);
 		return RESOURCED_ERROR_NONFREEZABLE;
 	}
 
@@ -113,7 +113,7 @@ static int proc_backgrd_manage(int currentpid, int active, int oom_score_adj)
 	 * it skipped to go to the background again.
 	 */
 	if (pai->lru_state >= PROC_BACKGROUND) {
-		_D("already managed background application(%d)", currentpid);
+		_D("pid %d already in background", currentpid);
 		return RESOURCED_ERROR_NONE;
 	}
 
