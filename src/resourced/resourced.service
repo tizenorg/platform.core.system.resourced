@@ -3,7 +3,7 @@ Description=Resource management daemon
 After=wm_ready.service
 
 [Service]
-Type=notify
+Type=simple
 EnvironmentFile=/run/tizen-mobile-env
 ExecStart=/usr/bin/resourced
 MemoryLimit=30M
