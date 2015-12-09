@@ -149,7 +149,7 @@ export FFLAGS="$FFLAGS -DTIZEN_DEBUG_ENABLE"
 	%ifarch aarch64
 		%define ARCH arm64
 	%else
-		%ifarch i586
+		%ifarch %ix86
 			%define ARCH i586
 		%else
 			%define ARCH x86_64
