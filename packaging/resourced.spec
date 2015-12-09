@@ -41,7 +41,7 @@ Source2:    resourced-cpucgroup.service
 %endif
 
 %if "%{?profile}" == "wearable"
-	%define freezer_module ON
+	%define freezer_module OFF
 	%define swap_module OFF
 	%define network_state OFF
 	%define tethering_feature OFF
@@ -149,7 +149,11 @@ export FFLAGS="$FFLAGS -DTIZEN_DEBUG_ENABLE"
 	%ifarch aarch64
 		%define ARCH arm64
 	%else
-		%define ARCH i586
+		%ifarch i586
+			%define ARCH i586
+		%else
+			%define ARCH x86_64
+		%endif
 	%endif
 %endif
 
