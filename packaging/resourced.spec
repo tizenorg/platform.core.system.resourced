@@ -19,8 +19,6 @@ Source2:    resourced-cpucgroup.service
 %define network_state OFF
 %define memory_eng ON
 
-%define slp_tests OFF
-
 %if "%{?tizen_profile_name}" == "mobile"
 	%define swap_module ON
 	%define freezer_module ON
@@ -106,16 +104,6 @@ Requires:   libresourced  = %{version}-%{release}
 %description -n libresourced-devel
 Library (development) for resourced (Resource Management Daemon)
 
-%if %{?slp_tests} == ON
-%package -n resourced-test
-Summary: Resource test tools
-Group:   System/Libraries
-Requires:   %{name} = %{version}-%{release}
-
-%description -n resourced-test
-This package include set of test programs
-%endif
-
 %prep
 %setup -q
 
@@ -161,7 +149,6 @@ export FFLAGS="$FFLAGS -DTIZEN_DEBUG_ENABLE"
 	 -DMEMORY_MODULE=%{memory_module} \
 	 -DWEARABLE_NOTI=%{wearable_noti} \
 	 -DBLOCK_MODULE=%{block_module} \
-	 -DSLP_TESTS=%{slp_tests}
 
 make %{?jobs:-j%jobs}
 
@@ -271,11 +258,6 @@ fi
 	%attr(700, app, app) %{logging_storage_db_full_path}-shm
 	%attr(700, app, app) %{logging_storage_db_full_path}-wal
 %endif
-%if %{?slp_tests} == ON
-	/usr/bin/resourced-test
-	/usr/lib/systemd/system/resourced-test.service
-	/usr/share/dbus-1/system-services/org.tizen.system.resourced-test.service
-%endif
 #memps
 %attr(-,root, system) %{_bindir}/memps
 #mem-stress
@@ -303,12 +285,3 @@ fi
 %{_libdir}/libresourced.so
 %{_includedir}/system/data_usage.h
 
-%if %{?slp_tests} == ON
-%files -n resourced-test
-%defattr(-,root,root,-)
-%{_libdir}/resourced/test/test-file-helper
-%{_libdir}/resourced/test/test-smaps
-%{_libdir}/resourced/test/test-procfs
-%{_bindir}/sluggish-test
-%config /etc/resourced/sluggish-test.conf
-%endif
