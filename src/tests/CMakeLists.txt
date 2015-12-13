@@ -16,6 +16,7 @@ SET(SRC_MEMORY_TEST ${TESTS_SOURCE_DIR}/memory/resourced_memory_test.c
 
 SET(SRC_DUMMY_PROCESS ${TESTS_SOURCE_DIR}/util/resourced_dummy_process.c)
 SET(SRC_MEMORY_HOG ${TESTS_SOURCE_DIR}/util/resourced_hogger_memory.c)
+SET(SRC_PROC_STAT_TEST ${TESTS_SOURCE_DIR}/proc-stat/resourced_proc_stat_test.c)
 
 #Linking flags
 INCLUDE(FindPkgConfig)
@@ -29,6 +30,10 @@ SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${EXTRA_CFLAGS}")
 ADD_EXECUTABLE (resourced_memory_test ${SRC_MEMORY_TEST})
 TARGET_LINK_LIBRARIES(resourced_memory_test ${daemon_pkgs_LDFLAGS})
 INSTALL(TARGETS resourced_memory_test DESTINATION bin)
+
+ADD_EXECUTABLE(resourced_proc_stat_test ${SRC_PROC_STAT_TEST})
+TARGET_LINK_LIBRARIES(resourced_proc_stat_test ${daemon_pkgs_LDFLAGS} ${PROC-STAT})
+INSTALL(TARGETS resourced_proc_stat_test DESTINATION bin)
 
 ADD_EXECUTABLE(resourced_dummy_process ${SRC_DUMMY_PROCESS})
 INSTALL(TARGETS resourced_dummy_process DESTINATION bin)

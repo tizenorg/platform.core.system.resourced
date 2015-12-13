@@ -271,6 +271,8 @@ fi
 %defattr(-,root,root,-)
 %{_bindir}/resourced_memory_test
 %defattr(-,root,root,-)
+%{_bindir}/resourced_proc_stat_test
+%defattr(-,root,root,-)
 %{_bindir}/resourced_dummy_process
 %defattr(-,root,root,-)
 %{_bindir}/resourced_hogger_memory
