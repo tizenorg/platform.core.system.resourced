@@ -19,7 +19,7 @@ Source2:    resourced-cpucgroup.service
 %define network_state OFF
 %define memory_eng ON
 
-%define tests_module ON
+%define tests_module OFF
 
 %if "%{?tizen_profile_name}" == "mobile"
 	%define swap_module ON
