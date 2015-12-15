@@ -1,0 +1,11 @@
+Resourced tests scripts
+=======================
+Provides scripts needed to interact with resourced during tests
+
+Scripts
+=======
+* resourced_dbus_sender.sh: Provides command line way of sending dbus method calls/signals to resourced
+				Uses dbus-send utility to accomplish the same. Look at the usage message
+				to understand the signals/methods supported.
+* resourced_util_memory_test.sh: Provides functions to gather info about the memory usage and memcg info
+					Look at the usage message to understand the options supported.

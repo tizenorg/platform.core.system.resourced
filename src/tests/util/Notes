@@ -1,0 +1,11 @@
+Resourced tests utilities
+=========================
+This folder provides some utilities that can be used to assist testing of resourced
+
+Utilities
+=========
+Look at the source code of the utilities to check the usage.
+* resourced_dummy_process: Creates a dummy process with oom score set to input value and runs for infinite time.
+			   Can be used as the victim process
+* resourced_hogger_memory: Creates a memory hogging process as big as the size mentioned in input and runs for a given time.
+			   Can be used to trigger oom situations.

@@ -1092,8 +1092,11 @@ static void change_lowmem_state(unsigned int mem_state)
 	if (cur_mem_state == mem_state)
 		return;
 
-	_I("[LOW MEM STATE] %s ==> %s", convert_memstate_to_str(cur_mem_state),
-		convert_memstate_to_str(mem_state));
+	_I("[LOW MEM STATE] %s ==> %s, changed available = %d MB",
+			convert_memstate_to_str(cur_mem_state),
+			convert_memstate_to_str(mem_state),
+			proc_get_mem_available());
+
 	cur_mem_state = mem_state;
 
 	adjust_dynamic_threshold(MEMCG_BACKGROUND);
@@ -1856,9 +1859,10 @@ static void lowmem_press_root_cgroup_handler(void)
 	for (i = 0; i < ARRAY_SIZE(lpe); i++) {
 		if ((cur_mem_state == lpe[i].cur_mem_state)
 				&& (mem_state == lpe[i].new_mem_state)) {
-			_D("cur_mem_state = %s, new_mem_state = %s",
+			_D("cur_mem_state = %s, new_mem_state = %s, available = %d",
 					convert_memstate_to_str(cur_mem_state),
-					convert_memstate_to_str(mem_state));
+					convert_memstate_to_str(mem_state),
+					available);
 			lpe[i].action();
 		}
 	}
