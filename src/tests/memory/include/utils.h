@@ -17,38 +17,30 @@
  *
  */
 
-#include <stdlib.h>
-#include <stdio.h>
+/**
+ * @file  utils.h
+ * @desc  file IO and proc fs functions
+ **/
 
-#include "smaps.h"
+#ifndef __RESOURCED_TESTS_UTILS_H__
+#define __RESOURCED_TESTS_UTILS_H__
 
-int main(int argc, char *argv[])
-{
-	_cleanup_smaps_free_ struct smaps *maps;
-	int i, j;
-	int r;
+#include "resourced_tests.h"
 
-	r = smaps_get(atoi(argv[1]), &maps, SMAPS_MASK_ALL);
-	if (r < 0) {
-		fprintf(stderr, "failed\n");
-		goto exit;
-	}
+/* Memory size conversion macros */
+#define kBtoMB(val) (int)((val*1000) >> 20)
+#define KBtoB(val) (int)(val << 10)
+#define MBtoB(val) (int)(val << 20)
 
+/* File write abstract functions */
+int fwrite_str(char *path, char *str);
+int fwrite_int(char *path, int num);
 
-	for (i = 0; i < maps->n_map; i++) {
-		fprintf(stdout, "%x-%-15x %-10s %s\n",
-			maps->maps[i]->start,
-			maps->maps[i]->end,
-			maps->maps[i]->mode,
-			maps->maps[i]->name);
+/* Proc fs util functions */
+unsigned int procfs_get_available(void);
+unsigned int procfs_get_total(void);
+int procfs_set_oom_score_adj(int pid, int oom);
 
-		for (j = 0; j < SMAPS_ID_MAX; j++) {
-			fprintf(stdout, "%-23s: %u\n",
-				smap_id_to_string(j),
-				maps->maps[i]->value[j]);
-		}
-	}
+int pid_exists(int pid);
 
-exit:
-	return r < 0 ? EXIT_FAILURE :  EXIT_SUCCESS;
-}
+#endif

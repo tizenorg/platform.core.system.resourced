@@ -75,6 +75,7 @@ SET(VIP_SOURCE_DIR              ${SOURCE_DIR}/vip-agent)
 SET(TIMER_SOURCE_DIR            ${SOURCE_DIR}/timer-slack)
 SET(BLOCK_SOURCE_DIR            ${SOURCE_DIR}/block)
 SET(RESOURCED_DBUS_SOURCE_DIR   ${SOURCE_DIR}/resourced-dbus)
+SET(TESTS_SOURCE_DIR		${SOURCE_DIR}/tests)
 
 INSTALL(FILES ${CMAKE_SOURCE_DIR}/lib${RESOURCED}.pc DESTINATION ${LIB_INSTALL_DIR}/pkgconfig)
 INSTALL(FILES ${CMAKE_SOURCE_DIR}/resourced.conf DESTINATION /etc/dbus-1/system.d)
