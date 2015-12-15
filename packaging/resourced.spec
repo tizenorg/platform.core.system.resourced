@@ -11,18 +11,12 @@ Source2:    resourced-cpucgroup.service
 %define vip_agent_module ON
 %define timer_slack OFF
 
-%ifarch aarch64
-	%define heart_module OFF
-%else
-	%define heart_module ON
-%endif
-
-
 %define memory_module ON
 %define block_module ON
 %define wearable_noti OFF
 %define network_state OFF
 %define memory_eng ON
+%define heart_module ON
 
 %define swap_module ON
 %define freezer_module OFF
