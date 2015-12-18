@@ -274,6 +274,8 @@ fi
 %defattr(-,root,root,-)
 %{_bindir}/resourced_memory_test
 %defattr(-,root,root,-)
+%{_bindir}/resourced_cpu_test
+%defattr(-,root,root,-)
 %{_bindir}/resourced_proc_stat_test
 %defattr(-,root,root,-)
 %{_bindir}/resourced_data_usage_test

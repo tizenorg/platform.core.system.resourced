@@ -42,5 +42,6 @@ unsigned int procfs_get_total(void);
 int procfs_set_oom_score_adj(int pid, int oom);
 
 int pid_exists(int pid);
+int is_pid_in_cgroup(char *cgroup_path, int pid);
 
 #endif

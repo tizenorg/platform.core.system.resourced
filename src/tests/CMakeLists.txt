@@ -11,13 +11,16 @@ INCLUDE_DIRECTORIES(
 
 #Setting sources
 SET(SRC_TESTS_COMMON 	${TESTS_SOURCE_DIR}/common/fio.c
-			${TESTS_SOURCE_DIR}/common/procfs.c)
+			${TESTS_SOURCE_DIR}/common/procfs.c
+			${TESTS_SOURCE_DIR}/common/cgroup.c)
 
 			
 SET(SRC_MEMORY_TEST 	${TESTS_SOURCE_DIR}/memory/resourced_memory_test.c
 			${TESTS_SOURCE_DIR}/memory/resourced_memory_test_helper.c
 			${SRC_TESTS_COMMON})
 
+SET(SRC_CPU_TEST	${TESTS_SOURCE_DIR}/cpu/resourced_cpu_test.c
+			${SRC_TESTS_COMMON})
 SET(SRC_DUMMY_PROCESS 	${TESTS_SOURCE_DIR}/util/resourced_dummy_process.c)
 SET(SRC_MEMORY_HOG 	${TESTS_SOURCE_DIR}/util/resourced_hogger_memory.c)
 SET(SRC_PROC_STAT_TEST 	${TESTS_SOURCE_DIR}/proc-stat/resourced_proc_stat_test.c)
@@ -35,6 +38,10 @@ SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${EXTRA_CFLAGS}")
 ADD_EXECUTABLE (resourced_memory_test ${SRC_MEMORY_TEST})
 TARGET_LINK_LIBRARIES(resourced_memory_test ${daemon_pkgs_LDFLAGS})
 INSTALL(TARGETS resourced_memory_test DESTINATION bin)
+
+ADD_EXECUTABLE (resourced_cpu_test ${SRC_CPU_TEST})
+TARGET_LINK_LIBRARIES(resourced_cpu_test ${daemon_pkgs_LDFLAGS})
+INSTALL(TARGETS resourced_cpu_test DESTINATION bin)
 
 ADD_EXECUTABLE(resourced_proc_stat_test ${SRC_PROC_STAT_TEST})
 TARGET_LINK_LIBRARIES(resourced_proc_stat_test ${daemon_pkgs_LDFLAGS} ${PROC-STAT})
