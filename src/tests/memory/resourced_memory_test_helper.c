@@ -69,7 +69,7 @@ int launch_memory_hogger(int memory, int oom, char *cgroup_path)
 		 */
 		snprintf(oom_path, sizeof(oom_path), "/proc/%d/oom_score_adj", getpid());
 		ret = fwrite_int(oom_path, oom);
-		if (ret != ERROR_NONE) {
+		if (IS_ERROR(ret)) {
 			_E("IO: Error writing oom %d of pid %d", oom, pid);
 			return 0;
 		}
@@ -101,7 +101,7 @@ int launch_memory_hogger(int memory, int oom, char *cgroup_path)
 
 		/* Writing pid to the cgroup. Error returned if this fails. */
 		ret = fwrite_int(cgroup_path, (int)pid);
-		if (ret != ERROR_NONE) {
+		if (IS_ERROR(ret)) {
 			_E("IO: Not able to write %d to %s", pid, cgroup_path);
 			return ret;
 		}
@@ -174,7 +174,7 @@ int check_cgroup_kill_status(int test, int memcg_index, int kill_flag,
 	 * Check if they are killed/not killed and output error/debug messages
 	 * according to the condition (code and log msgs are self-explanatory)
 	 */
-	ret_val = ERROR_NONE;
+	ret_val = RESOURCED_ERROR_NONE;
 	pid_list_num = memcg_base_process_num[test][memcg_index];
 	for (i = pid_list_num-1; i >= 0; --i) {
 		curr_pid = pid_list[memcg_index][i];
@@ -182,7 +182,7 @@ int check_cgroup_kill_status(int test, int memcg_index, int kill_flag,
 			ret = pid_exists(curr_pid);
 			oom = memcg_base_process_oom[test][memcg_index][i];
 			if (!ret) {
-				ret = ERROR_FAIL;
+				ret = RESOURCED_ERROR_FAIL;
 				if (!kill_flag)
 					_E("process %d (oom: %d) should not be killed (%d / %d ; killflag)",
 							curr_pid, oom, *recovered, recovery_target);
@@ -198,13 +198,13 @@ int check_cgroup_kill_status(int test, int memcg_index, int kill_flag,
 				else {
 					_D("process %d (oom: %d) killed as expected (%d / %d)",
 							curr_pid, oom, *recovered, recovery_target);
-					ret = ERROR_NONE;
+					ret = RESOURCED_ERROR_NONE;
 				}
 
 				*recovered = *recovered + pid_memory_list[memcg_index][i];
 				*num_victims = *num_victims + 1;
 			} else {
-				ret = ERROR_NONE;
+				ret = RESOURCED_ERROR_NONE;
 				if (!kill_flag)
 					_D("process %d (oom: %d) not killed as expected (%d / %d ; killflag)",
 							curr_pid, oom, *recovered, recovery_target);
@@ -220,10 +220,10 @@ int check_cgroup_kill_status(int test, int memcg_index, int kill_flag,
 				else {
 					_E("process %d (oom: %d) expected to be killed (%d / %d)",
 							curr_pid, oom, *recovered, recovery_target);
-					ret = ERROR_FAIL;
+					ret = RESOURCED_ERROR_FAIL;
 				}
 			}
-			if (ret != ERROR_NONE)
+			if (IS_ERROR(ret))
 				ret_val = ret;
 		}
 	}

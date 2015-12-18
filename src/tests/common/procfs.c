@@ -18,8 +18,8 @@
  */
 
 /**
- * @file  utils.c
- * @desc  file IO and proc fs related functions
+ * @file  procfs.c
+ * @desc  proc fs related functions
  **/
 
 #include <errno.h>
@@ -29,41 +29,6 @@
 #define MEM_TOTAL "MemTotal"
 #define MEM_FREE "MemFree"
 #define MEM_CACHED "Cached"
-
-/* File IO abstract function
- * Writes the string (in str) to the file (with path as path)
- */
-int fwrite_str(char *path, char *str)
-{
-	int ret;
-	FILE *file;
-
-	file = fopen(path, "w");
-	if (!file) {
-		_E("IO: Error opening file %s", path);
-		return ERROR_IO;
-	}
-
-	ret = fputs(str, file);
-	fclose(file);
-
-	if (ret < 0)
-		return ERROR_IO;
-	else
-		return ERROR_NONE;
-}
-
-/* File IO abstract function
- * Writes the integer (in num) to the file (with path as path)
- * Uses fwrite_str to accomplish the task
- */
-int fwrite_int(char *path, int num)
-{
-	char content_str[STRING_MAX];
-
-	snprintf(content_str, sizeof(content_str), "%d", num);
-	return fwrite_str(path, content_str);
-}
 
 /* Proc fs util function to get the available (usable) memory in the system
  * Scans the /proc/meminfo file and returns the value of the field MemAvailable
@@ -154,7 +119,7 @@ int procfs_set_oom_score_adj(int pid, int oom)
 
 	snprintf(name, sizeof(name), "/proc/%d/oom_score_adj", pid);
 	ret = fwrite_int(name, oom);
-	if (ret != ERROR_NONE)
+	if (IS_ERROR(ret))
 		_E("IO: Not able to change oom score of process %d", pid);
 	return ret;
 }

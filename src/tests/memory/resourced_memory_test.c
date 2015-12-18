@@ -167,7 +167,7 @@ int proactive_oom_killer(void)
 	to_populate += memory_margin[memconf][MEMORY_MARGIN_MEDIUM];
 	if (to_populate < 0) {
 		_E("Not able to test proactive oom killer. Not enough memory");
-		return ERROR_MEMORY;
+		return RESOURCED_ERROR_OOM;
 	}
 
 	/* Add a process each to the background and the swap cgroups (with sizes in ratio 0.4/0.6 of to_populate) */
@@ -177,7 +177,7 @@ int proactive_oom_killer(void)
 	pid_swap = launch_memory_hogger((int)(to_populate*0.4), 350, swap_path);
 	if (pid_bck < 0 || pid_swap < 0) {
 		_E("error in creating processes");
-		return ERROR_MEMORY;
+		return RESOURCED_ERROR_OOM;
 	}
 	prev_available = available = kBtoMB(procfs_get_available());
 	_D("Added %d MB to raise to dynamic threshold (%d MB). current available %d MB",
@@ -207,7 +207,7 @@ int proactive_oom_killer(void)
 	 * Keep track of recovered memory and # of kills for each encountered kill
 	 * (Note that this calculation is just approximate and not accurate which is why memory margins are used)
 	 */
-	ret_val = ERROR_NONE;
+	ret_val = RESOURCED_ERROR_NONE;
 	recovery_target = vmpressure_limits[memconf][LIMIT_DYNAMIC_THRESH_LEAVE] - prev_available;
 	recovery_target += memory_margin[memconf][MEMORY_MARGIN_LOW];
 	recovered = 0;
@@ -260,7 +260,7 @@ int proactive_oom_killer(void)
 		ret = check_cgroup_kill_status(TEST_PROACTIVE_KILLER, memcg_index, kill_flag,
 						recovery_target, &recovered,
 						num_max_victims, &num_victims);
-		if (ret != ERROR_NONE)
+		if (IS_ERROR(ret))
 			ret_val = ret;
 	}
 	return ret_val;
@@ -290,7 +290,7 @@ int oom_dbus_trigger(void)
 	 * and background cgroups are expected to be killed irrespective of recovered
 	 * memory. Thus recovery_target is set to the total available memory on the target.
 	 */
-	ret_val = ERROR_NONE;
+	ret_val = RESOURCED_ERROR_NONE;
 	recovery_target = vmpressure_limits[memconf][LIMIT_TOTAL_MEMORY];
 	recovered = 0;
 	num_max_victims = RESOURCED_MAX_VICTIMS;
@@ -312,7 +312,7 @@ int oom_dbus_trigger(void)
 		ret = check_cgroup_kill_status(TEST_OOM_DBUS_TRIGGER, memcg_index, kill_flag,
 						recovery_target, &recovered,
 						num_max_victims, &num_victims);
-		if (ret != ERROR_NONE)
+		if (IS_ERROR(ret))
 			ret_val = ret;
 	}
 	return ret_val;
@@ -337,7 +337,7 @@ int vmpressure_root(int test)
 
 	/* If the test is to check the working at the first call (without callback) */
 	if (test == TEST_VMPRESSURE_ROOT) {
-		ret_val = ERROR_NONE;
+		ret_val = RESOURCED_ERROR_NONE;
 
 		/* Input as soon as you see oom killer thread related messages on the dlog
 		 * of resourced. We wait for VMPRESSURE_ROOT_SLEEP seconds to ensure that the
@@ -381,14 +381,14 @@ int vmpressure_root(int test)
 			ret = check_cgroup_kill_status(test, memcg_index, kill_flag,
 						recovery_target, &recovered,
 						num_max_victims, &num_victims);
-			if (ret != ERROR_NONE)
+			if (IS_ERROR(ret))
 				ret_val = ret;
 		}
 	} else {
 		int i, pid_list_num;
 		int oom;
 
-		ret_val = ERROR_NONE;
+		ret_val = RESOURCED_ERROR_NONE;
 
 		/* Input after you see that the oom killer thread has started to run
 		 * We let the first run go through and check for reach of the target
@@ -446,7 +446,7 @@ int vmpressure_root(int test)
 					continue;
 				else {
 					ret = procfs_set_oom_score_adj(pid_list[memcg_index][i], oom);
-					if (ret == ERROR_NONE)
+					if (!IS_ERROR(ret))
 						memcg_base_process_oom[test][memcg_index][i] = oom;
 				}
 			}
@@ -469,7 +469,7 @@ int vmpressure_root(int test)
 			ret = check_cgroup_kill_status(test, memcg_index, kill_flag,
 					recovery_target, &recovered,
 					num_max_victims, &num_victims);
-			if (ret != ERROR_NONE)
+			if (IS_ERROR(ret))
 				ret_val = ret;
 		}
 	}
@@ -524,13 +524,13 @@ int create_base_usage(int test)
 		break;
 	default:
 		_E("Invalid input");
-		return ERROR_INVALID_INPUT;
+		return RESOURCED_ERROR_INVALID_PARAMETER;
 	}
 
 	if (to_populate < 0) {
 		_E("%s: Base usage cannot be created. Not enough memory (%d/%d MB)",
 				test_name[test], to_populate, available);
-		return ERROR_MEMORY;
+		return RESOURCED_ERROR_OOM;
 	} else
 		_D("%s: Available %d MB, Base usage to populate %d MB",
 				test_name[test], available, to_populate);
@@ -547,24 +547,24 @@ int create_base_usage(int test)
 	_I("%s: revised available memory is: %d MB, limit is: %d MB",
 			test_name[test], available, limit);
 
-	return ERROR_NONE;
+	return RESOURCED_ERROR_NONE;
 }
 
 /* Runs the needed sequence of tests for the input test
  * Refer to the README in the memory submodule to understand the
  * checks conducted in each test
  */
-int run_test(int test)
+void run_test(int test)
 {
-	int  ret;
+	int ret;
 
 	/* Create the base usage scenario before proceeding to test for
 	 * correct working of memory module in resourced
 	 */
 	ret = create_base_usage(test);
-	if (ret != ERROR_NONE) {
+	if (IS_ERROR(ret)) {
 		_E("%s: Not able to create base usage. Error %d", test_name[test], ret);
-		return ret;
+		return;
 	}
 
 	/* After base usage scenario was created successfully, test
@@ -583,14 +583,13 @@ int run_test(int test)
 		break;
 	default:
 		_E("Invalid input");
-		return ERROR_INVALID_INPUT;
+		return;
 	}
-	if (ret != ERROR_NONE)
+	if (IS_ERROR(ret))
 		_E("%s: Error running test", test_name[test]);
 	else
 		_I("%s: Test successfully completed", test_name[test]);
 
-	return ERROR_NONE;
 }
 
 /* Usage function */
@@ -611,14 +610,9 @@ void usage(void)
 int main(int argc, char *argv[])
 {
 	int i;
-	char inp_str[STRING_MAX];
 
-	/* This is done so as to provide an opportunity to start a journalctl
-	 * session following only this pid
-	 */
-	printf("Running as pid %d\n", getpid());
-	printf("Enter input after starting journalctl: ");
-	i = scanf("%s", inp_str);
+
+	TEST_START_MESSAGE("memory module");
 
 	/* Invalid argument */
 	if (argc < 2) {
