@@ -89,7 +89,7 @@ static inline void closedirp(DIR **d)
 #define GBYTE_TO_KBYTE(g) ((g) << 20)
 #define GBYTE_TO_MBYTE(g) ((g) << 10)
 
-#define streq(a,b) (strcmp((a),(b)) == 0)
+#define streq(a,b) (strncmp((a),(b), strlen(b)+1) == 0)
 #define strneq(a, b, n) (strncmp((a), (b), (n)) == 0)
 #define strcaseeq(a,b) (strcasecmp((a),(b)) == 0)
 #define strncaseeq(a, b, n) (strncasecmp((a), (b), (n)) == 0)

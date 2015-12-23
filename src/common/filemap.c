@@ -393,7 +393,7 @@ int filemap_write(struct filemap *fm, const char *key, const char *value,
 
 	if (*offset) {
 		fi = filemap_to_info(fm, offset);
-		if (fi && !strcmp(fi->key, key))
+		if (fi && !strncmp(fi->key, key, keylen+1))
 			_D("fi for key %s is found using offset", fi->key);
 		else
 			fi = NULL;

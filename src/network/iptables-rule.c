@@ -162,7 +162,7 @@ static struct ipt_chain *ipt_select_chain(struct ipt_context *iptc,
 	}
 	for (iter = iptc->chains; iter; iter = iter->next) {
 		struct ipt_chain *chain = iter->data;
-		if (!strcmp(chain->name, chain_name)) {
+		if (!strncmp(chain->name, chain_name, strlen(chain_name)+1)) {
 			found_chain = chain;
 			break;
 		}
@@ -172,7 +172,7 @@ static struct ipt_chain *ipt_select_chain(struct ipt_context *iptc,
 		found_chain = (struct ipt_chain *)malloc(sizeof(struct ipt_chain));
 		ret_value_msg_if(found_chain == NULL, NULL, "Not enough memory!");
 		memset(found_chain, 0, sizeof(struct ipt_chain));
-		strcpy(found_chain->name, chain_name);
+		strncpy(found_chain->name, sizeof(found_chain->name) - 1, chain_name);
 		found_chain->hooknum = hook_number;
 		iptc->chains = g_list_append(iptc->chains,
 				found_chain);
@@ -200,7 +200,7 @@ static void recalculate_verdict(struct ipt_chain *chain,
 		ret_msg_if(ipt_entry->jump == NULL, "Need to find jump destination.");
 
 		memset(t->target.u.user.name, 0, XT_EXTENSION_MAXNAMELEN);
-		strcpy(t->target.u.user.name, XT_STANDARD_TARGET);
+		strncpy(t->target.u.user.name, XT_STANDARD_TARGET, XT_EXTENSION_MAXNAMELEN - 1);
 		/*
 		 * Jumps can only happen in builtin chains, so we
 		 * can safely assume that they always have a header
@@ -396,9 +396,10 @@ static resourced_ret_c ipt_populate_entry(struct ipt_context *iptc,
 
 	/* it means not nfacct entry */
 	if (nfacct_name)
-		strcpy(e->nfacct_name, nfacct_name);
+		strncpy(e->nfacct_name, nfacct_name, sizeof(e->nfacct_name) - 1);
 	else
-		strcpy(e->nfacct_name, "not nfacct entry"); /* for debug purpose only */
+		strncpy(e->nfacct_name, "not nfacct entry", sizeof(e->nfacct_name) - 1); /* for debug purpose only */
+	e->nfacct_name[sizeof(e->nfacct_name) - 1] = 0;
 
 	e->verdict_type = verdict_type;
 	if (insert_type == IPT_INSERT_APPEND)
@@ -442,7 +443,7 @@ enum ipt_verdict_type reverse_target_type(int offset, struct ipt_entry *e)
 {
 	struct xt_standard_target *t = (struct xt_standard_target *)ipt_get_target(e);
 
-	if (!strcmp(t->target.u.user.name, XT_STANDARD_TARGET)) {
+	if (!strncmp(t->target.u.user.name, XT_STANDARD_TARGET, strlen(XT_STANDARD_TARGET)+1)) {
 		if (t->target.u.target_size
 		    != IPT_ALIGN(sizeof(struct xt_standard_target))) {
 			_E("Mismatch target size for standard target!");
@@ -477,7 +478,7 @@ static inline bool is_last_entry(struct ipt_context *t, struct ipt_entry *e)
 
 static inline bool is_error_target(struct xt_error_target *t)
 {
-	return strcmp(t->target.u.user.name, XT_ERROR_TARGET) == 0;
+	return strncmp(t->target.u.user.name, XT_ERROR_TARGET, strlen(XT_ERROR_TARGET)+1) == 0;
 }
 
 static void clear_user_chain(struct ipt_context *table)
@@ -534,7 +535,7 @@ static resourced_cb_ret populate_entry(struct resourced_ipt_entry_info *info,
 		is_auxilary_entry = true;
 	} else {
 		chain_name = define_chain_name(table, entry_offset, &hook_number);
-		is_auxilary_entry = strcmp(t->target.u.user.name, XT_STANDARD_TARGET) == 0 &&
+		is_auxilary_entry = strncmp(t->target.u.user.name, XT_STANDARD_TARGET, strlen(XT_STANDARD_TARGET)+1) == 0 &&
 			info->entry->target_offset == sizeof(struct ipt_entry) &&
 			info->entry->next_offset == IPTC_ENTRY_STANDARD_TARGET_SIZE &&
 			(hook_number < NF_IP_NUMHOOKS && entry_offset == table->underflow[hook_number]);
@@ -579,7 +580,7 @@ typedef resourced_cb_ret (*iterate_entries_cb)(struct resourced_ipt_entry_info *
 static int find_nfacct_name (const struct xt_entry_match *match,
 			char **found_name)
 {
-	if (match && !strcmp(match->u.user.name, NFACCT_MATCH_NAME)) {
+	if (match && !strncmp(match->u.user.name, NFACCT_MATCH_NAME, strlen(NFACCT_MATCH_NAME)+1)) {
 		struct xt_nfacct_match_info *info = (struct xt_nfacct_match_info *)match->data;
 		*found_name = info ? info->name: NULL;
 		return  1; /* means stop */
@@ -642,6 +643,8 @@ static resourced_ret_c ipt_foreach(struct ipt_context *iptc, iterate_entries_cb 
 API resourced_ret_c resourced_ipt_begin(struct ipt_context *iptc)
 {
 	int ret;
+	char error_buf[256];
+
 	socklen_t s = sizeof(*iptc->info);
 	ret_value_msg_if(iptc == NULL, RESOURCED_ERROR_INVALID_PARAMETER,
 			"Please provide iptc handle");
@@ -658,13 +661,13 @@ API resourced_ret_c resourced_ipt_begin(struct ipt_context *iptc)
 		}
 	}
 
-	strcpy(iptc->info->name, TABLE_NAME);
+	snprintf(iptc->info->name,  sizeof(iptc->info->name), "%s", TABLE_NAME);
 	ret = getsockopt(iptc->sock, IPPROTO_IP, IPT_SO_GET_INFO,
 			 iptc->info, &s);
 
 	if(ret < 0) {
 		_E("iptables support missing error %d (%s)", errno,
-			strerror(errno));
+			strerror_r(errno, error_buf, sizeof(error_buf)));
 		goto release_info;
 	}
 
@@ -730,8 +733,11 @@ static resourced_ret_c send_ipt_items(struct ipt_context *iptc,
 {
 	int err = setsockopt(iptc->sock, IPPROTO_IP, IPT_SO_SET_REPLACE, r,
 			sizeof(*r) + r->size);
+	char error_buf[256];
+
 	ret_value_msg_if(err < 0, RESOURCED_ERROR_FAIL,
-			"Can't send iptables rules! %s [%d]", strerror(errno),
+			"Can't send iptables rules! %s [%d]",
+			strerror_r(errno, error_buf, sizeof(error_buf)),
 			errno);
 
 	return RESOURCED_ERROR_NONE;
@@ -974,18 +980,18 @@ static void fill_ipt_entry(struct nfacct_rule *rule, struct ipt_entry *entry)
 
 	iface_len = strlen(rule->ifname);
 	if (dest_ifname && iface_len) {
-		strcpy(dest_ifname, rule->ifname);
+		snprintf(dest_ifname, IFNAMSIZ, "%s", rule->ifname);
 		memset(dest_ifmask, 0xff, iface_len + 1);
 	}
 
-	strcpy(match->u.user.name, CGROUP_MATCH_NAME);
+	snprintf(match->u.user.name, sizeof(match->u.user.name), "%s", CGROUP_MATCH_NAME);
 	match->u.user.match_size = XT_CGROUP_MATCH_SIZE;
 	memcpy(match->data, &cgroup_info, sizeof(struct xt_cgroup_info));
 	memcpy(entry->elems, match,  XT_CGROUP_MATCH_SIZE);
 
 	memset(&nfacct_info, 0, sizeof(struct xt_nfacct_match_info));
-	strcpy(nfacct_info.name, rule->name);
-	strcpy(match->u.user.name, NFACCT_MATCH_NAME);
+	snprintf(nfacct_info.name, sizeof(nfacct_info.name), "%s", rule->name);
+	snprintf(match->u.user.name, sizeof(match->u.user.name), "%s", NFACCT_MATCH_NAME);
 	match->u.user.match_size = XT_NFACCT_MATCH_SIZE;
 	memcpy(match->data, &nfacct_info, sizeof(struct xt_nfacct_match_info));
 
@@ -1029,7 +1035,7 @@ static bool check_existence(struct nfacct_rule *rule, struct ipt_context *iptc)
 		chain = cur_chain->data;
 		for (cur_rule = chain->rules; cur_rule; cur_rule = cur_rule->next) {
 			e = cur_rule->data;
-			if (strcmp (e->nfacct_name, rule->name) == 0)
+			if (strncmp(e->nfacct_name, rule->name, strlen(rule->name)+1) == 0)
 				return true;
 		}
 	}
@@ -1104,7 +1110,7 @@ API resourced_ret_c resourced_ipt_remove(struct nfacct_rule *rule, struct ipt_co
 	}
 	for (iter = chain->rules; iter; iter = iter->next) {
 		e = iter->data;
-		if (!strcmp(e->nfacct_name, rule->name)) {
+		if (!strncmp(e->nfacct_name, rule->name, strlen(rule->name)+1)) {
 			found_entry = e;
 			break;
 		}
@@ -1174,7 +1180,7 @@ static void dump_target(struct ipt_entry *entry)
 {
 	struct xt_entry_target *target = ipt_get_target(entry);
 
-	if (strcmp(target->u.user.name, IPT_STANDARD_TARGET) == 0) {
+	if (strncmp(target->u.user.name, IPT_STANDARD_TARGET, strlen(IPT_STANDARD_TARGET)+1) == 0) {
 		struct xt_standard_target *t;
 
 		t = (struct xt_standard_target *)target;
@@ -1214,7 +1220,7 @@ static resourced_cb_ret dump_entry(struct resourced_ipt_entry_info *info, void *
 	_D("entry %p next_offset %d ", info->entry,
 			info->entry->next_offset);
 
-	if (!strcmp(target->u.user.name, IPT_ERROR_TARGET)) {
+	if (!strncmp(target->u.user.name, IPT_ERROR_TARGET, strlen(IPT_ERROR_TARGET)+1)) {
 		_D("\tUSER CHAIN (%s) match %p  target %p",
 			target->data, info->entry->elems,
 			(char *)info->entry + info->entry->target_offset);

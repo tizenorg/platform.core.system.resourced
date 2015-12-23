@@ -157,6 +157,7 @@ long logging_get_time_ms(void)
 static struct logging_module *logging_find_module(char *name)
 {
 	int i;
+	int namelen = strlen(name) + 1;
 
 	if (!logging_modules)
 		return NULL;
@@ -164,7 +165,7 @@ static struct logging_module *logging_find_module(char *name)
 	for (i = 0; i < logging_modules->len; i++) {
 		struct logging_module *module = g_array_index(logging_modules,
 				struct logging_module *, i);
-		if (!strcmp(name, module->name)) {
+		if (!strncmp(name, module->name, namelen)) {
 			return module;
 		}
 	}
@@ -278,6 +279,7 @@ int logging_module_init_with_db_path(char *name, enum logging_period max_period,
 
 	if (asprintf(&(module->db_path), "%s", path) < 0) {
 		_E("asprintf failed");
+		free(module->name);
 		free(module);
 		return RESOURCED_ERROR_OUT_OF_MEMORY;
 	}
@@ -287,6 +289,7 @@ int logging_module_init_with_db_path(char *name, enum logging_period max_period,
 	if (pthread_mutex_init(&module->cache_mutex, NULL) < 0) {
 		_E("%s module mutex_init failed %d", name, errno);
 		free(module->name);
+		free(module->db_path);
 		free(module);
 		return RESOURCED_ERROR_FAIL;
 	}
@@ -296,6 +299,7 @@ int logging_module_init_with_db_path(char *name, enum logging_period max_period,
 	if (!module->cache) {
 		_E("g_queue_new failed");
 		free(module->name);
+		free(module->db_path);
 		free(module);
 		return RESOURCED_ERROR_OUT_OF_MEMORY;
 	}
@@ -617,7 +621,7 @@ int logging_get_latest_in_cache(char *name, char *appid, char **data)
 		table = g_queue_peek_nth(module->cache, i);
 
 		if (table &&
-			!strcmp(appid, table->appid))
+			!strncmp(appid, table->appid, strlen(table->appid)+1))
 			*data = table->data;
 	}
 	pthread_mutex_unlock(&(module->cache_mutex));
@@ -635,7 +639,7 @@ static void logging_cache_search(struct logging_table_form *data, struct logging
 	/* search in cache */
 	/* true condition, call function */
 	if (search->appid) {
-		if (strcmp(search->appid, data->appid))
+		if (strncmp(search->appid, data->appid, strlen(data->appid)+1))
 			return;
 
 		if (search->start && search->start < data->time)
@@ -644,7 +648,7 @@ static void logging_cache_search(struct logging_table_form *data, struct logging
 		if (search->end && search->end > data->time)
 			return;
 	} else if (search->pkgid) {
-		if (strcmp(search->pkgid, data->pkgid))
+		if (strncmp(search->pkgid, data->pkgid, strlen(data->pkgid)+1))
 			return;
 
 		if (search->start && search->start < data->time)

@@ -355,7 +355,7 @@ resourced_ret_c process_kernel_restriction(
 static bool check_background_app(const char *app_id, const resourced_state_t state)
 {
 	if (state == RESOURCED_STATE_BACKGROUND &&
-	    !strcmp(app_id, RESOURCED_BACKGROUND_APP_NAME)) {
+	    !strncmp(app_id, RESOURCED_BACKGROUND_APP_NAME, strlen(RESOURCED_BACKGROUND_APP_NAME)+1)) {
 		return TRUE;
 	}
 	return FALSE;
@@ -383,7 +383,7 @@ resourced_ret_c proc_keep_restriction(
 		app_classid = get_classid_by_app_id(app_id, rst_type != RST_UNSET);
 	if (!skip_kernel_op) {
 		imsi_hash = get_imsi_hash(get_current_modem_imsi());
-		if (imsi_hash && rst->imsi && !strcmp(imsi_hash, rst->imsi)) {
+		if (imsi_hash && rst->imsi && !strncmp(imsi_hash, rst->imsi, strlen(rst->imsi)+1)) {
 			ret = process_kernel_restriction(app_classid, rst, rst_type, quota_id);
 			if (ret != RESOURCED_ERROR_NONE)
 			    _E("Can't keep restriction. only update the DB");
@@ -397,7 +397,7 @@ resourced_ret_c proc_keep_restriction(
 	    "imsi %s, rs_type %d\n", app_id, app_classid,
 	    store_iftype, rst_state, rst_type, rst->imsi, rst->rs_type);
 #endif
-	if (!strcmp(app_id, RESOURCED_ALL_APP) &&
+	if (!strncmp(app_id, RESOURCED_ALL_APP, strlen(RESOURCED_ALL_APP)+1) &&
 		rst->iftype == RESOURCED_IFACE_ALL)
 		process_net_block_state(rst_type);
 

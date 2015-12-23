@@ -91,6 +91,7 @@ static DBusMessage *edbus_get_meminfo(E_DBus_Object *obj, DBusMessage *msg)
 	DBusMessage *reply;
 	struct meminfo mi;
 	int r;
+	char error_buf[256];
 
 	reply = dbus_message_new_method_return(msg);
 
@@ -102,7 +103,8 @@ static DBusMessage *edbus_get_meminfo(E_DBus_Object *obj, DBusMessage *msg)
 			     MEMINFO_MASK_SWAP_TOTAL |
 			     MEMINFO_MASK_SWAP_FREE);
 	if (r < 0) {
-		_E("Failed to get meminfo: %s", strerror(-r));
+		_E("Failed to get meminfo: %s",
+				strerror_r(-r, error_buf, sizeof(error_buf)));
 		return reply;
 	}
 
@@ -186,9 +188,9 @@ static void proc_dbus_active_signal_handler(void *data, DBusMessage *msg)
 		return;
 	}
 
-	if (!strcmp(str, "active"))
+	if (!strncmp(str, "active", strlen("active")+1))
 		type = PROC_CGROUP_SET_ACTIVE;
-	else if (!strcmp(str, "inactive"))
+	else if (!strncmp(str, "inactive", strlen("inactive")+1))
 		type = PROC_CGROUP_SET_INACTIVE;
 	else
 		return;

@@ -107,7 +107,7 @@ pid_t find_pid_from_cmdline(char *cmdline)
 			continue;
 		ret = proc_get_cmdline(pid, appname);
 		if (ret == RESOURCED_ERROR_NONE) {
-			if (!strcmp(cmdline, appname)) {
+			if (!strncmp(cmdline, appname, strlen(appname)+1)) {
 				foundpid = pid;
 				break;
 			}
@@ -243,12 +243,13 @@ unsigned int proc_get_swap_free(void)
 {
 	struct meminfo mi;
 	int r;
+	char error_buf[256];
 
 	r = proc_get_meminfo(&mi, MEMINFO_MASK_SWAP_FREE);
 	if (r < 0) {
 		_E("Failed to get %s: %s",
 		   meminfo_id_to_string(MEMINFO_ID_SWAP_FREE),
-		   strerror(-r));
+		   strerror_r(-r, error_buf, sizeof(error_buf)));
 		return 0;
 	}
 
@@ -357,6 +358,7 @@ int proc_get_status(pid_t pid, char *buf, int len)
 int proc_sys_node_trigger(enum sys_node_id sys_node_id)
 {
 	FILE *fp = NULL;
+	char error_buf[256];
 
 	if (sys_node_id >= ARRAY_SIZE(sys_node_tables)) {
 		_E("sys_node_id[%d] is out of range.\n", sys_node_id);
@@ -371,7 +373,8 @@ int proc_sys_node_trigger(enum sys_node_id sys_node_id)
 	fp = fopen(sys_node_tables[sys_node_id].path, "w");
 	if (fp == NULL) {
 		_E("Failed to open: %s: %s\n",
-			sys_node_tables[sys_node_id].path, strerror(errno));
+			sys_node_tables[sys_node_id].path,
+			strerror_r(errno, error_buf, sizeof(error_buf)));
 		sys_node_tables[sys_node_id].valid = 0;
 		return RESOURCED_ERROR_FAIL;
 	}

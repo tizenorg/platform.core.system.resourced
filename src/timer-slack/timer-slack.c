@@ -190,19 +190,19 @@ static int load_timer_config(struct parse_result *result, void *user_data)
 	if (!result)
 		return -EINVAL;
 
-	if (!strcmp(result->section, EXCLUDE_CONF_SECTION)) {
-		if (strcmp(result->name, EXCLUDE_CONF_NAME))
+	if (!strncmp(result->section, EXCLUDE_CONF_SECTION, strlen(EXCLUDE_CONF_SECTION)+1)) {
+		if (strncmp(result->name, EXCLUDE_CONF_NAME, strlen(EXCLUDE_CONF_NAME)+1))
 			return RESOURCED_ERROR_NO_DATA;
 		pid = find_pid_from_cmdline(result->value);
 		if (pid > 0)
 			timer_slack_write(TIMER_EXCLUDE_CGROUP, CGROUP_FILE_NAME, pid);
 	} else {
 		for (i = 0; i < TIMER_SLACK_MAX; i++) {
-			if (strcmp(result->section, timer_slack[i].name))
+			if (strncmp(result->section, timer_slack[i].name, strlen(timer_slack[i].name)+1))
 				continue;
-			if (!strcmp(result->name, "timer_mode"))
+			if (!strncmp(result->name, "timer_mode", strlen("timer_mode")+1))
 				timer_slack[i].timer_mode = atoi(result->value);
-			if (!strcmp(result->name, "min_slack_ns"))
+			if (!strncmp(result->name, "min_slack_ns", strlen("min_slack_ns")+1))
 				timer_slack[i].slack_value = atoi(result->value);
 		}
 	}

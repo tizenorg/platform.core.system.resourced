@@ -168,13 +168,13 @@ u_int32_t get_classid_by_app_id(const char *app_id, int create)
 		return RESOURCED_UNKNOWN_CLASSID;
 	}
 
-	if (!strcmp(app_id, RESOURCED_ALL_APP))
+	if (!strncmp(app_id, RESOURCED_ALL_APP, strlen(RESOURCED_ALL_APP)+1))
 		return RESOURCED_ALL_APP_CLASSID;
 
-	if (!strcmp(app_id, TETHERING_APP_NAME))
+	if (!strncmp(app_id, TETHERING_APP_NAME, strlen(TETHERING_APP_NAME)+1))
 		return RESOURCED_TETHERING_APP_CLASSID;
 
-	if (!strcmp(app_id, RESOURCED_BACKGROUND_APP_NAME))
+	if (!strncmp(app_id, RESOURCED_BACKGROUND_APP_NAME, strlen(RESOURCED_BACKGROUND_APP_NAME)+1))
 		return RESOURCED_BACKGROUND_APP_CLASSID;
 
 	/* just read */
@@ -359,7 +359,7 @@ API resourced_ret_c make_net_cls_cgroup_with_pid(const int pid, const char *pkg_
 		return RESOURCED_ERROR_INVALID_PARAMETER;
 	}
 
-	if (!strcmp(pkg_name, RESOURCED_BACKGROUND_APP_NAME))
+	if (!strncmp(pkg_name, RESOURCED_BACKGROUND_APP_NAME, strlen(RESOURCED_BACKGROUND_APP_NAME)+1))
 		ret = make_net_cls_cgroup(pkg_name, RESOURCED_BACKGROUND_APP_CLASSID);
 	else
 		ret = make_net_cls_cgroup(pkg_name, RESOURCED_UNKNOWN_CLASSID);

@@ -711,13 +711,13 @@ static void heart_appopt_pkgmgr_status(void *data, DBusMessage *msg)
 	   "req_id: %s, pkgtype: %s, pkgid: %s, key: %s, val: %s",
 	    req_id, pkgtype, pkgid, key, val);
 
-	if (!strcmp(key, APPOPT_STR_START)) {
-		if (!strcmp(val, APPOPT_STR_INSTALL))
+	if (!strncmp(key, APPOPT_STR_START, strlen(APPOPT_STR_START)+1)) {
+		if (!strncmp(val, APPOPT_STR_INSTALL, strlen(APPOPT_STR_INSTALL)+1))
 			pkg_install = 1;
-		else if (!strcmp(val, APPOPT_STR_UNINSTALL))
+		else if (!strncmp(val, APPOPT_STR_UNINSTALL, strlen(APPOPT_STR_UNINSTALL)+1))
 			pkg_uninstall = 1;
-	} else if (!strcmp(key, APPOPT_STR_END)) {
-		if (!strcmp(val, APPOPT_STR_OK)) {
+	} else if (!strncmp(key, APPOPT_STR_END, strlen(APPOPT_STR_END)+1)) {
+		if (!strncmp(val, APPOPT_STR_OK, strlen(APPOPT_STR_OK)+1)) {
 			if (pkg_install) {
 				gettimeofday(&tv, NULL);
 				ret = heart_appopt_enqueue_insert_cmd(pkgid, tv.tv_sec,

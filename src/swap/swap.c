@@ -160,6 +160,7 @@ static pid_t swap_change_state(enum swap_state state)
 	int status;
 	pid_t child_pid;
 	pid_t pid = fork();
+	char error_buf[256];
 
 	if (pid < 0) {
 		_E("failed to fork");
@@ -180,7 +181,8 @@ static pid_t swap_change_state(enum swap_state state)
 	/* parent */
 	child_pid = waitpid(pid, &status, 0);
 	if (child_pid < 0) {
-		_E("can't wait for a pid %d %d %s", pid, status, strerror(errno));
+		_E("can't wait for a pid %d %d %s", pid, status,
+				strerror_r(errno, error_buf, sizeof(error_buf)));
 		return child_pid;
 	}
 
@@ -854,29 +856,29 @@ static int load_swap_config(struct parse_result *result, void *user_data)
 	if (!result)
 		return -EINVAL;
 
-	if (strcmp(result->section, SWAP_CONTROL_SECTION))
+	if (strncmp(result->section, SWAP_CONTROL_SECTION, strlen(SWAP_CONTROL_SECTION)+1))
 		return RESOURCED_ERROR_NO_DATA;
 
-	if (!strcmp(result->name, SWAP_CONF_STREAMS)) {
+	if (!strncmp(result->name, SWAP_CONF_STREAMS, strlen(SWAP_CONF_STREAMS)+1)) {
 		int value = atoi(result->value);
 		if (value > 0) {
 			swap_control.max_comp_streams = value;
 			_D("max_comp_streams of swap_control is %d",
 				swap_control.max_comp_streams);
 		}
-	} else if (!strcmp(result->name, SWAP_CONF_ALGORITHM)) {
-		if (!strcmp(result->value, "lzo") ||
-		    !strcmp(result->value, "lz4")) {
+	} else if (!strncmp(result->name, SWAP_CONF_ALGORITHM, strlen(SWAP_CONF_ALGORITHM)+1)) {
+		if (!strncmp(result->value, "lzo", 4) ||
+		    !strncmp(result->value, "lz4", 4)) {
 			strncpy(swap_control.comp_algorithm, result->value,
 				strlen(result->value) + 1);
 			_D("comp_algorithm of swap_control is %s",
 				result->value);
 		}
-	} else if (!strcmp(result->name, SWAP_CONF_RATIO)) {
+	} else if (!strncmp(result->name, SWAP_CONF_RATIO, strlen(SWAP_CONF_RATIO)+1)) {
 		float ratio = atof(result->value);
 		swap_control.ratio = ratio;
 		_D("swap disk size ratio is %.2f", swap_control.ratio);
-	} else if (!strncmp(result->name, SWAP_HARD_LIMIT, strlen(SWAP_HARD_LIMIT))) {
+	} else if (!strncmp(result->name, SWAP_HARD_LIMIT, strlen(SWAP_HARD_LIMIT)+1)) {
 		limit_value = (int)strtoul(result->value, NULL, 0);
 		if (limit_value < 0 || limit_value > 100)
 			_E("Invalid %s value in %s file, setting %f as default percent value",

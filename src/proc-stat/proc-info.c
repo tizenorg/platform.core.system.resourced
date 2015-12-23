@@ -100,6 +100,10 @@ static void *resourced_proc_info_func(void *data)
 
 		pid = atoi(msg->argv[0]);
 		send_len = atoi(msg->argv[1]);
+		if (pid < 0 || send_len < 0) {
+			_E("invalid parameters");
+			goto end;
+		}
 		send_buffer = calloc(1, send_len);
 		if (send_buffer == NULL) {
 			_E("Not enough memory");

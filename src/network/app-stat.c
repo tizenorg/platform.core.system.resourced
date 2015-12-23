@@ -71,12 +71,12 @@ static gint compare_classid(gconstpointer a, gconstpointer b,
 	if (ret)
 		return ret;
 
-	ret = strcmp(a_key->ifname, b_key->ifname);
+	ret = strncmp(a_key->ifname, b_key->ifname, strlen(b_key->ifname)+1);
 	if (ret)
 		return ret;
 
 	return (a_key->imsi && b_key->imsi) ?
-		strcmp(a_key->imsi, b_key->imsi) : 0;
+		strncmp(a_key->imsi, b_key->imsi, strlen(b_key->imsi)+1) : 0;
 }
 
 struct application_stat_tree *create_app_stat_tree(void)

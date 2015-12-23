@@ -924,7 +924,7 @@ static void deserialize_rule(DBusMessage *msg, data_usage_selection_rule *rule, 
 			err.name, err.message);
 	}
 
-	if (app_id && !strcmp(*app_id, null_str))
+	if (app_id && !strncmp(*app_id, null_str, strlen(null_str)+1))
 		*app_id = NULL;
 	dbus_error_free(&err);
 }
@@ -980,10 +980,10 @@ static inline char *get_public_appid(const uint32_t classid)
 	/* following value for ALL is suitable for using in statistics
 	   what's why it's not in get_app_id_by_classid */
 	if (classid == RESOURCED_ALL_APP_CLASSID)
-		return strdup(RESOURCED_ALL_APP);
+		return strndup(RESOURCED_ALL_APP, strlen(RESOURCED_ALL_APP));
 
 	appid = get_app_id_by_classid(classid, true);
-	return !appid ? strdup(UNKNOWN_APP) : appid;
+	return !appid ? strndup(UNKNOWN_APP, strlen(UNKNOWN_APP)) : appid;
 }
 
 static bool need_flush_immediatelly(sig_atomic_t state)

@@ -159,9 +159,9 @@ static int load_cpu_config(struct parse_result *result, void *user_data)
 	if (!result)
 		return -EINVAL;
 
-	if (strcmp(result->section, CPU_CONF_SECTION))
+	if (strncmp(result->section, CPU_CONF_SECTION, strlen(CPU_CONF_SECTION)+1))
 		return RESOURCED_ERROR_NO_DATA;
-	if (!strcmp(result->name, CPU_CONF_PREDEFINE)) {
+	if (!strncmp(result->name, CPU_CONF_PREDEFINE, strlen(CPU_CONF_PREDEFINE)+1)) {
 		pid = find_pid_from_cmdline(result->value);
 		if (pid > 0) {
 			cpu_move_cgroup(pid, CPU_CONTROL_GROUP);
@@ -170,7 +170,7 @@ static int load_cpu_config(struct parse_result *result, void *user_data)
 		} else {
 			_E("not found appname = %s", result->value);
 		}
-	} else if (!strcmp(result->name, CPU_CONF_BOOTING)) {
+	} else if (!strncmp(result->name, CPU_CONF_BOOTING, strlen(CPU_CONF_BOOTING)+1)) {
 		pid = find_pid_from_cmdline(result->value);
 		if (pid > 0) {
 			cpu_move_cgroup(pid, CPU_CONTROL_GROUP);
@@ -178,7 +178,7 @@ static int load_cpu_config(struct parse_result *result, void *user_data)
 			def_list.control[def_list.num++].type = SET_BOOTING;
 			setpriority(PRIO_PROCESS, pid, CPU_BACKGROUND_PRI);
 		}
-	} else if (!strcmp(result->name, CPU_CONF_WRT)) {
+	} else if (!strncmp(result->name, CPU_CONF_WRT, strlen(CPU_CONF_WRT)+1)) {
 		pid = find_pid_from_cmdline(result->value);
 		if (pid > 0) {
 			cpu_move_cgroup(pid, CPU_CONTROL_GROUP);
@@ -187,24 +187,24 @@ static int load_cpu_config(struct parse_result *result, void *user_data)
 			setpriority(PRIO_PROCESS, pid, CPU_CONTROL_PRI);
 			ioprio_set(IOPRIO_WHO_PROCESS, pid, IOPRIO_CLASS_IDLE << IOPRIO_CLASS_SHIFT);
 		}
-	} else if (!strcmp(result->name, CPU_CONF_LAZY)) {
+	} else if (!strncmp(result->name, CPU_CONF_LAZY, strlen(CPU_CONF_LAZY)+1)) {
 		pid = find_pid_from_cmdline(result->value);
 		if (pid > 0) {
 			def_list.control[def_list.num].pid = pid;
 			def_list.control[def_list.num++].type = SET_LAZY;
 		}
-	} else if (!strcmp(result->name, CPU_CONF_SYSTEM)) {
+	} else if (!strncmp(result->name, CPU_CONF_SYSTEM, strlen(CPU_CONF_SYSTEM)+1)) {
 		pid = find_pid_from_cmdline(result->value);
 		if (pid > 0)
 			cpu_move_cgroup(pid, CPU_CONTROL_GROUP);
-	} else if (!strcmp(result->name, CPU_CONF_HOME)) {
+	} else if (!strncmp(result->name, CPU_CONF_HOME, strlen(CPU_CONF_HOME)+1)) {
 		pid = find_pid_from_cmdline(result->value);
 		if (pid > 0) {
 			setpriority(PRIO_PROCESS, pid, CPU_HIGHAPP_PRI);
 			def_list.control[def_list.num].pid = pid;
 			def_list.control[def_list.num++].type = SET_BOOTING;
 		}
-	} else if (!strcmp(result->name, "BACKGROUND_CPU_SHARE")) {
+	} else if (!strncmp(result->name, "BACKGROUND_CPU_SHARE", strlen("BACKGROUND_CPU_SHARE")+1)) {
 		value = atoi(result->value);
 		if (value) {
 			cgroup_write_node(CPU_CONTROL_GROUP, CPU_SHARE, value);
@@ -212,14 +212,14 @@ static int load_cpu_config(struct parse_result *result, void *user_data)
 		}
 		if (cpu_quota_enabled())
 			cgroup_write_node(CPU_CONTROL_CPUQUOTA_GROUP, CPU_SHARE, value);
-	} else if (!strcmp(result->name, "BACKGROUND_CPU_MAX_QUOTA")) {
+	} else if (!strncmp(result->name, "BACKGROUND_CPU_MAX_QUOTA", strlen("BACKGROUND_CPU_MAX_QUOTA")+1)) {
 		value = atoi(result->value);
 		if (value && cpu_quota_enabled()) {
 			value *= CPU_QUOTA_PERIOD_USEC;
 			cgroup_write_node(CPU_CONTROL_DOWNLOAD_GROUP,
 				    CPU_CONTROL_BANDWIDTH, value);
 		}
-	} else if (!strcmp(result->name, "BACKGROUND_CPU_MIN_QUOTA")) {
+	} else if (!strncmp(result->name, "BACKGROUND_CPU_MIN_QUOTA", strlen("BACKGROUND_CPU_MIN_QUOTA")+1)) {
 		value = atoi(result->value);
 		if (value && cpu_quota_enabled()) {
 			value *= CPU_QUOTA_PERIOD_USEC;

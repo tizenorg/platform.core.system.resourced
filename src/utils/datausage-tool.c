@@ -69,17 +69,17 @@ static resourced_ret_c convert_roaming(const char *str,
 	if (!str)
 		return RESOURCED_ERROR_INVALID_PARAMETER;
 
-	if (!strcmp(optarg, "enabled")) {
+	if (!strncmp(optarg, "enabled", strlen("enabled")+1)) {
 		*roaming = RESOURCED_ROAMING_ENABLE;
 		return RESOURCED_ERROR_NONE;
 	}
 
-	if (!strcmp(optarg, "disabled")) {
+	if (!strncmp(optarg, "disabled", strlen("disabled")+1)) {
 		*roaming = RESOURCED_ROAMING_DISABLE;
 		return RESOURCED_ERROR_NONE;
 	}
 
-	if (!strcmp(optarg, "unknown")) {
+	if (!strncmp(optarg, "unknown", strlen("unknown")+1)) {
 		*roaming = RESOURCED_ROAMING_UNKNOWN;
 		return RESOURCED_ERROR_NONE;
 	}
@@ -307,9 +307,9 @@ static enum run_rsml_cmd parse_cmd(int argc, char **argv,
 				printf("options option requeres an argument.");
 				exit(EXIT_FAILURE);
 			}
-			if (optarg && strcmp(optarg, "set") == 0)
+			if (optarg && strncmp(optarg, "set", 4) == 0)
 				cmd = RESOURCED_SET_OPTIONS;
-			else if (optarg && strcmp(optarg, "get") == 0)
+			else if (optarg && strncmp(optarg, "get", 4) == 0)
 				cmd = RESOURCED_GET_OPTIONS;
 			break;
 		case 'q':

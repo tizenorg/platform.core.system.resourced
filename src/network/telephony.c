@@ -453,7 +453,7 @@ static void edbus_telephony_changed(void *data, DBusMessage *msg)
 
 		dbus_message_iter_get_basic (&prop, &property);
 
-		if (strcmp(property, DBUS_TELEPHONY_ROAMING_STATUS) == 0) {
+		if (strncmp(property, DBUS_TELEPHONY_ROAMING_STATUS, strlen(DBUS_TELEPHONY_ROAMING_STATUS)+1) == 0) {
 			dbus_message_iter_next(&prop); /* it's variant here, expand it */
 			dbus_message_iter_recurse(&prop, &bool_iter);
 			ret_msg_if (dbus_message_iter_get_arg_type(&bool_iter) != DBUS_TYPE_BOOLEAN,
@@ -462,7 +462,7 @@ static void edbus_telephony_changed(void *data, DBusMessage *msg)
 			dbus_message_iter_get_basic (&bool_iter, &modem->roaming);
 			_D("Roaming state for modem %s has changed", modem->name);
 			_D("roaming state now is %d", modem->roaming);
-		} else if (strcmp(property, DBUS_TELEPHONY_SERVICE_TYPE) == 0) {
+		} else if (strncmp(property, DBUS_TELEPHONY_SERVICE_TYPE, strlen(DBUS_TELEPHONY_SERVICE_TYPE)+1) == 0) {
 			dbus_message_iter_next(&prop); /* it's variant here, expand it */
 			dbus_message_iter_recurse(&prop, &bool_iter);
 			ret_msg_if (dbus_message_iter_get_arg_type(&bool_iter) != DBUS_TYPE_INT32,
@@ -603,7 +603,7 @@ char *get_imsi_hash(char *imsi)
 		struct modem_state *modem = (struct modem_state *)iter->data;
 		if (modem->imsi == NULL)
 			continue;
-		if(!strcmp(imsi, modem->imsi))
+		if(!strncmp(imsi, modem->imsi, strlen(modem->imsi)+1))
 			return modem->imsi_hash;
 	}
 	return NULL;
@@ -629,7 +629,7 @@ bool check_event_in_current_modem(const char *imsi_hash,
 	/* if we don't have current_imsi_hash
 	 * do everything as before */
 	return (current_imsi_hash && imsi_hash) ?
-			strcmp(imsi_hash, current_imsi_hash) : false;
+			strncmp(imsi_hash, current_imsi_hash, strlen(current_imsi_hash)+1) : false;
 }
 
 static void modem_free(gpointer data)

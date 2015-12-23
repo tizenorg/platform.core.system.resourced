@@ -90,7 +90,7 @@ static resourced_cb_ret _restriction_iter(
 	   info->app_id, context->ifindex);
 #ifdef MULTISIM_FEATURE_ENABLED
 	const char *imsi_hash = get_imsi_hash(get_current_modem_imsi());
-	if (imsi_hash && info->imsi  && !strcmp(imsi_hash, info->imsi)) {
+	if (imsi_hash && info->imsi  && !strncmp(imsi_hash, info->imsi, strlen(info->imsi)+1)) {
 		gpointer data = _create_reset_restriction(info, context->ifindex);
 		if (data)
 			context->restrictions = g_list_prepend(context->restrictions,
@@ -132,7 +132,7 @@ static bool check_current_imsi_for_restriction(resourced_iface_type iftype,
 		const char *imsi_hash = get_imsi_hash(get_current_modem_imsi());
 		_SD("current imsi %s", imsi_hash);
 		_SD("restrictions imsi %s", du_quota.imsi);
-		return imsi_hash && strcmp(du_quota.imsi, imsi_hash);
+		return imsi_hash && strncmp(du_quota.imsi, imsi_hash, strlen(imsi_hash)+1);
 	}
 	return false;
 }
