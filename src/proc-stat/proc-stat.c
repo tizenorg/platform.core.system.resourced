@@ -159,6 +159,8 @@ static bool get_proc_cmdline(pid_t pid, char *cmdline)
 		fclose(fp);
 		return false;
 	}
+	buf[sizeof(buf)-1] = 0;
+
 	fclose(fp);
 
 

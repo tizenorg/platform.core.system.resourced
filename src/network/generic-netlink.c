@@ -120,7 +120,7 @@ static int extract_group_id(const struct rtattr *rt_na, const char *group_name,
 
 	name = RTA_DATA(multicast_group_family[CTRL_ATTR_MCAST_GRP_NAME]);
 
-	if (strcmp(name, group_name))
+	if (strncmp(name, group_name, strlen(group_name)+1))
 		return -EINVAL;
 
 	*group_id = *((__u32 *)RTA_DATA(

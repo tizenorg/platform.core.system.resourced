@@ -159,9 +159,9 @@ static int load_cpu_config(struct parse_result *result, void *user_data)
 	if (!result)
 		return -EINVAL;
 
-	if (strcmp(result->section, CPU_CONF_SECTION))
+	if (strncmp(result->section, CPU_CONF_SECTION, strlen(CPU_CONF_SECTION)+1))
 		return RESOURCED_ERROR_NO_DATA;
-	if (!strcmp(result->name, CPU_CONF_PREDEFINE)) {
+	if (!strncmp(result->name, CPU_CONF_PREDEFINE, strlen(CPU_CONF_PREDEFINE)+1)) {
 		pid = find_pid_from_cmdline(result->value);
 		if (pid > 0) {
 			cpu_move_cgroup(pid, CPU_CONTROL_GROUP);
@@ -170,7 +170,7 @@ static int load_cpu_config(struct parse_result *result, void *user_data)
 		} else {
 			_E("not found appname = %s", result->value);
 		}
-	} else if (!strcmp(result->name, CPU_CONF_BOOTING)) {
+	} else if (!strncmp(result->name, CPU_CONF_BOOTING, strlen(CPU_CONF_BOOTING)+1)) {
 		pid = find_pid_from_cmdline(result->value);
 		if (pid > 0) {
 			cpu_move_cgroup(pid, CPU_CONTROL_GROUP);
@@ -178,7 +178,7 @@ static int load_cpu_config(struct parse_result *result, void *user_data)
 			def_list.control[def_list.num++].type = SET_BOOTING;
 			setpriority(PRIO_PROCESS, pid, CPU_BACKGROUND_PRI);
 		}
-	} else if (!strcmp(result->name, CPU_CONF_WRT)) {
+	} else if (!strncmp(result->name, CPU_CONF_WRT, strlen(CPU_CONF_WRT)+1)) {
 		pid = find_pid_from_cmdline(result->value);
 		if (pid > 0) {
 			cpu_move_cgroup(pid, CPU_CONTROL_GROUP);
@@ -187,24 +187,24 @@ static int load_cpu_config(struct parse_result *result, void *user_data)
 			setpriority(PRIO_PROCESS, pid, CPU_CONTROL_PRI);
 			ioprio_set(IOPRIO_WHO_PROCESS, pid, IOPRIO_CLASS_IDLE << IOPRIO_CLASS_SHIFT);
 		}
-	} else if (!strcmp(result->name, CPU_CONF_LAZY)) {
+	} else if (!strncmp(result->name, CPU_CONF_LAZY, strlen(CPU_CONF_LAZY)+1)) {
 		pid = find_pid_from_cmdline(result->value);
 		if (pid > 0) {
 			def_list.control[def_list.num].pid = pid;
 			def_list.control[def_list.num++].type = SET_LAZY;
 		}
-	} else if (!strcmp(result->name, CPU_CONF_SYSTEM)) {
+	} else if (!strncmp(result->name, CPU_CONF_SYSTEM, strlen(CPU_CONF_SYSTEM)+1)) {
 		pid = find_pid_from_cmdline(result->value);
 		if (pid > 0)
 			cpu_move_cgroup(pid, CPU_CONTROL_GROUP);
-	} else if (!strcmp(result->name, CPU_CONF_HOME)) {
+	} else if (!strncmp(result->name, CPU_CONF_HOME, strlen(CPU_CONF_HOME)+1)) {
 		pid = find_pid_from_cmdline(result->value);
 		if (pid > 0) {
 			setpriority(PRIO_PROCESS, pid, CPU_HIGHAPP_PRI);
 			def_list.control[def_list.num].pid = pid;
 			def_list.control[def_list.num++].type = SET_BOOTING;
 		}
-	} else if (!strcmp(result->name, "BACKGROUND_CPU_SHARE")) {
+	} else if (!strncmp(result->name, "BACKGROUND_CPU_SHARE", strlen("BACKGROUND_CPU_SHARE")+1)) {
 		value = atoi(result->value);
 		if (value) {
 			cgroup_write_node(CPU_CONTROL_GROUP, CPU_SHARE, value);
@@ -212,14 +212,14 @@ static int load_cpu_config(struct parse_result *result, void *user_data)
 		}
 		if (cpu_quota_enabled())
 			cgroup_write_node(CPU_CONTROL_CPUQUOTA_GROUP, CPU_SHARE, value);
-	} else if (!strcmp(result->name, "BACKGROUND_CPU_MAX_QUOTA")) {
+	} else if (!strncmp(result->name, "BACKGROUND_CPU_MAX_QUOTA", strlen("BACKGROUND_CPU_MAX_QUOTA")+1)) {
 		value = atoi(result->value);
 		if (value && cpu_quota_enabled()) {
 			value *= CPU_QUOTA_PERIOD_USEC;
 			cgroup_write_node(CPU_CONTROL_DOWNLOAD_GROUP,
 				    CPU_CONTROL_BANDWIDTH, value);
 		}
-	} else if (!strcmp(result->name, "BACKGROUND_CPU_MIN_QUOTA")) {
+	} else if (!strncmp(result->name, "BACKGROUND_CPU_MIN_QUOTA", strlen("BACKGROUND_CPU_MIN_QUOTA")+1)) {
 		value = atoi(result->value);
 		if (value && cpu_quota_enabled()) {
 			value *= CPU_QUOTA_PERIOD_USEC;
@@ -235,7 +235,7 @@ static int cpu_service_state(void *data)
 	struct proc_status *ps = (struct proc_status *)data;
 	struct proc_app_info *pai = ps->pai;
 
-	_D("cpu_service_launch : pid = %d, appname = %s", ps->pid, ps->appid);
+	_D("service launch: pid = %d, appname = %s", ps->pid, ps->appid);
 	if (pai && CHECK_BIT(pai->categories, PROC_BG_SYSTEM))
 		return RESOURCED_ERROR_NONE;
 	else if (pai && CHECK_BIT(pai->flags, PROC_DOWNLOADAPP))
@@ -250,7 +250,7 @@ static int cpu_widget_state(void *data)
 	struct proc_status *ps = (struct proc_status *)data;
 	struct proc_app_info *pai = ps->pai;
 
-	_D("cpu_widget_background : pid = %d, appname = %s", ps->pid, ps->appid);
+	_D("widget background: pid = %d, appname = %s", ps->pid, ps->appid);
 	if (pai && CHECK_BIT(pai->flags, PROC_DOWNLOADAPP))
 		cpu_move_cgroup(ps->pid, CPU_CONTROL_GROUP);
 	return RESOURCED_ERROR_NONE;
@@ -260,7 +260,7 @@ static int cpu_foreground_state(void *data)
 {
 	struct proc_status *ps = (struct proc_status *)data;
 	int pri;
-	_D("cpu_foreground_state : pid = %d, appname = %s", ps->pid, ps->appid);
+	_D("app foreground: pid = %d, appname = %s", ps->pid, ps->appid);
 	pri = getpriority(PRIO_PROCESS, ps->pid);
 	if (pri == -1 || pri > CPU_DEFAULT_PRI)
 		setpriority(PRIO_PGRP, ps->pid, CPU_DEFAULT_PRI);
@@ -272,7 +272,7 @@ static int cpu_foreground_state(void *data)
 static int cpu_background_state(void *data)
 {
 	struct proc_status *ps = (struct proc_status *)data;
-	_D("cpu_background_state : pid = %d, appname = %s", ps->pid, ps->appid);
+	_D("app background: pid = %d, appname = %s", ps->pid, ps->appid);
 	setpriority(PRIO_PGRP, ps->pid, CPU_BACKGROUND_PRI);
 	cpu_move_cgroup(ps->pid, CPU_CONTROL_GROUP);
 	return RESOURCED_ERROR_NONE;
@@ -281,7 +281,7 @@ static int cpu_background_state(void *data)
 static int cpu_restrict_state(void *data)
 {
 	struct proc_status *ps = (struct proc_status *)data;
-	_D("cpu_restrict_state : pid = %d, appname = %s", ps->pid, ps->appid);
+	_D("app suspend: pid = %d, appname = %s", ps->pid, ps->appid);
 	if (CHECK_BIT(ps->pai->categories, PROC_BG_MEDIA))
 		return RESOURCED_ERROR_NONE;
 	cpu_move_cgroup(ps->pid, CPU_CONTROL_CPUQUOTA_GROUP);
@@ -292,7 +292,7 @@ static int cpu_active_state(void *data)
 {
 	struct proc_status *ps = (struct proc_status *)data;
 	int oom_score_adj = 0, ret;
-	_D("cpu_active_state : pid = %d, appname = %s", ps->pid, ps->appid);
+	_D("app active : pid = %d, appname = %s", ps->pid, ps->appid);
 	ret = proc_get_oom_score_adj(ps->pid, &oom_score_adj);
 	if (ret || oom_score_adj < OOMADJ_PREVIOUS_DEFAULT)
 		return RESOURCED_ERROR_NONE;
@@ -325,7 +325,7 @@ static int cpu_system_state(void *data)
 {
 	struct proc_status *ps = (struct proc_status *)data;
 
-	_D("cpu receive system service : pid = %d", ps->pid);
+	_D("system service : pid = %d", ps->pid);
 	cpu_move_cgroup(ps->pid, CPU_CONTROL_GROUP);
 	return RESOURCED_ERROR_NONE;
 }

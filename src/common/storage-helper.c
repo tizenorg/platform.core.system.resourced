@@ -45,7 +45,7 @@ bool is_mounted(const char* path)
 	if (!fp)
 		return ret;
 	while ((mnt = getmntent(fp))) {
-		if (!strcmp(mnt->mnt_dir, path)) {
+		if (!strncmp(mnt->mnt_dir, path, strlen(path)+1)) {
 			ret = true;
 			break;
 		}

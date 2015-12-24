@@ -27,17 +27,6 @@
 
 #define PSTAT_GET_PID_ENTRY_MAX_TESTS 5
 
-enum {
-	PSTAT_TESTS_GET_PID_ENTRY,
-	PSTAT_TESTS_MAX,
-};
-
-struct pstat_test_t {
-	int test_num;
-	char name[STRING_MAX];
-	int (*test_func)(void);
-};
-
 int pstat_get_pid_entry(void)
 {
 	char buf[4*STRING_MAX];
@@ -59,38 +48,35 @@ int pstat_get_pid_entry(void)
 	};
 
 	pid = getpid();
-	final_ret = ERROR_NONE;
+	final_ret = RESOURCED_ERROR_NONE;
 	for (i = 0; i < PSTAT_GET_PID_ENTRY_MAX_TESTS; ++i) {
 		ret = proc_stat_get_pid_entry(test_inp[i], pid, buf, sizeof(buf)-1);
 		buf[sizeof(buf)-1] = 0;
 		if (ret != RESOURCED_ERROR_NONE) {
 			_E("Test %s: failed with %d error", tests[i], ret);
-			final_ret = ERROR_FAIL;
+			final_ret = RESOURCED_ERROR_FAIL;
 		} else
 			_D("Test %s: Passed. buf: %s", tests[i], buf);
 	}
 	return final_ret;
 }
 
-static struct pstat_test_t pstat_tests[] = {
-	{ PSTAT_TESTS_GET_PID_ENTRY, "pstat_get_pid_entry", pstat_get_pid_entry },
-	{ PSTAT_TESTS_MAX, "", NULL },
+static struct resourced_test_t pstat_tests[] = {
+	{ "pstat_get_pid_entry", pstat_get_pid_entry },
+	{ "", NULL },
 };
 
 int main(int argc, char *argv[])
 {
 	int i, ret;
-	char buf[STRING_MAX];
 
-	printf("Testing proc-stat module. Current pid: %d\n", getpid());
-	printf("Start journalctl and enter input:");
-	ret = scanf("%s", buf);
+	TEST_START_MESSAGE("proc-stat module");
 
-	for (i = 0; i < PSTAT_TESTS_MAX; ++i) {
+	for (i = 0; pstat_tests[i].test_func; ++i) {
 		_D("=======================================");
 		_D("Current Test: %s", pstat_tests[i].name);
 		ret = (*pstat_tests[i].test_func)();
-		if (ret)
+		if (IS_ERROR(ret))
 			_E("Test %s failed!", pstat_tests[i].name);
 		else
 			_D("Test %s passed!", pstat_tests[i].name);

@@ -44,10 +44,10 @@ static int fill_general_opt(struct parse_result *result,
 		void *user_data)
 {
 	struct net_counter_opts *opts = (struct net_counter_opts *)user_data;
-	if (strcmp(result->section, GENERAL_SECTION))
+	if (strncmp(result->section, GENERAL_SECTION, strlen(GENERAL_SECTION)+1))
 		return RESOURCED_ERROR_NONE;
 
-	if (strcmp(result->name, NET_UPDATE_PERIOD_NAME) == 0) {
+	if (strncmp(result->name, NET_UPDATE_PERIOD_NAME, strlen(NET_UPDATE_PERIOD_NAME)+1) == 0) {
 		opts->update_period = atoi(result->value);
 		if (opts->update_period == 0) {
 			_D("not valid value %s for %s key", result->value,
@@ -58,7 +58,7 @@ static int fill_general_opt(struct parse_result *result,
 			_D("update period is %d", opts->update_period);
 	}
 
-	if (strcmp(result->name, NET_FLUSH_PERIOD_NAME) == 0) {
+	if (strncmp(result->name, NET_FLUSH_PERIOD_NAME, strlen(NET_FLUSH_PERIOD_NAME)+1) == 0) {
 		opts->flush_period = atoi(result->value);
 		if (opts->flush_period == 0) {
 			_D("not valid value %s for %s key", result->value,

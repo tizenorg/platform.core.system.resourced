@@ -418,7 +418,7 @@ int compare_func(const struct dirent **a, const struct dirent **b)
 	char *str_at = strrchr(fn_a, '_') + 1;
 	char *str_bt = strrchr(fn_b, '_') + 1;
 
-	return strcmp(str_at, str_bt);
+	return strncmp(str_at, str_bt, strlen(str_bt)+1);
 }
 
 static void clear_logs(char *dir)
@@ -588,9 +588,9 @@ static void lowmem_kill_victim(struct task_info *tsk,
 	if (ret == RESOURCED_ERROR_FAIL)
 		return;
 
-	if (!strcmp("memps", appname) ||
-	    !strcmp("crash-worker", appname) ||
-	    !strcmp("system-syspopup", appname)) {
+	if (!strncmp("memps", appname, strlen(appname)+1) ||
+	    !strncmp("crash-worker", appname, strlen(appname)+1) ||
+	    !strncmp("system-syspopup", appname, strlen(appname)+1)) {
 		_E("%s(%d) was selected, skip it", appname, pid);
 		return;
 	}
@@ -835,8 +835,11 @@ static int lowmem_get_pids_proc(GArray *pids)
 			continue;
 
 		pid = (pid_t)atoi(dentry.d_name);
+		if (pid < 0)
+			continue;
+
 		pgid = getpgid(pid);
-		if (!pgid)
+		if (pgid < 0)
 			continue;
 
 		if (proc_get_oom_score_adj(pid, &oom) < 0) {
@@ -1371,10 +1374,10 @@ static int load_vip_config(struct parse_result *result, void *user_data)
 	if (!result)
 		return -EINVAL;
 
-	if (strcmp(result->section, MEM_VIP_SECTION))
+	if (strncmp(result->section, MEM_VIP_SECTION, strlen(MEM_VIP_SECTION)+1))
 		return RESOURCED_ERROR_NONE;
 
-	if (!strcmp(result->name, MEM_VIP_PREDEFINE)) {
+	if (!strncmp(result->name, MEM_VIP_PREDEFINE, strlen(MEM_VIP_PREDEFINE)+1)) {
 		pid = find_pid_from_cmdline(result->value);
 		if (pid > 0)
 			proc_set_oom_score_adj(pid, OOMADJ_SERVICE_MIN);
@@ -1387,13 +1390,13 @@ static int load_mem_config(struct parse_result *result, void *user_data)
 	if (!result)
 		return -EINVAL;
 
-	if (strcmp(result->section, MEM_POPUP_SECTION))
+	if (strncmp(result->section, MEM_POPUP_SECTION, strlen(MEM_POPUP_SECTION)+1))
 		return RESOURCED_ERROR_NONE;
 
-	if (!strcmp(result->name, MEM_POPUP_STRING)) {
-		if (!strcmp(result->value, "yes"))
+	if (!strncmp(result->name, MEM_POPUP_STRING, strlen(MEM_POPUP_STRING)+1)) {
+		if (!strncmp(result->value, "yes", strlen("yes")+1))
 			oom_popup_enable = 1;
-		else if (!strcmp(result->value, "no"))
+		else if (!strncmp(result->value, "no", strlen("no")+1))
 			oom_popup_enable = 0;
 	}
 
@@ -1407,42 +1410,42 @@ static int set_memory_config(const char *section_name, const struct parse_result
 	if (!result || !section_name)
 		return -EINVAL;
 
-	if (strcmp(result->section, section_name))
+	if (strncmp(result->section, section_name, strlen(section_name)+1))
 		return RESOURCED_ERROR_NONE;
 
-	if (!strcmp(result->name, "ThresholdSwap")) {
+	if (!strncmp(result->name, "ThresholdSwap", strlen("ThresholdSwap")+1)) {
 		int value = atoi(result->value);
 		lowmem_memcg_set_threshold(MEMCG_MEMORY, LOWMEM_SWAP, value);
-	} else if (!strcmp(result->name, "ThresholdLow")) {
+	} else if (!strncmp(result->name, "ThresholdLow", strlen("ThresholdLow")+1)) {
 		int value = atoi(result->value);
 		lowmem_memcg_set_threshold(MEMCG_MEMORY, LOWMEM_LOW, value);
-	} else if (!strcmp(result->name, "ThresholdMedium")) {
+	} else if (!strncmp(result->name, "ThresholdMedium", strlen("ThresholdMedium")+1)) {
 		int value = atoi(result->value);
 		lowmem_memcg_set_threshold(MEMCG_MEMORY, LOWMEM_MEDIUM, value);
-	} else if (!strcmp(result->name, "ThresholdLeave")) {
+	} else if (!strncmp(result->name, "ThresholdLeave", strlen("ThresholdLeave")+1)) {
 		int value = atoi(result->value);
 		lowmem_memcg_set_leave_threshold(MEMCG_MEMORY, value);
-	} else if (!strcmp(result->name, "ForegroundRatio")) {
+	} else if (!strncmp(result->name, "ForegroundRatio", strlen("ForegroundRatio")+1)) {
 		float ratio = atof(result->value);
 		memcg_info_set_limit(memcg_tree[MEMCG_FOREGROUND]->info, ratio, totalram);
-	} else if (!strcmp(result->name, "ForegroundUseHierarchy")) {
+	} else if (!strncmp(result->name, "ForegroundUseHierarchy", strlen("ForegroundUseHierarchy")+1)) {
 		int use_hierarchy = atoi(result->value);
 		memcg_tree[MEMCG_FOREGROUND]->use_hierarchy = use_hierarchy;
-	} else if (!strcmp(result->name, "ForegroundNumCgroups")) {
+	} else if (!strncmp(result->name, "ForegroundNumCgroups", strlen("ForegroundNumCgroups")+1)) {
 		int num_cgroups = atoi(result->value);
-		memcg_add_cgroups(memcg_tree[MEMCG_FOREGROUND],
-			num_cgroups);
+		if (num_cgroups > 0)
+			memcg_add_cgroups(memcg_tree[MEMCG_FOREGROUND], num_cgroups);
 		memcg_show(memcg_tree[MEMCG_FOREGROUND]);
-	} else if (!strcmp(result->name, "NumMaxVictims")) {
+	} else if (!strncmp(result->name, "NumMaxVictims", strlen("NumMaxVictims")+1)) {
 		int value = atoi(result->value);
 		num_max_victims = value;
-	} else if (!strcmp(result->name, "ProactiveThreshold")) {
+	} else if (!strncmp(result->name, "ProactiveThreshold", strlen("ProactiveThreshold")+1)) {
 		int value = atoi(result->value);
 		proactive_threshold = value;
-	} else if (!strcmp(result->name, "ProactiveLeave")) {
+	} else if (!strncmp(result->name, "ProactiveLeave", strlen("ProactiveLeave")+1)) {
 		int value = atoi(result->value);
 		proactive_leave = value;
-	} else if (!strcmp(result->name, "DynamicThreshold")) {
+	} else if (!strncmp(result->name, "DynamicThreshold", strlen("DynamicThreshold")+1)) {
 		int value = atoi(result->value);
 		dynamic_threshold_min = value;
 	}

@@ -171,9 +171,9 @@ int memcg_get_anon_usage(struct memcg_info *mi, unsigned int *anon_usage)
 	}
 	while (fgets(line, BUF_MAX, f) != NULL) {
 		if (sscanf(line, "%s %d", name, &tmp)) {
-			if (!strcmp(name, "inactive_anon")) {
+			if (!strncmp(name, "inactive_anon", strlen("inactive_anon")+1)) {
 				inactive_anon = tmp;
-			} else if (!strcmp(name, "active_anon")) {
+			} else if (!strncmp(name, "active_anon", strlen("active_anon")+1)) {
 				active_anon = tmp;
 				break;
 			}

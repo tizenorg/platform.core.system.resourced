@@ -89,7 +89,7 @@ static inline char *recv_str(int fd)
 	if (len <= 0)
 		return NULL;
 
-	if (len >= INT_MAX) {
+	if (len >= INT_MAX - 1) {
 		_E("size is over INT_MAX");
 		return NULL;
 	}
@@ -136,6 +136,7 @@ int read_message(int fd, struct resourced_noti *msg)
 	ret_value_if(msg->type <= 0, errno);
 	msg->argc = recv_int(fd);
 	ret_value_if(msg->argc <= 0, errno);
+	ret_value_if(msg->argc > NOTI_MAXARG, RESOURCED_ERROR_FAIL);
 
 	for (i = 0; i < msg->argc; ++i) {
 		msg->argv[i] = recv_str(fd);
@@ -159,6 +160,9 @@ static inline void internal_free(char *str)
 void free_message(struct resourced_noti *msg)
 {
 	int i;
+
+	if (!msg)
+		return;
 
 	for (i = 0; i < msg->argc; i++)
 		internal_free(msg->argv[i]);
@@ -214,11 +218,15 @@ static Eina_Bool proc_noti_cb(void *data, Ecore_Fd_Handler *fd_handler)
 	struct timeval tv = { 1, 0 };	/* 1 sec */
 
 	if (!ecore_main_fd_handler_active_get(fd_handler, ECORE_FD_READ)) {
-		_E("ecore_main_fd_handler_active_get error , return\n");
+		_E("ecore_main_fd_handler_active_get error , return");
 		return ECORE_CALLBACK_CANCEL;
 	}
 
 	fd = ecore_main_fd_handler_fd_get(fd_handler);
+	if (fd < 0) {
+		_E("ecore_main_fd_handler_fd_get failed");
+		return ECORE_CALLBACK_CANCEL;
+	}
 
 	msg = calloc(1, sizeof(struct resourced_noti));
 	if (msg == NULL) {
@@ -260,6 +268,12 @@ static Eina_Bool proc_noti_cb(void *data, Ecore_Fd_Handler *fd_handler)
 	if (msg->type >= PROC_CGROUP_GET_CMDLINE) {
 		pid = atoi(msg->argv[0]);
 		send_len = atoi(msg->argv[1]);
+		if (pid <= 0 || send_len <= 0) {
+			_E("invalid parameters");
+			ret = -EINVAL;
+			safe_write_int(client_sockfd, msg->type, &ret);
+			goto proc_noti_renew;
+		}
 		send_buffer = calloc(1, send_len);
 		if (!send_buffer) {
 			_E("not enough memory for calloc");

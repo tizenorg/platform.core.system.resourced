@@ -174,7 +174,7 @@ int proc_get_appflag(const pid_t pid);
 
 static inline int equal_name_info(const char *id_a, const char *id_b)
 {
-	return !strcmp(id_a, id_b);
+	return !strncmp(id_a, id_b, strlen(id_b)+1);
 }
 
 int proc_get_svc_state(struct proc_program_info *ppi);

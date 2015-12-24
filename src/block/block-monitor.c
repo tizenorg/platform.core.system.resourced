@@ -244,7 +244,8 @@ static Eina_Bool block_monitor_cb(void *user_data, Ecore_Fd_Handler *fd_handler)
 		block_logging(bmi, m->pid, label, buf);
 
 	next:
-		close(m->fd);
+		if (m->fd >= 0)
+			close(m->fd);
 	}
 	return ECORE_CALLBACK_RENEW;
 }
@@ -292,7 +293,7 @@ int register_fanotify(struct block_monitor_info *bmi)
 	block_logging_init(bmi);
 	return RESOURCED_ERROR_NONE;
 error:
-	if (bmi->mfd) {
+	if (bmi->mfd > 0) {
 		close(bmi->mfd);
 		bmi->mfd = 0;
 	}

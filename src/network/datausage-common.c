@@ -1238,7 +1238,7 @@ static int compare_nfcntr(gconstpointer a, gconstpointer b,
 	 * assume it's the same as given ifname
 	 */
 	if (strlen(key_a->ifname) && strlen(key_b->ifname))
-		return strcmp(key_a->ifname, key_b->ifname);
+		return strncmp(key_a->ifname, key_b->ifname, strlen(key_b->ifname)+1);
 
 	return 0;
 }
@@ -1407,7 +1407,7 @@ static gboolean fill_restriction_list(gpointer key, gpointer value,
 
 	gslist_for_each_item(iter, *rst_list) {
 		resourced_restriction_info *look_info = (resourced_restriction_info *)iter->data;
-		if (look_info->app_id && !strcmp(look_info->app_id, app_id) &&
+		if (look_info->app_id && !strncmp(look_info->app_id, app_id, strlen(appid)+1) &&
 		    look_info->iftype == nf_key->iftype &&
 		    look_info->quota_id == nf_value->quota_id &&
 		    look_info->roaming == nf_value->roaming) {

@@ -25,11 +25,6 @@
 
 #include "resourced_tests.h"
 
-struct data_usage_test_t {
-	char name[STRING_MAX];
-	int (*test_func)(void);
-};
-
 int data_usage_test_set_resourced_options()
 {
 	return set_resourced_options(NULL);
@@ -135,7 +130,7 @@ int data_usage_test_resourced_remove_restriction_by_iftype()
 	return resourced_remove_restriction_by_iftype(NULL, 0, NULL);
 }
 
-static struct data_usage_test_t data_usage_tests[] = {
+static struct resourced_test_t data_usage_tests[] = {
 	{ "set_resourced_options", data_usage_test_set_resourced_options },
 	{ "get_resourced_options", data_usage_test_get_resourced_options },
 	{ "set_net_restriction", data_usage_test_set_net_restriction },
@@ -163,22 +158,17 @@ static struct data_usage_test_t data_usage_tests[] = {
 int main(int argc, char *argv[])
 {
 	int i, ret;
-	char buf[STRING_MAX];
 
-	printf("Testing data-usage library. Current pid: %d\n", getpid());
-	printf("Start journalctl and enter input:");
-	ret = scanf("%s", buf);
+	TEST_START_MESSAGE("data-usage library");
 
-	i = 0;
-	while(data_usage_tests[i].test_func) {
+	for(i = 0; data_usage_tests[i].test_func; ++i) {
 		_D("=======================================");
 		_D("Current Test: %s", data_usage_tests[i].name);
 		ret = (*data_usage_tests[i].test_func)();
-		if (ret)
+		if (IS_ERROR(ret))
 			_E("Test %s failed!", data_usage_tests[i].name);
 		else
 			_D("Test %s passed!", data_usage_tests[i].name);
-		i++;
 	}
 	return 0;
 }

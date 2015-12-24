@@ -344,7 +344,7 @@ void heart_memory_fill_array(struct logging_table_form *data, void *user_data)
 		struct heart_memory_data *loop;
 		loop = g_array_index(send, struct heart_memory_data *, i);
 
-		if (!strcmp(loop->appid, data->appid)) {
+		if (!strncmp(loop->appid, data->appid, strlen(data->appid)+1)) {
 			md = loop;
 			break;
 		}
@@ -1103,6 +1103,7 @@ static int heart_memory_write(char *appid, char *pkgid, struct proc_status *p_da
 	_cleanup_free_ char *info = NULL;
 	unsigned int pss = 0, uss = 0;
 	int ret;
+	char error_buf[256];
 
 	/* For write to data crud during period */
 	/* write memory usage in proc_list */
@@ -1114,7 +1115,8 @@ static int heart_memory_write(char *appid, char *pkgid, struct proc_status *p_da
 			 SMAPS_MASK_SWAP));
 	if (ret < 0) {
 		_E("Failed to get PID(%d) smaps: %s",
-		   p_data->pid, strerror(-ret));
+		   p_data->pid,
+		   strerror_r(-ret, error_buf, sizeof(error_buf)));
 		return ret;
 	}
 

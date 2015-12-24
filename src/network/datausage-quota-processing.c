@@ -210,7 +210,7 @@ static gint compare_quota_key(gconstpointer a, gconstpointer b,
 	 * per sim, and only afterward by appid */
 
 	if (key1->imsi_hash && key2->imsi_hash)
-		ret = strcmp(key1->imsi_hash, key2->imsi_hash);
+		ret = strncmp(key1->imsi_hash, key2->imsi_hash, strlen(key2->imsi_hash)+1);
 	else if (!key1->imsi_hash || !key2->imsi_hash) /* in case of one empty another not */
 		ret = key1->imsi_hash - key2->imsi_hash;
 
@@ -220,7 +220,7 @@ static gint compare_quota_key(gconstpointer a, gconstpointer b,
 	}
 
 	if (key1->app_id && key2->app_id)
-		ret = strcmp(key1->app_id, key2->app_id);
+		ret = strncmp(key1->app_id, key2->app_id, strlen(key2->app_id)+1);
 	if (ret) {
 		_D("quotas different by app_id");
 		return ret;
@@ -386,7 +386,7 @@ static resourced_cb_ret data_usage_details_cb(const data_usage_info *info,
 
 	/* if imsi is not specified, e.g. for WiFi
 	 * need additional check*/
-	if (info->imsi && context->imsi && strcmp(context->imsi, info->imsi))
+	if (info->imsi && context->imsi && strncmp(context->imsi, info->imsi, strlen(info->imsi)+1))
 		return RESOURCED_CONTINUE;
 
 	context->sent_used_quota += info->cnt.outgoing_bytes;
@@ -501,7 +501,7 @@ static void set_effective_quota(const char *app_id,
 	const time_t cur_time = time(0);
 	char buf[30];
 
-	app_id = !strcmp(app_id, RESOURCED_ALL_APP) ? 0: app_id;
+	app_id = !strncmp(app_id, RESOURCED_ALL_APP, strlen(RESOURCED_ALL_APP)+1) ? 0: app_id;
 
 	if (cur_time < start_time) {
 		_D("No need to update effective quota!");
@@ -822,7 +822,7 @@ static bool skip_quota(struct quota_key *key_quota, struct quota *app_quota,
 		return true;
 	}
 
-	if (!strcmp(key_quota->app_id, TETHERING_APP_NAME) &&
+	if (!strncmp(key_quota->app_id, TETHERING_APP_NAME, strlen(TETHERING_APP_NAME)+1) &&
 	    (send_delta > 0 || rcv_delta > 0)) {
 		_D("tethering");
 		/* in the case of tethering we send
@@ -954,7 +954,7 @@ struct update_all_arg
 static inline bool check_imsi_hash(const char *hash_a, const char *hash_b)
 {
 	if (hash_a && hash_b)
-		return !strcmp(hash_a,  hash_b);
+		return !strncmp(hash_a, hash_b, strlen(hash_b)+1);
 	return hash_a == hash_b; /* both null */
 }
 
@@ -990,7 +990,7 @@ static gboolean update_pseudo_app_entry(gpointer key,
 	_D("app stat ground %d", arg->app_stat->ground);
 #endif
 	/* handle case for network interfaces*/
-	if ((!strcmp(qkey->app_id, RESOURCED_ALL_APP) &&
+	if ((!strncmp(qkey->app_id, RESOURCED_ALL_APP, strlen(RESOURCED_ALL_APP)+1) &&
 	     (qkey->iftype == RESOURCED_IFACE_UNKNOWN ||
 	      qkey->iftype == RESOURCED_IFACE_ALL ||
 	      qkey->iftype == arg->iftype) &&
@@ -998,7 +998,7 @@ static gboolean update_pseudo_app_entry(gpointer key,
 	     (qkey->roaming == RESOURCED_ROAMING_UNKNOWN ||
 	      qkey->roaming == arg->app_stat->is_roaming) &&
 	      check_ground_state(qkey, arg->app_stat)) ||
-	    !strcmp(qkey->app_id, TETHERING_APP_NAME))
+	    !strncmp(qkey->app_id, TETHERING_APP_NAME, strlen(TETHERING_APP_NAME)+1))
 	{
 		/* update it */
 		total_quota->sent_used_quota += arg->app_stat->delta_snd;

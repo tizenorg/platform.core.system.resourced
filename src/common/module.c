@@ -53,7 +53,7 @@ const struct module_ops *find_module(const char *name)
 
 	gslist_for_each_item(iter, modules_list) {
 		module = (struct module_ops *)iter->data;
-		if (!strcmp(module->name, name))
+		if (!strncmp(module->name, name, strlen(module->name)+1))
 			return module;
 	}
 	return NULL;

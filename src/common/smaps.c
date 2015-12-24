@@ -156,7 +156,7 @@ int smaps_get(pid_t pid, struct smaps **maps, enum smap_mask mask)
 			   &map->start, &map->end, &map->mode, &map->name);
 
 		if (n == 3 && !map->name)
-			map->name = strdup("[anon]");
+			map->name = strndup("[anon]", strlen("[anon]"));
 		else if (n != 4) {
 			free(map);
 			r = -EINVAL;

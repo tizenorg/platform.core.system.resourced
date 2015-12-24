@@ -1901,20 +1901,20 @@ static int heart_battery_config(struct parse_result *result, void *user_data)
 	if (!result)
 		return -EINVAL;
 
-	if (strcmp(result->section, HEART_BATTERY_CONF_SECTION))
+	if (strncmp(result->section, HEART_BATTERY_CONF_SECTION, strlen(HEART_BATTERY_CONF_SECTION)+1))
 		return RESOURCED_ERROR_NONE;
 
-	if (!strcmp(result->name, "POWER_NORMAL_MODE")) {
+	if (!strncmp(result->name, "POWER_NORMAL_MODE", strlen("POWER_NORMAL_MODE")+1)) {
 		val = atoi(result->value);
 		if (val > 0)
 			default_mode_spc[POWER_NORMAL_MODE] = val;
 		_D("POWER_NORMAL_MODE SPC: %d", val);
-	} else if (!strcmp(result->name, "POWER_SAVING_MODE")) {
+	} else if (!strncmp(result->name, "POWER_SAVING_MODE", strlen("POWER_SAVING_MODE")+1)) {
 		val = atoi(result->value);
 		if (val > 0)
 			default_mode_spc[POWER_SAVING_MODE] = val;
 		_D("POWER_SAVING_MODE SPC: %d", val);
-	} else if (!strcmp(result->name, "ULTRA_SAVING_MODE")) {
+	} else if (!strncmp(result->name, "ULTRA_SAVING_MODE", strlen("ULTRA_SAVING_MODE")+1)) {
 		val = atoi(result->value);
 		if (val > 0)
 			default_mode_spc[ULTRA_SAVING_MODE] = val;

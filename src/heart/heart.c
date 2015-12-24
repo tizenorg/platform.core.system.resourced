@@ -58,7 +58,7 @@ static const struct heart_module_ops *heart_module_find(const char *name)
 
 	gslist_for_each_item(iter, heart_module) {
 		module = (struct heart_module_ops *)iter->data;
-		if (!strcmp(module->name, name))
+		if (!strncmp(module->name, name, strlen(name)+1))
 			return module;
 	}
 	return NULL;
@@ -104,14 +104,14 @@ static int heart_load_config(struct parse_result *result, void *user_data)
 	if (!result)
 		return -EINVAL;
 
-	if (strcmp(result->section, HEART_CONF_SECTION))
+	if (strncmp(result->section, HEART_CONF_SECTION, strlen(HEART_CONF_SECTION)+1))
 		return RESOURCED_ERROR_FAIL;
 
 	ops = heart_module_find(result->name);
 	if (!ops)
 		return RESOURCED_ERROR_FAIL;
 
-	if (!strcmp(result->value, "ON"))
+	if (!strncmp(result->value, "ON", 3))
 		*count = *count + 1;
 	else
 		heart_module_remove(ops);

@@ -318,9 +318,10 @@ int register_edbus_interface(struct edbus_object *object)
 E_DBus_Interface *get_edbus_interface(const char *path)
 {
 	int i;
+	int pathlen = strlen(path) + 1;
 
 	for (i = 0; i < ARRAY_SIZE(edbus_objects); i++)
-		if (!strcmp(path, edbus_objects[i].path))
+		if (!strncmp(path, edbus_objects[i].path, pathlen))
 			return edbus_objects[i].iface;
 
 	return NULL;

@@ -42,6 +42,7 @@ int main(int argc, char *argv[])
 	struct ipt_context iptc = {0};
 	struct nfacct_rule rule;
 	enum iptables_test_cmd cmd;
+	char *saveptr;
 
 	if (argc <= 2) {
 		puts(" Usage: \n");
@@ -49,11 +50,11 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
-	if (strcmp(argv[1], "i") == 0) {
+	if (strncmp(argv[1], "i", 2) == 0) {
 		cmd = CMD_INSERT;
-	} else if (strcmp(argv[1], "a") == 0) {
+	} else if (strncmp(argv[1], "a", 2) == 0) {
 		cmd = CMD_APPEND;
-	} else if (strcmp(argv[1], "d") == 0) {
+	} else if (strncmp(argv[1], "d", 2) == 0) {
 		cmd = CMD_DELETE;
 	} else {
 		printf("Unknown command %s", argv[1]);
@@ -61,7 +62,7 @@ int main(int argc, char *argv[])
 	}
 
 	memset(&rule, 0, sizeof(struct nfacct_rule));
-	strcpy(rule.ifname, "seth_w0");
+	snprintf(rule.ifname, sizeof(rule.ifname), "seth_w0");
 	resourced_ipt_begin(&iptc);
 
 	resourced_ipt_dump(&iptc);
@@ -69,12 +70,12 @@ int main(int argc, char *argv[])
 	for (i = 2; i < argc; ++i) {
 		opt = argv[i];
 
-		sprintf(rule.name, pattern, opt);
-		parse = strtok(opt, "_");
+		snprintf(rule.name, sizeof(rule.name), pattern, opt);
+		parse = strtok_r(opt, "_", &saveptr);
 		rule.iotype = atoi(parse);
-		parse = strtok(NULL, "_");
+		parse = strtok_r(NULL, "_", &saveptr);
 		rule.iftype = atoi(parse);
-		parse = strtok(NULL, "_");
+		parse = strtok_r(NULL, "_", &saveptr);
 		rule.classid = atoi(parse);
 
 		if (cmd == CMD_INSERT)

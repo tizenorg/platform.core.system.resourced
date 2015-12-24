@@ -30,19 +30,32 @@
 #include <sys/types.h>
 #include <systemd/sd-journal.h>
 
+#include "resourced.h"
+
 #define STRING_MAX 256
 
 #define _E(fmt, arg...) sd_journal_print(LOG_ERR, "[%s,%d] "fmt, __FUNCTION__, __LINE__, ##arg)
 #define _D(fmt, arg...) sd_journal_print(LOG_DEBUG, "[%s,%d] "fmt, __FUNCTION__, __LINE__, ##arg)
 #define _I(fmt, arg...) sd_journal_print(LOG_INFO, "[%s,%d] "fmt, __FUNCTION__, __LINE__, ##arg)
 
-/* resourced_tests package error codes */
-enum {
-	ERROR_NONE = 0,
-	ERROR_INVALID_INPUT = -1,
-	ERROR_IO = -2,
-	ERROR_MEMORY = -3,
-	ERROR_FAIL = -4,
+struct resourced_test_t{
+	char name[STRING_MAX];
+	int (*test_func)(void);
 };
+
+#define IS_ERROR(ret) (ret != RESOURCED_ERROR_NONE)
+
+/* This provides an opportunity to start a journalctl session following only the
+ * current process.
+ */
+#define TEST_START_MESSAGE(test_name) \
+{ \
+	int test_usage_ret; \
+	char test_usage_buf[STRING_MAX]; \
+	printf("Testing %s. Current pid: %d\n", test_name, getpid()); \
+	printf("Start journalctl and enter input:"); \
+	test_usage_ret = scanf("%s", test_usage_buf); \
+	test_usage_ret++; \
+}
 
 #endif

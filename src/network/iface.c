@@ -114,7 +114,7 @@ static void keep_ifname(GSList **ifnames_list, char *ifname, int iftype)
 
 	gslist_for_each_item(iter, *ifnames_list) {
 		struct iface_status *cur = (struct iface_status *)iter->data;
-		if (cur->iftype == iftype && !strcmp(cur->ifname, ifname)) {
+		if (cur->iftype == iftype && !strncmp(cur->ifname, ifname, strlen(ifname)+1)) {
 			cur->active = true;
 			found = true;
 		}
@@ -205,7 +205,7 @@ static resourced_iface_type read_iftype(const char *iface)
 			break;
 		key_buffer = strtok_r(buffer, UEVENT_DELIM, &saveptr);
 		value_buffer = strtok_r(NULL, UEVENT_DELIM, &saveptr);
-		if (key_buffer && strcmp(key_buffer, DEVTYPE_KEY) != 0)
+		if (key_buffer && strncmp(key_buffer, DEVTYPE_KEY, strlen(DEVTYPE_KEY)+1) != 0)
 			continue;
 		ret = convert_iftype(value_buffer);
 		break;
@@ -251,7 +251,7 @@ int fill_ifaces_relation(struct parse_result *result,
 				void UNUSED *user_data)
 {
 	struct iface_relation *relation;
-	if (strcmp(result->section, IFACES_TYPE_SECTION))
+	if (strncmp(result->section, IFACES_TYPE_SECTION, strlen(IFACES_TYPE_SECTION)+1))
 		return RESOURCED_ERROR_NONE;
 
 	relation = (struct iface_relation *)malloc(sizeof(struct iface_relation));
@@ -323,18 +323,18 @@ resourced_iface_type convert_iftype(const char *buffer)
 		return RESOURCED_IFACE_UNKNOWN;
 	}
 
-	if (strcmp(buffer, DATACALL_VALUE) == 0)
+	if (strncmp(buffer, DATACALL_VALUE, strlen(DATACALL_VALUE)+1) == 0)
 		return RESOURCED_IFACE_DATACALL;
 
-	if (strcmp(buffer, WIFI_VALUE) == 0)
+	if (strncmp(buffer, WIFI_VALUE, strlen(WIFI_VALUE)+1) == 0)
 		return RESOURCED_IFACE_WIFI;
 
-	if (strcmp(buffer, BLUETOOTH_VALUE) == 0)
+	if (strncmp(buffer, BLUETOOTH_VALUE, strlen(BLUETOOTH_VALUE)+1) == 0)
 		return RESOURCED_IFACE_BLUETOOTH;
 
-	if (strcmp(buffer, WIRED_VALUE) == 0)
+	if (strncmp(buffer, WIRED_VALUE, strlen(WIRED_VALUE)+1) == 0)
 		return RESOURCED_IFACE_WIRED;
-	if (strcmp(buffer, ALL_NET_IFACE_VALUE) == 0)
+	if (strncmp(buffer, ALL_NET_IFACE_VALUE, strlen(ALL_NET_IFACE_VALUE)+1) == 0)
 		return RESOURCED_IFACE_ALL;
 	return RESOURCED_IFACE_UNKNOWN;
 }
@@ -377,7 +377,7 @@ resourced_iface_type get_iftype_by_name(char *name)
 
 	gslist_for_each_item(iter, ifnames) {
 		struct iface_status *value = (struct iface_status *)iter->data;
-		if (!strcmp(value->ifname, name))
+		if (!strncmp(value->ifname, name, strlen(name)+1))
 			return value->iftype;
 	}
 

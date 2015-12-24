@@ -253,10 +253,12 @@ static void get_memcg_info(void)
 {
 	char buf[PATH_MAX];
 	_cleanup_closedir_ DIR *pdir = NULL;
-	struct dirent *entry;
+	struct dirent entry;
+	struct dirent *result;
 	struct stat path_stat;
 	long usage_swap;
 	unsigned long usage, usage_with_swap;
+	int ret;
 
 	_I("====================================================================");
 	_I("MEMORY CGROUPS USAGE INFO");
@@ -267,15 +269,15 @@ static void get_memcg_info(void)
 		return;
 	}
 
-	while ((entry = readdir(pdir)) != NULL) {
-		sprintf(buf, "%s/%s", MEMCG_PATH, entry->d_name);
+	while (!(ret = readdir_r(pdir, &entry, &result)) && result != NULL) {
+		snprintf(buf, sizeof(buf), "%s/%s", MEMCG_PATH, entry.d_name);
 		/* If can't stat then ignore */
 		if (stat(buf, &path_stat) != 0)
 			continue;
 
 		/* If it's not directory or it's parent path then ignore */
 		if (!(S_ISDIR(path_stat.st_mode) &&
-			strcmp(entry->d_name, "..")))
+			strncmp(entry.d_name, "..", 3)))
 			continue;
 
 		usage = get_memcg_usage(buf, false);
@@ -286,7 +288,7 @@ static void get_memcg_info(void)
 			usage_swap = 0;
 
 		/* Case of root cgroup in hierarchy */
-		if (!strcmp(entry->d_name, "."))
+		if (!strncmp(entry.d_name, ".", 2))
 			_I("%13s Mem %3ld MB (%6ld kB), Mem+Swap %3ld MB (%6ld kB), Swap %3ld MB (%6ld kB) \n",
 				MEMCG_PATH, BYTE_TO_MBYTE(usage),
 				BYTE_TO_KBYTE(usage),
@@ -296,7 +298,7 @@ static void get_memcg_info(void)
 				BYTE_TO_KBYTE(usage_swap));
 		else
 			_I("memcg: %13s  Mem %3ld MB (%6ld kB), Mem+Swap %3ld MB (%6ld kB), Swap %3ld MB (%6ld kB)",
-				entry->d_name, BYTE_TO_MBYTE(usage),
+				entry.d_name, BYTE_TO_MBYTE(usage),
 				BYTE_TO_KBYTE(usage),
 				BYTE_TO_MBYTE(usage_with_swap),
 				BYTE_TO_KBYTE(usage_with_swap),
@@ -663,7 +665,7 @@ static int show_map_all_new(void)
 			continue;
 
 		base_name = basename(cmdline);
-		if (base_name && !strcmp(base_name, "mem-stress"))
+		if (base_name && !strncmp(base_name, "mem-stress", strlen("mem-stress")+1))
 			continue;
 
 		r = smaps_get(pid, &maps, SMAPS_MASK_DEFAULT);

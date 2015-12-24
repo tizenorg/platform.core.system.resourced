@@ -94,17 +94,17 @@ static int load_appusage_config(struct parse_result *result, void *user_data)
 	if(!result)
 		return -EINVAL;
 
-	if (strcmp(result->section, APPUSAGE_CONF_SECTION))
+	if (strncmp(result->section, APPUSAGE_CONF_SECTION, strlen(APPUSAGE_CONF_SECTION)+1))
 		return RESOURCED_ERROR_NO_DATA;
 
-	if (!strcmp(result->name, "APPUSAGE")) {
-		if (!strcmp(result->value, "OFF"))
+	if (!strncmp(result->name, "APPUSAGE", strlen("APPUSAGE")+1)) {
+		if (!strncmp(result->value, "OFF", 4))
 			return RESOURCED_ERROR_UNINITIALIZED;
 
 		appusage_favorite_htab = g_hash_table_new_full(g_str_hash,
 				g_str_equal, free_key, NULL);
 
-	} else if (!strcmp(result->name, "PREDEFINE")) {
+	} else if (!strncmp(result->name, "PREDEFINE", strlen("PREDEFINE")+1)) {
 		g_hash_table_insert(appusage_favorite_htab,
 				g_strndup(result->value, strlen(result->value)), GINT_TO_POINTER(1));
 	}

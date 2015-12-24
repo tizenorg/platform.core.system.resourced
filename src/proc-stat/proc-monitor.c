@@ -91,6 +91,7 @@ static DBusMessage *edbus_get_meminfo(E_DBus_Object *obj, DBusMessage *msg)
 	DBusMessage *reply;
 	struct meminfo mi;
 	int r;
+	char error_buf[256];
 
 	reply = dbus_message_new_method_return(msg);
 
@@ -102,7 +103,8 @@ static DBusMessage *edbus_get_meminfo(E_DBus_Object *obj, DBusMessage *msg)
 			     MEMINFO_MASK_SWAP_TOTAL |
 			     MEMINFO_MASK_SWAP_FREE);
 	if (r < 0) {
-		_E("Failed to get meminfo: %s", strerror(-r));
+		_E("Failed to get meminfo: %s",
+				strerror_r(-r, error_buf, sizeof(error_buf)));
 		return reply;
 	}
 
@@ -116,7 +118,7 @@ static DBusMessage *edbus_get_meminfo(E_DBus_Object *obj, DBusMessage *msg)
 	used = mem_total - mem_available;
 	swap = swap_total - swap_free;
 
-	_D("get memory info total = %u, free = %u, cache = %u, used = %u, swap = %u",
+	_D("memory info total = %u, free = %u, cache = %u, used = %u, swap = %u",
 		mem_total, mem_free, cached, used, swap);
 
 	dbus_message_iter_init_append(reply, &iter);
@@ -137,7 +139,7 @@ static DBusMessage *edbus_reclaim_memory(E_DBus_Object *obj, DBusMessage *msg)
 	int ret = -1;
 
 	dbus_error_init(&err);
-	_D("edbus_reclaim_memory");
+	_D("reclaiming memory!");
 
 	ret = proc_sys_node_trigger(SYS_VM_SHRINK_MEMORY);
 	ret = proc_sys_node_trigger(SYS_VM_COMPACT_MEMORY);
@@ -154,7 +156,7 @@ static DBusMessage *edbus_pre_poweroff(E_DBus_Object *obj, DBusMessage *msg)
 	DBusMessage *reply;
 	int ret = -1;
 
-	_D("edbus_poweroff");
+	_D("pre power off: unmounting cgroup fs");
 
 	proc_sweep_memory(PROC_SWEEP_EXCLUDE_ACTIVE, INIT_PID);
 	resourced_notify(RESOURCED_NOTIFIER_POWER_OFF, NULL);
@@ -186,12 +188,14 @@ static void proc_dbus_active_signal_handler(void *data, DBusMessage *msg)
 		return;
 	}
 
-	if (!strcmp(str, "active"))
+	if (!strncmp(str, "active", strlen("active")+1))
 		type = PROC_CGROUP_SET_ACTIVE;
-	else if (!strcmp(str, "inactive"))
+	else if (!strncmp(str, "inactive", strlen("inactive")+1))
 		type = PROC_CGROUP_SET_INACTIVE;
 	else
 		return;
+
+	_D("received %s signal for pid %d", str, pid);
 	resourced_proc_status_change(type, pid, NULL, NULL, PROC_TYPE_NONE);
 }
 
@@ -224,8 +228,8 @@ static DBusMessage *edbus_get_app_cpu(E_DBus_Object *obj, DBusMessage *msg)
 		reply = dbus_message_new_method_return(msg);
 		return reply;
 	}
-	_D("get cpu usage for %s (%d), utime = %u, stime = %u",
-			appid, pai->main_pid, utime, stime);
+
+	_D("cpu usage of %s (%d), utime = %u, stime = %u", appid, pai->main_pid, utime, stime);
 	total = utime + stime;
 	reply = dbus_message_new_method_return(msg);
 	dbus_message_iter_init_append(reply, &iter);
@@ -265,7 +269,7 @@ static DBusMessage *edbus_get_app_memory(E_DBus_Object *obj, DBusMessage *msg)
 		return reply;
 	}
 
-	_D("get memory usage for %s (%d), rss = %u", appid, pai->main_pid, rss);
+	_D("memory usage of %s (%d), rss = %u", appid, pai->main_pid, rss);
 	reply = dbus_message_new_method_return(msg);
 	dbus_message_iter_init_append(reply, &iter);
 	dbus_message_iter_append_basic(&iter, DBUS_TYPE_UINT32, &rss);
@@ -484,13 +488,13 @@ static void proc_dbus_exclude_signal_handler(void *data, DBusMessage *msg)
 		return;
 	}
 
-	_D("call proc_dbus_exclude_signal_handler : pid = %d, str = %s", pid, str);
 
 	/*
 	 * allowed strings: wakeup, exclude, include
 	 */
 	len = strlen(str);
 
+	_D("%s signal on pid = %d", str, pid);
 	if (len == 6 && !strncmp(str, "wa", 2)) {
 		struct proc_status ps = {0};
 
@@ -541,11 +545,9 @@ static void proc_dbus_exclude_appid_signal_handler(void *data, DBusMessage *msg)
 	if (!appid)
 		return;
 
-	_D("proc exclude : appid = %s, str = %s", appid, str);
-
 	ps.pai = find_app_info_by_appid(appid);
 	if (!ps.pai) {
-		_E("don't find any process info about %s", appid);
+		_E("no entry of %s in app list", appid);
 		return;
 	}
 	ps.pid = ps.pai->main_pid;
@@ -555,6 +557,7 @@ static void proc_dbus_exclude_appid_signal_handler(void *data, DBusMessage *msg)
 	 */
 	len = strlen(str);
 
+	_D("%s signal on app = %s", str, appid);
 	if (len == 6 && !strncmp(str, "wa", 2)) {
 		resourced_notify(RESOURCED_NOTIFIER_APP_WAKEUP, &ps);
 	} else if (len == 7) {
@@ -602,15 +605,15 @@ static void proc_dbus_prelaunch_signal_handler(void *data, DBusMessage *msg)
 		return;
 	}
 
-	_D("call proc_dbus_prelaunch_handler: appid = %s, pkgid = %s, flags = %d,"
-		" categories = %X\n", appid, pkgid, flags, categories);
-
 	pai = proc_create_app_list(appid, pkgid);
 	if (!pai) {
-		_E("Failed to create app list");
+		_E("prelaunch: failed to create app info for app %s, pkg %s",
+				appid, pkgid);
 		return;
 	}
 
+	_D("prelaunch signal: app %s, pkg %s, flags %d, categories %X\n",
+			appid, pkgid, flags, categories);
 	pai->flags = flags;
 	pai->type = PROC_TYPE_READY;
 	pai->categories = categories;
@@ -644,7 +647,7 @@ static Eina_Bool check_watchdog_cb(void *data)
 
 	ret = proc_get_oom_score_adj(pid, &oom_score_adj);
 	if (!ret) {
-		_E("watchdog pid: %d not terminated pid: %d kill again\n", pid);
+		_E("watchdog pid %d not terminated, kill again\n", pid);
 		kill(pid, SIGKILL);
 	}
 	ecore_timer_del(watchdog_check_timer);
@@ -768,14 +771,14 @@ static void proc_dbus_watchdog_handler(void *data, DBusMessage *msg)
 		return;
 	}
 
-	_E("Receive watchdog signal to pid: %d(%s)\n", pid, appname);
+	_E("Receive watchdog signal to app %s, pid %d\n", appname, pid);
 	ps.pai = find_app_info(pid);
 	ps.pid = pid;
 	resourced_notify(RESOURCED_NOTIFIER_APP_ANR, &ps);
 
 	if (watchdog_check_timer) {
 		if (proc_watchdog.pid == pid) {
-			_E("pid %d(%s) has already received watchdog siganl but not terminated", pid, appname);
+			_E("app %s, pid %d has already received watchdog siganl but not terminated", appname, pid);
 			kill(pid, SIGKILL);
 			proc_watchdog.pid = -1;
 			proc_watchdog.signum = -1;
@@ -783,7 +786,6 @@ static void proc_dbus_watchdog_handler(void *data, DBusMessage *msg)
 		}
 	}
 	
-	_E("just kill watchdog process when debug enabled pid: %d(%s)\n", pid, appname);
 	resourced_proc_status_change(PROC_CGROUP_SET_TERMINATE_REQUEST,
 		    pid, NULL, NULL, PROC_TYPE_NONE);
 	kill(pid, SIGABRT);
@@ -824,7 +826,7 @@ static void proc_dbus_dump_handler(void *data, DBusMessage *msg)
 		_D("there is no message");
 		return;
 	}
-	_D("received dump request : path %s", path);
+	_D("received dump request: path %s", path);
 	send_dump_signal(SIGNAL_DUMP_START);
 	resourced_proc_dump(mode, path);
 	send_dump_signal(SIGNAL_DUMP_FINISH);
@@ -939,6 +941,7 @@ static void booting_done_signal_handler(void *data, DBusMessage *msg)
 	 * Because modules_init checked whether it was already intialized,
 	 * it didn't initialize modules twice.
 	 */
+	_I("launching all modules (booting done)");
 	modules_init(NULL);
 	resourced_notify(RESOURCED_NOTIFIER_BOOTING_DONE, NULL);
 }
@@ -953,6 +956,8 @@ static void early_booting_done_signal_handler(void *data, DBusMessage *msg)
 		_D("there is no lcd on signal");
 		return;
 	}
+
+	_I("launching remaining modules (booting done)");
 	modules_late_init(NULL);
 }
 
@@ -1020,6 +1025,11 @@ static void proc_dbus_aul_launch(void *data, DBusMessage *msg)
 		return;
 	}
 	dbus_error_free(&err);
+
+#ifdef PROC_DEBUG
+	_D("aul_launch: app %s, pkgd %s, pid %d, pkgtype %s",
+			appid, pkgid, pid, pkgtype);
+#endif
 
 	if (!strncmp(pkgtype, "svc", 3)) {
 		apptype = PROC_TYPE_SERVICE;
@@ -1186,7 +1196,6 @@ static void proc_dbus_aul_terminated(void *data, DBusMessage *msg)
 	}
 	dbus_error_free(&err);
 
-	_D("received terminated process : pid %d", pid);
 	resourced_proc_status_change(status, pid, NULL, NULL, PROC_TYPE_NONE);
 }
 
@@ -1212,10 +1221,15 @@ static void proc_dbus_suspend_hint(void *data, DBusMessage *msg)
 	}
 	dbus_error_free(&err);
 
-	_D("received susnepd hint : pid %d", pid);
 	pai = find_app_info(pid);
 	if (!pai)
 		return;
+
+	if (pai->appid)
+		_D("received suspend hint : app %s, pid %d",
+				pai->appid, pid);
+	else
+		_D("received suspend hint : pid %d", pid);
 
 	state = proc_check_suspend_state(pai);
 	if (state == PROC_STATE_SUSPEND) {

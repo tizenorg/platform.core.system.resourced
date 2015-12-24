@@ -86,7 +86,8 @@ static int systemd_get_unit_obj_path(const char *unit_name,
 
 	*obj_path = strndup(path, strlen(path));
 	if (!*obj_path) {
-		_E("failed to duplicate object path: %s", strerror_r(ENOMEM, buf, sizeof(buf)));
+		str_err = strerror_r(ENOMEM, buf, sizeof(buf));
+		_E("failed to duplicate object path: %s", str_err);
 		*err_msg = strndup(str_err, strlen(str_err));
 		if (!*err_msg)
 			_E("failed to duplicate dbus error message");
