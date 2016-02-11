@@ -269,6 +269,17 @@ static struct memcg **memcg_tree;
  */
 static struct memcg_info *memcg_root;
 
+struct proc_info {
+	pid_t pid;
+	char cmdline[PROC_NAME_MAX];
+};
+
+static GPtrArray *proc_apps;
+static int num_proc_apps = 0;
+
+static GPtrArray *vip_apps;
+static int num_vip_apps = 0;
+
 static char *convert_memstate_to_str(int mem_state)
 {
 	char *tmp = NULL;
@@ -1370,25 +1381,29 @@ static unsigned int check_mem_state(unsigned int available)
 
 static int load_vip_config(struct parse_result *result, void *user_data)
 {
-	pid_t pid = 0;
-	if (!result)
-		return -EINVAL;
+	int vip_process = 0;
 
-	if (strncmp(result->section, MEM_VIP_SECTION, strlen(MEM_VIP_SECTION)+1))
+	if (!result || !vip_apps)
+		return RESOURCED_ERROR_INVALID_PARAMETER;
+
+	vip_process = !strcmp(result->section, MEM_VIP_SECTION);
+
+	if (!vip_process)
 		return RESOURCED_ERROR_NONE;
 
-	if (!strncmp(result->name, MEM_VIP_PREDEFINE, strlen(MEM_VIP_PREDEFINE)+1)) {
-		pid = find_pid_from_cmdline(result->value);
-		if (pid > 0)
-			proc_set_oom_score_adj(pid, OOMADJ_SERVICE_MIN);
+	if (!strcmp(result->name, MEM_VIP_PREDEFINE)) {
+		char *app_name = g_strdup(result->value);
+		g_ptr_array_add(vip_apps, (gpointer)app_name);
+		num_vip_apps++;
 	}
+
 	return RESOURCED_ERROR_NONE;
 }
 
 static int load_mem_config(struct parse_result *result, void *user_data)
 {
 	if (!result)
-		return -EINVAL;
+		return RESOURCED_ERROR_INVALID_PARAMETER;
 
 	if (strncmp(result->section, MEM_POPUP_SECTION, strlen(MEM_POPUP_SECTION)+1))
 		return RESOURCED_ERROR_NONE;
@@ -2026,6 +2041,109 @@ static int lowmem_press_setup_eventfd(void)
 	return RESOURCED_ERROR_NONE;
 }
 
+void set_oom_score_adj_vip(void)
+{
+	/* set oom_score_adj for VIP process */
+	int total_index = 0;
+	int proc_index = 0;
+	int i = 0;
+	struct proc_info *info;
+
+	for(total_index = 0; total_index < num_vip_apps; total_index++) {
+		for(proc_index = 0; proc_index < num_proc_apps; proc_index++) {
+			info = g_ptr_array_index(proc_apps, proc_index);
+			if(!strncmp(g_ptr_array_index(vip_apps, total_index),
+						info->cmdline, strlen(info->cmdline) + 1)) {
+				if (info->pid > 0) {
+					proc_set_oom_score_adj(info->pid, OOMADJ_SERVICE_MIN);
+					break;
+				}
+			}
+		}
+	}
+
+	/* Free the GPtrArray's as these are not required anymore. */
+	if(proc_apps) {
+		for (i = 0; i < num_proc_apps; i++)
+			g_free(g_ptr_array_index(proc_apps, i));
+		g_ptr_array_free(proc_apps, TRUE);
+		proc_apps = NULL;
+	}
+	
+	if(vip_apps) {
+		for (i = 0; i < num_vip_apps; i++)
+			g_free(g_ptr_array_index(vip_apps, i));
+		g_ptr_array_free(vip_apps, TRUE);
+		vip_apps = NULL;
+	}
+}
+
+static int allocate_proc_list(void)
+{
+	vip_apps = g_ptr_array_new();
+	if(!vip_apps) {
+		_E("lowmem : out of memory");
+		return RESOURCED_ERROR_OUT_OF_MEMORY;
+	}
+
+	proc_apps = g_ptr_array_new();
+	if(!proc_apps) {
+		_E("lowmem : out of memory");
+		return RESOURCED_ERROR_OUT_OF_MEMORY;
+	}
+
+	return RESOURCED_ERROR_NONE;
+}
+
+
+static int set_vip_list(void)
+{
+	pid_t pid = -1;
+	int ret = 0;
+	DIR *dp;
+	struct dirent dentry;
+	struct dirent *result;
+	char appname[PROC_NAME_MAX];
+	int appname_len;
+	struct proc_info *info;
+
+	if (!proc_apps)
+		return RESOURCED_ERROR_INVALID_PARAMETER;
+
+	/* load all (appname,pid) pairs in the /proc to the proc_apps*/
+	dp = opendir("/proc");
+	if (!dp) {
+		_E("fail to open /proc");
+		return RESOURCED_ERROR_FAIL;
+	}
+
+	while(!readdir_r(dp, &dentry, &result) && result != NULL) {
+		if (!isdigit(dentry.d_name[0]))
+			continue;
+
+		pid = atoi(dentry.d_name);
+		if(!pid)
+			continue;
+		
+		ret = proc_get_cmdline(pid, appname);
+
+		if (ret == RESOURCED_ERROR_NONE) {
+			info = (struct proc_info *)malloc(sizeof(struct proc_info)); // check malloc
+			info->pid = pid;
+			appname_len = strlen(appname);
+			strncpy(info->cmdline, appname, appname_len);
+			info->cmdline[appname_len] = '\0';
+			g_ptr_array_add(proc_apps, (gpointer)info);
+			num_proc_apps++;
+		}
+	}
+	closedir(dp);
+
+	set_oom_score_adj_vip();
+
+	return RESOURCED_ERROR_NONE;
+}
+
 /* To Do: should we need lowmem_fd_start, lowmem_fd_stop ?? */
 int lowmem_init(void)
 {
@@ -2035,7 +2153,16 @@ int lowmem_init(void)
 
 	init_memcg_params();
 	setup_memcg_params();
-	config_parse(MEM_CONF_FILE, load_vip_config, NULL);
+
+	if(allocate_proc_list() != RESOURCED_ERROR_NONE)
+		_E("allocate_proc_list FAIL");
+
+	if(config_parse(MEM_CONF_FILE, load_vip_config, NULL))
+		_E("(%s) parse Fail", MEM_CONF_FILE);
+
+	if(set_vip_list() != RESOURCED_ERROR_NONE)
+		_E("create_proc_list FAIL");
+
 	config_parse(MEM_CONF_FILE, load_mem_config, NULL);
 
 	create_memcgs();
@@ -2043,7 +2170,7 @@ int lowmem_init(void)
 
 	ret = oom_thread_create();
 	if (ret) {
-		_E("oom thread create failed\n");
+		_E("oom thread create failed");
 		return ret;
 	}
 
