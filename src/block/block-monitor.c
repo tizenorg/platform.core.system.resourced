@@ -123,7 +123,7 @@ static void block_logging(struct block_monitor_info *bmi, pid_t pid,
 	int type = bmi->logging;
 
 	if (type & BLOCK_LOGGING_DLOG)
-		_E("pid %d(%s) accessed %s", pid, label, filename);
+		_I("pid %d(%s) accessed %s", pid, label, filename);
 
 	if (type & BLOCK_LOGGING_FILE) {
 		FILE *f;
