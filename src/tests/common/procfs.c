@@ -145,7 +145,7 @@ int pid_exists(int pid)
 		 * Otherwise the process exists
 		 */
 		FILE *stat_fp;
-		int ret;
+		int ret = 0;
 		char proc_stat;
 
 		stat_fp = fopen(name, "r");
