@@ -80,6 +80,7 @@ int proc_get_cmdline(pid_t pid, char *cmdline)
 		filename = filename + 1;
 
 	strncpy(cmdline, filename, PROC_NAME_MAX-1);
+	cmdline[strlen(cmdline)] = '\0';
 
 	return RESOURCED_ERROR_NONE;
 }
