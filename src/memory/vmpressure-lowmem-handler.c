@@ -269,11 +269,6 @@ static struct memcg **memcg_tree;
  */
 static struct memcg_info *memcg_root;
 
-struct proc_info {
-	pid_t pid;
-	char cmdline[PROC_NAME_MAX];
-};
-static GPtrArray *proc_apps;
 static GPtrArray *vip_apps;
 
 static char *convert_memstate_to_str(int mem_state)
@@ -1377,6 +1372,8 @@ static unsigned int check_mem_state(unsigned int available)
 
 static int load_vip_config(struct parse_result *result, void *user_data)
 {
+	char *app_name;
+
 	if (!result || !vip_apps)
 		return RESOURCED_ERROR_INVALID_PARAMETER;
 
@@ -1384,7 +1381,7 @@ static int load_vip_config(struct parse_result *result, void *user_data)
 		return RESOURCED_ERROR_NONE;
 
 	if (!strcmp(result->name, MEM_VIP_PREDEFINE)) {
-		char *app_name = g_strdup(result->value);
+		app_name = g_strdup(result->value);
 		g_ptr_array_add(vip_apps, (gpointer)app_name);
 	}
 
@@ -2032,49 +2029,11 @@ static int lowmem_press_setup_eventfd(void)
 	return RESOURCED_ERROR_NONE;
 }
 
-static void set_vip_oom_score_adj(gpointer vip_app)
-{
-	int proc_index = 0;
-	struct proc_info *info;
-
-	for(proc_index = 0; proc_index < proc_apps->len; proc_index++) {
-		info = g_ptr_array_index(proc_apps, proc_index);
-		if(!strncmp(vip_app, info->cmdline, strlen(info->cmdline) + 1)) {
-			if (info->pid > 0) {
-				proc_set_oom_score_adj(info->pid, OOMADJ_SERVICE_MIN);
-				break;
-			}
-		}
-	}
-}
-
-static void free_app_list(void)
-{
-	if(proc_apps) {
-		g_ptr_array_foreach(proc_apps, (GFunc)g_free, NULL);
-		g_ptr_array_free(proc_apps, true);
-		proc_apps = NULL;
-	}
-
-	if(vip_apps) {
-		g_ptr_array_foreach(vip_apps, (GFunc)g_free, NULL);
-		g_ptr_array_free(vip_apps, true);
-		vip_apps = NULL;
-	}
-}
-
-static int allocate_app_list(void)
+static int allocate_vip_app_list(void)
 {
 	vip_apps = g_ptr_array_new();
 	if(!vip_apps) {
-		_E("lowmem : out of memory");
-		return RESOURCED_ERROR_OUT_OF_MEMORY;
-	}
-
-	proc_apps = g_ptr_array_new();
-	if(!proc_apps) {
-		_E("lowmem : out of memory");
-		free_app_list();
+		_E("g_ptr_array_new : out of memory");
 		return RESOURCED_ERROR_OUT_OF_MEMORY;
 	}
 
@@ -2084,47 +2043,53 @@ static int allocate_app_list(void)
 static int set_vip_list(void)
 {
 	pid_t pid = -1;
-	int ret = 0;
 	DIR *dp;
 	struct dirent dentry;
 	struct dirent *result;
-	char appname[PROC_NAME_MAX];
-	int appname_len;
-	struct proc_info *info;
+	char proc_name[PROC_NAME_MAX];
+	int vip_index;
+	char *vip_name;
 
-	if (!proc_apps)
-		return RESOURCED_ERROR_INVALID_PARAMETER;
-
-	/* load all (appname,pid) pairs in the /proc to the proc_apps*/
 	dp = opendir("/proc");
 	if (!dp) {
 		_E("fail to open /proc");
 		return RESOURCED_ERROR_FAIL;
 	}
 
-	while(!readdir_r(dp, &dentry, &result) && result != NULL) {
+	while (!readdir_r(dp, &dentry, &result) && result != NULL) {
 		if (!isdigit(dentry.d_name[0]))
 			continue;
 
 		pid = atoi(dentry.d_name);
-		if(!pid)
+		if (!pid)
 			continue;
-		ret = proc_get_cmdline(pid, appname);
 
-		if (ret == RESOURCED_ERROR_NONE) {
-			info = (struct proc_info *)malloc(sizeof(struct proc_info)); // check malloc
-			info->pid = pid;
-			appname_len = strlen(appname);
-			strncpy(info->cmdline, appname, appname_len);
-			info->cmdline[appname_len] = '\0';
-			g_ptr_array_add(proc_apps, (gpointer)info);
+		if (proc_get_cmdline(pid, proc_name) != RESOURCED_ERROR_NONE)
+			continue;
+		
+		for (vip_index = 0; vip_index < vip_apps->len; vip_index++) {
+			vip_name = g_ptr_array_index(vip_apps, vip_index);
+			if (strncmp(vip_name, proc_name, strlen(proc_name)))
+				continue;
+
+			if (pid > 0) {
+				proc_set_oom_score_adj(pid, OOMADJ_SERVICE_MIN);
+				break;
+			}
 		}
 	}
 	closedir(dp);
 
-	g_ptr_array_foreach(vip_apps, (GFunc)set_vip_oom_score_adj, NULL);
-
 	return RESOURCED_ERROR_NONE;
+}
+
+static void free_vip_app_list(void)
+{
+	if(vip_apps) {
+		g_ptr_array_foreach(vip_apps, (GFunc)g_free, NULL);
+		g_ptr_array_free(vip_apps, true);
+		vip_apps = NULL;
+	}
 }
 
 /* To Do: should we need lowmem_fd_start, lowmem_fd_stop ?? */
@@ -2137,8 +2102,8 @@ int lowmem_init(void)
 	init_memcg_params();
 	setup_memcg_params();
 
-	if(allocate_app_list() != RESOURCED_ERROR_NONE)
-		_E("allocate_proc_list FAIL");
+	if(allocate_vip_app_list() != RESOURCED_ERROR_NONE)
+		_E("allocate_vip_app_list FAIL");
 
 	if(config_parse(MEM_CONF_FILE, load_vip_config, NULL))
 		_E("(%s) parse Fail", MEM_CONF_FILE);
@@ -2146,8 +2111,8 @@ int lowmem_init(void)
 	if(set_vip_list() != RESOURCED_ERROR_NONE)
 		_E("set_vip_list FAIL");
 
-	/* Free the GPtrArray's as these are not required anymore. */
-	free_app_list();
+	/* vip_list is only needed at the set_vip_list */
+	free_vip_app_list();
 
 	config_parse(MEM_CONF_FILE, load_mem_config, NULL);
 
