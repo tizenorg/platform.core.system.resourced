@@ -514,7 +514,7 @@ static int get_cmdline(unsigned int pid, char *cmdline)
 		return RESOURCED_ERROR_FAIL;
 	}
 
-	return fscanf(fp, "%s", cmdline);
+	return fscanf(fp, "%4096s", cmdline);
 }
 
 static int get_oomscoreadj(unsigned int pid)
