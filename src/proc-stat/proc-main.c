@@ -707,7 +707,7 @@ int proc_get_appflag(const pid_t pid)
 	return PROC_NONE;
 }
 
-void proc_set_group(pid_t onwerpid, pid_t childpid, char *pkgname)
+void proc_set_group(pid_t ownerpid, pid_t childpid, char *pkgname)
 {
 	int owner_oom = 0, child_oom = 0, ret;
 	int child_type = 0, child_state = 0;
@@ -715,16 +715,16 @@ void proc_set_group(pid_t onwerpid, pid_t childpid, char *pkgname)
 	struct proc_app_info *pai, *owner;
 	struct proc_status ps = {0};
 
-	if (onwerpid <= 0 || childpid <=0)
+	if (ownerpid <= 0 || childpid <=0)
 		return;
 
-	ret = proc_get_oom_score_adj(onwerpid, &owner_oom);
+	ret = proc_get_oom_score_adj(ownerpid, &owner_oom);
 	if (ret < 0) {
-		_D("owner pid(%d) was already terminated", onwerpid);
+		_D("owner pid(%d) was already terminated", ownerpid);
 		return;
 	}
 
-	owner = find_app_info(onwerpid);
+	owner = find_app_info(ownerpid);
 	pai = find_app_info(childpid);
 	if (!owner)
 		return;

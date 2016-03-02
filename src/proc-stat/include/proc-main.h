@@ -72,7 +72,7 @@ int proc_remove_app_list(const pid_t pid);
 
 char *proc_get_appid_from_pid(const pid_t pid);
 
-void proc_set_group(pid_t onwerpid, pid_t childpid, char *pkgname);
+void proc_set_group(pid_t ownerpid, pid_t childpid, char *pkgname);
 
 static inline gint compare_pid(gconstpointer a, gconstpointer b)
 {
