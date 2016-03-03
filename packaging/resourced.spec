@@ -23,6 +23,7 @@ Source2:    resourced-cpucgroup.service
 %define wearable_noti OFF
 %define network_state OFF
 %define memory_eng ON
+%define mem_stress OFF
 
 %define swap_module ON
 %define freezer_module OFF
@@ -171,6 +172,7 @@ export FFLAGS="$FFLAGS -DTIZEN_DEBUG_ENABLE"
 	 -DWEARABLE_NOTI=%{wearable_noti} \
 	 -DBLOCK_MODULE=%{block_module} \
 	 -DTESTS_MODULE=%{tests_module} \
+	 -DMEM_STRESS=%{mem_stress} \
 	 -DDEBUG_LOG=%{debug_log}
 
 make %{?jobs:-j%jobs}
@@ -282,9 +284,11 @@ fi
 #memps
 %attr(-,root, system) %{_bindir}/memps
 #mem-stress
+%if %{?mem_stress} == ON
 %attr(-,root, root) %{_bindir}/mem-stress
 %{_unitdir}/mem-stress.service
 %{_unitdir}/graphical.target.wants/mem-stress.service
+%endif
 %if %{?tests_module} == ON
 %defattr(-,root,root,-)
 %{_bindir}/resourced_memory_test
