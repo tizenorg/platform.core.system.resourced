@@ -281,8 +281,6 @@ fi
 	%attr(700, app, app) %{logging_storage_db_full_path}-shm
 	%attr(700, app, app) %{logging_storage_db_full_path}-wal
 %endif
-#memps
-%attr(-,root, system) %{_bindir}/memps
 #mem-stress
 %if %{?mem_stress} == ON
 %attr(-,root, root) %{_bindir}/mem-stress
