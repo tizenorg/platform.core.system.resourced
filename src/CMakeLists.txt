@@ -4,6 +4,13 @@ CMAKE_MINIMUM_REQUIRED (VERSION 2.6)
 # libresourced uses it
 PROJECT(resource_d)
 
+ADD_DEFINITIONS("-DTZ_SYS_ETC=\"${TZ_SYS_ETC}\"")
+ADD_DEFINITIONS("-DTZ_SYS_STORAGE=\"${TZ_SYS_STORAGE}\"")
+ADD_DEFINITIONS("-DTZ_SYS_DATA=\"${TZ_SYS_DATA}\"")
+ADD_DEFINITIONS("-DTZ_SYS_DB=\"${TZ_SYS_DB}\"")
+ADD_DEFINITIONS("-DTZ_SYS_SHARE=\"${TZ_SYS_SHARE}\"")
+ADD_DEFINITIONS("-DTZ_SYS_VAR=\"${TZ_SYS_VAR}\"")
+
 INCLUDE(${CMAKE_SOURCE_DIR}/cmake/InstallSymlink.cmake)
 INCLUDE(${CMAKE_SOURCE_DIR}/cmake/ProcessGPERF.cmake)
 
@@ -94,10 +101,14 @@ IF("${NETWORK_MODULE}" STREQUAL "ON")
     ${NETWORK_SOURCE_DIR}/db-guard.c
     )
 
+  CONFIGURE_FILE(${NETWORK_SOURCE_DIR}/500.resourced-datausage.patch.sh.in
+	  ${NETWORK_SOURCE_DIR}/500.resourced-datausage.patch.sh
+	  @ONLY)
+
   INSTALL(FILES ${NETWORK_SOURCE_DIR}/network.conf
     DESTINATION /etc/resourced)
   INSTALL(FILES ${NETWORK_SOURCE_DIR}/500.resourced-datausage.patch.sh
-    DESTINATION /etc/opt/upgrade)
+	  DESTINATION ${TZ_SYS_ETC}/upgrade)
 
   SET(REQUIRES_LIST ${REQUIRES_LIST}
     openssl
@@ -299,8 +310,11 @@ ENDIF()
 IF("${HEART_MODULE}" STREQUAL "ON")
   INSTALL(FILES ${HEART_SOURCE_DIR}/heart.conf
     DESTINATION /etc/resourced RENAME heart.conf)
+  CONFIGURE_FILE(${HEART_SOURCE_DIR}/dump_heart_data.sh.in
+	  ${HEART_SOURCE_DIR}/dump_heart_data.sh
+	  @ONLY)
   INSTALL(FILES ${HEART_SOURCE_DIR}/dump_heart_data.sh
-    DESTINATION /opt/etc/dump.d/module.d)
+	DESTINATION ${TZ_SYS_ETC}/dump.d/module.d)
 ENDIF()
 
 IF("${CPU_MODULE}" STREQUAL "ON")
@@ -325,8 +339,8 @@ IF("${VIP_AGENT}" STREQUAL "ON")
 ENDIF()
 
 IF("${BLOCK_MODULE}" STREQUAL "ON")
-  INSTALL(FILES ${BLOCK_SOURCE_DIR}/block.conf
-    DESTINATION /etc/resourced RENAME block.conf)
+	INSTALL(FILES ${BLOCK_SOURCE_DIR}/block.conf
+		DESTINATION /etc/resourced RENAME block.conf)
 ENDIF()
 
 IF("${FREEZER_MODULE}" STREQUAL "ON")

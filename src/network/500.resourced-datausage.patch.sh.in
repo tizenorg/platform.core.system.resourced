@@ -1,4 +1,4 @@
-network_db_version="`sqlite3 /opt/usr/dbspace/.resourced-datausage.db "PRAGMA user_version;"`"
+network_db_version="`sqlite3 "@TZ_SYS_DB@"/.resourced-datausage.db "PRAGMA user_version;"`"
 
 if [ 0"$network_db_version" -eq 1 ]
 then
@@ -6,7 +6,7 @@ then
     exit 1
 fi
 
-sqlite3 /opt/usr/dbspace/.resourced-datausage.db "
+sqlite3 @TZ_SYS_DB@/.resourced-datausage.db "
 PRAGMA journal_mode=PERSIST;
 DROP TABLE IF EXISTS fota;
 ALTER TABLE statistics RENAME to fota;
@@ -29,7 +29,7 @@ hw_net_protocol_type, ifname, reserved, imsi) SELECT binpath, received, sent, ti
 hw_net_protocol_type, ifname, reserved, imsi from fota;
 DROP TABLE IF EXISTS fota;
 "
-sqlite3 /opt/usr/dbspace/.resourced-datausage.db "
+sqlite3 @TZ_SYS_DB@/.resourced-datausage.db "
 PRAGMA journal_mode=PERSIST;
 DROP TABLE IF EXISTS fota;
 ALTER TABLE quotas RENAME to fota;
@@ -54,7 +54,7 @@ start_time, iftype, roaming, reserved, imsi from fota;
 DROP TABLE IF EXISTS fota;
 "
 
-sqlite3 /opt/usr/dbspace/.resourced-datausage.db "
+sqlite3 @TZ_SYS_DB@/.resourced-datausage.db "
 PRAGMA journal_mode=PERSIST;
 DROP TABLE IF EXISTS fota;
 ALTER TABLE restrictions RENAME to fota;

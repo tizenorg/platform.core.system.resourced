@@ -45,7 +45,7 @@
 
 #include <sqlite3.h>
 
-#define HEART_STORAGE_DB			"/opt/usr/dbspace/.resourced-logging-storage.db"
+#define HEART_STORAGE_DB	TZ_SYS_DB"/.resourced-logging-storage.db"
 #define STORAGE_NAME		"storage"
 
 static bool heart_storage_initailized = false;

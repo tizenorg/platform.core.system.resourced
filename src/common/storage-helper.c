@@ -32,7 +32,7 @@
 
 #define PATH_MAX	256
 #define INTERNAL_MEMORY_PATH	 "/opt/usr"
-#define EXTERNAL_MEMORY_PATH	 "/opt/storage/sdcard"
+#define EXTERNAL_MEMORY_PATH	 TZ_SYS_STORAGE"/sdcard"
 
 bool is_mounted(const char* path)
 {

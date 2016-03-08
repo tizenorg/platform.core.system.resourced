@@ -12,7 +12,7 @@
 #include "trace.h"
 #include "vip-process.h"
 
-#define TIZEN_DEBUG_MODE_FILE   "/opt/etc/.debugmode"
+#define TIZEN_DEBUG_MODE_FILE   TZ_SYS_ETC"/.debugmode"
 #define DUMP_PATH "/usr/bin/all_log_dump.sh"
 #define REBOOT_PATH "/usr/sbin/reboot"
 #define WAIT_TIMEOUT 10
