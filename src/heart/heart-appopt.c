@@ -44,7 +44,7 @@
 #include "proc-common.h"
 #include "edbus-handler.h"
 
-#define APPOPT_DB_FILE_NAME	"/opt/usr/dbspace/.resourced-appopt.db"
+#define APPOPT_DB_FILE_NAME	RD_SYS_DB"/.resourced-appopt.db"
 #define APP_NAMES_TABLE		"appnames"
 #define APP_OPTS_TABLE		"appopts"
 #define QUERY_CREATE_APPNAMES	"CREATE TABLE IF NOT EXISTS "APP_NAMES_TABLE" (appkey INTEGER PRIMARY KEY AUTOINCREMENT, appname TEXT NOT NULL UNIQUE);"

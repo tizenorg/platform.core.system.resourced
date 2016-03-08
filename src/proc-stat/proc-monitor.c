@@ -49,7 +49,7 @@
 #define WATCHDOG_KEY2			"_APP_NAME_"
 #define WATCHDOG_VALUE_1			"watchdog"
 
-#define TIZEN_DEBUG_MODE_FILE		"/opt/etc/.debugmode"
+#define TIZEN_DEBUG_MODE_FILE	RD_SYS_ETC"/.debugmode"
 
 #define INIT_PID	1
 #define INIT_PROC_VAL	-1

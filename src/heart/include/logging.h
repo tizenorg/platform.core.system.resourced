@@ -36,8 +36,8 @@
 #define STRINGFY(x) #x
 #define KEY_TO_STRING(x) STRINGFY(x)
 
-#define LOGGING_DB_FILE_NAME			"/opt/usr/dbspace/.resourced-logging.db"
-#define LOGGING_LEVEL_DB_FILE_NAME		"/opt/usr/dbspace/.resourced-logging-leveldb"
+#define LOGGING_DB_FILE_NAME			RD_SYS_DB"/.resourced-logging.db"
+#define LOGGING_LEVEL_DB_FILE_NAME		RD_SYS_DB"/.resourced-logging-leveldb"
 #define HOUR_TO_SEC(x)				(x*3600)
 #define DAY_TO_SEC(x)				(x*HOUR_TO_SEC(24))
 #define MONTH_TO_SEC(x)				(x*DAY_TO_SEC(30))
