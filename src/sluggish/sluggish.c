@@ -39,9 +39,9 @@
 #include "file-helper.h"
 #include "util.h"
 
-#define SLUGGISH_PATH	"/opt/usr/share/sluggish"	/* Path to dump system snapshot */
-#define PATH_DLOG	"/opt/var/log/dlog_main"	/* Platform log file */
-#define PATH_DLOG1	"/opt/var/log/dlog_main.1"	/* Platform log file */
+#define SLUGGISH_PATH	TZ_SYS_SHARE"/sluggish"	/* Path to dump system snapshot */
+#define PATH_DLOG	TZ_SYS_VAR"/log/dlog_main"	/* Platform log file */
+#define PATH_DLOG1	TZ_SYS_VAR"/log/dlog_main.1"	/* Platform log file */
 #define MAX_TIMESTAMP_LEN	30
 #define MAX_FILENAME_LEN	256
 #define MAX_BUF_LEN	1024

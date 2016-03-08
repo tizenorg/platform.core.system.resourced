@@ -63,11 +63,11 @@ Source2:    resourced-cpucgroup.service
 
 %define exclude_list_file_name resourced_proc_exclude.ini
 %define exclude_list_full_path /usr/etc/%{exclude_list_file_name}
-%define exclude_list_opt_full_path /opt/usr/etc/%{exclude_list_file_name}
-%define database_full_path /opt/usr/dbspace/.resourced-datausage.db
+%define exclude_list_opt_full_path %{TZ_SYS_ETC}/%{exclude_list_file_name}
+%define database_full_path %{TZ_SYS_DB}/.resourced-datausage.db
 
-%define logging_db_full_path /opt/usr/dbspace/.resourced-logging.db
-%define logging_storage_db_full_path /opt/usr/dbspace/.resourced-logging-storage.db
+%define logging_db_full_path %{TZ_SYS_DB}/.resourced-logging.db
+%define logging_storage_db_full_path %{TZ_SYS_DB}/.resourced-logging-storage.db
 
 BuildRequires:  cmake
 BuildRequires:  pkgconfig(glib-2.0)
@@ -84,6 +84,7 @@ BuildRequires:  pkgconfig(openssl)
 BuildRequires:  pkgconfig(leveldb)
 BuildRequires:  pkgconfig(eventsystem)
 BuildRequires:  pkgconfig(capi-system-info)
+BuildRequires:  pkgconfig(libtzplatform-config)
 
 #only for data types
 BuildRequires:  pkgconfig(tapi)
@@ -173,7 +174,14 @@ export FFLAGS="$FFLAGS -DTIZEN_DEBUG_ENABLE"
 	 -DBLOCK_MODULE=%{block_module} \
 	 -DTESTS_MODULE=%{tests_module} \
 	 -DMEM_STRESS=%{mem_stress} \
-	 -DDEBUG_LOG=%{debug_log}
+	 -DDEBUG_LOG=%{debug_log} \
+	 -DTZ_SYS_ETC=%{TZ_SYS_ETC} \
+	 -DTZ_SYS_STORAGE=%{TZ_SYS_STORAGE} \
+	 -DTZ_SYS_DATA=%{TZ_SYS_DATA} \
+	 -DTZ_SYS_DB=%{TZ_SYS_DB} \
+	 -DTZ_SYS_SHARE=%{TZ_SYS_SHARE} \
+	 -DTZ_SYS_VAR=%{TZ_SYS_VAR} \
+	 -DTZ_USER_CONTENT=%{TZ_USER_CONTENT}
 
 make %{?jobs:-j%jobs}
 
@@ -185,8 +193,8 @@ cp -f LICENSE %{buildroot}/usr/share/license/libresourced
 
 %make_install
 %if %{?heart_module} == ON
-	mkdir -p %{buildroot}/opt/usr/data/heart
-	mkdir -p %{buildroot}/opt/usr/dbspace
+	mkdir -p %{buildroot}%{TZ_SYS_DATA}/heart
+	mkdir -p %{buildroot}/%{TZ_SYS_DB}
 	sqlite3 %{buildroot}%{logging_db_full_path}
 	sqlite3 --line %{buildroot}%{logging_storage_db_full_path} 'PRAGMA journal_mode = WAL'
 	touch %{buildroot}%{logging_storage_db_full_path}-shm
@@ -194,7 +202,7 @@ cp -f LICENSE %{buildroot}/usr/share/license/libresourced
 %endif
 
 %if %{?network_state} == ON
-	mkdir -p %{buildroot}/opt/usr/dbspace
+	mkdir -p %{buildroot}/%{TZ_SYS_DB}
 	sqlite3 %{buildroot}%{database_full_path} < %{buildroot}/usr/share/traffic_db.sql
 	rm %{buildroot}/usr/share/traffic_db.sql
 	sqlite3 %{buildroot}%{database_full_path} < %{buildroot}/usr/share/exception_db.sql
@@ -219,7 +227,7 @@ mkdir -p %{_sysconfdir}/systemd/default-extra-dependencies/ignore-units.d/
 ln -sf %{_unitdir}/resourced.service %{_sysconfdir}/systemd/default-extra-dependencies/ignore-units.d/
 
 #install init.d script
-mkdir -p /opt/usr/etc
+mkdir -p %{TZ_SYS_ETC}
 #make empty dynamic exclude list for first installation
 touch %{exclude_list_opt_full_path}
 
@@ -238,8 +246,8 @@ fi
 	%config(noreplace) %attr(660,root,app) %{database_full_path}-journal
 	/usr/bin/datausagetool
 	%config /etc/resourced/network.conf
-	/etc/opt/upgrade/500.resourced-datausage.patch.sh
-	%attr(700,root,root) /etc/opt/upgrade/500.resourced-datausage.patch.sh
+	%{TZ_SYS_ETC}/upgrade/500.resourced-datausage.patch.sh
+	%attr(700,root,root) %{TZ_SYS_ETC}/upgrade/500.resourced-datausage.patch.sh
 	%{_bindir}/net-cls-release
 %endif
 %config %{_sysconfdir}/dbus-1/system.d/resourced.conf
@@ -276,7 +284,7 @@ fi
 %{exclude_list_full_path}
 %if %{?heart_module} == ON
 	%config /etc/resourced/heart.conf
-	%attr(700, root, root) /opt/etc/dump.d/module.d/dump_heart_data.sh
+	%attr(700, root, root) %{TZ_SYS_ETC}/dump.d/module.d/dump_heart_data.sh
 	%attr(700, app, app) %{logging_storage_db_full_path}
 	%attr(700, app, app) %{logging_storage_db_full_path}-shm
 	%attr(700, app, app) %{logging_storage_db_full_path}-wal

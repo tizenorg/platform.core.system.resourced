@@ -2,6 +2,8 @@
 # logging { DLOG = 0x1, FILE = 0x2, DB = 0x4}
 # When adding new monitor, "configend=NULL" should be included for distributing other categories.
 [MONITOR1]
+#path will be superceded by macro
+#path=@TZ_USER_CONTENT@
 path=/opt/usr/media
 mode=WRITE
 include=DOWNLOADABLE

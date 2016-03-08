@@ -51,7 +51,6 @@ static const unsigned int exclude_list_limit = 1024;
 static const struct module_ops *freezer;
 static GSList *proc_module;  /* proc sub-module list */
 
-#define BASE_UGPATH_PREFIX "/usr/ug/bin"
 #define LOG_PREFIX "resourced"
 #define TIZEN_SYSTEM_APPID "org.tizen.system"
 
