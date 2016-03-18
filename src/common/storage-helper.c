@@ -29,6 +29,7 @@
 #include "storage-helper.h"
 #include "trace.h"
 #include <mntent.h>
+#include <storage.h>
 
 #define PATH_MAX	256
 #define INTERNAL_MEMORY_PATH	 "/opt/usr"
@@ -54,24 +55,65 @@ bool is_mounted(const char* path)
 	return ret;
 }
 
+struct rd_storage {
+	int id;
+	int type;
+};
+
+static bool get_storage_id(int sid, storage_type_e type, storage_state_e state,
+		const char *path, void *userData)
+{
+	struct rd_storage *target = (struct rd_storage*)userData;
+
+	if (type == target->type && state == STORAGE_STATE_MOUNTED) {
+		target->id = sid;
+		return false;
+	}
+	return true;
+}
+
+resourced_ret_c get_storage_root_path(int type, char **path)
+{
+	struct rd_storage target;
+
+	if (type == INTERNAL)
+		target.type = STORAGE_TYPE_INTERNAL;
+	else if (type == EXTERNAL)
+		target.type = STORAGE_TYPE_EXTERNAL;
+	else {
+		_E("Invalid storage type");
+		return RESOURCED_ERROR_INVALID_PARAMETER;
+	}
+
+	if (storage_foreach_device_supported(get_storage_id,
+				&target) != STORAGE_ERROR_NONE) {
+		_E("Failed to get storage ID");
+		return RESOURCED_ERROR_FAIL;
+	}
+
+	if (storage_get_root_directory(target.id, path)
+			!= STORAGE_ERROR_NONE) {
+		_E("Failed to get root path of storage");
+		return RESOURCED_ERROR_FAIL;
+	}
+
+	return RESOURCED_ERROR_NONE;
+}
+
 resourced_ret_c storage_get_size(int type, struct statvfs *buf)
 {
 	int ret;
-	char path[PATH_MAX] = "";
+	char *path;
 	char errbuf[PATH_MAX];
 
-	if (type == INTERNAL)
-		snprintf(path, sizeof(path),"%s", INTERNAL_MEMORY_PATH);
-	else if (type == EXTERNAL)
-		snprintf(path, sizeof(path), "%s", EXTERNAL_MEMORY_PATH);
-	else {
-		_E("Unsupported storage type:%d", type);
-		return RESOURCED_ERROR_INVALID_PARAMETER;
+	if (get_storage_root_path(type, &path) != RESOURCED_ERROR_NONE) {
+		_E("Failed to get storage path");
+		return RESOURCED_ERROR_FAIL;
 	}
 
 	_I("Path:%s", path);
 	if (type == EXTERNAL) {
-		if (!is_mounted(EXTERNAL_MEMORY_PATH)) {
+		if (!is_mounted(path)) {
 			memset(buf, 0, sizeof(struct statvfs));
 			return RESOURCED_ERROR_NONE;
 		}
