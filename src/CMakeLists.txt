@@ -210,6 +210,7 @@ SET(REQUIRES_LIST ${REQUIRES_LIST}
 	libsystemd
 	leveldb
 	eventsystem
+	storage
   )
 
 INCLUDE(FindPkgConfig)

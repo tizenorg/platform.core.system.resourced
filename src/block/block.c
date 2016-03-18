@@ -31,6 +31,7 @@
 #include <sys/time.h>
 #include <sys/resource.h>
 #include <sys/syscall.h>
+#include <storage.h>
 #include "notifier.h"
 #include "macro.h"
 #include "module.h"
@@ -47,6 +48,7 @@
 
 #define BLOCK_CONF_FILE                  "/etc/resourced/block.conf"
 #define BLOCK_CONF_SECTION		"MONITOR"
+#define BLOCK_CONF_ACTIVATED	"TRUE"
 
 static GSList *block_monitor_list;
 
@@ -56,9 +58,41 @@ static void free_exclude_key(gpointer data)
 		free(data);
 }
 
+static bool get_internal_root_storage_id(int sid, storage_type_e type, storage_state_e state,
+		const char *path, void *userData)
+{
+	int *output = (int*)userData;
+
+	if (type == STORAGE_TYPE_INTERNAL && state == STORAGE_STATE_MOUNTED) {
+		*output = sid;
+		return false;
+	}
+	return true;
+}
+
+static int get_internal_storage_path(char **path)
+{
+	int internal_storage_id;
+
+	if (storage_foreach_device_supported(get_internal_root_storage_id, 
+				&internal_storage_id) != STORAGE_ERROR_NONE) {
+		_E("Failed to get internal storage ID");
+		return RESOURCED_ERROR_FAIL;
+	}
+
+	if (storage_get_root_directory(internal_storage_id, path)
+			!= STORAGE_ERROR_NONE) {
+		_E("Failed to get root path of internal storage");
+		return RESOURCED_ERROR_FAIL;
+	}
+
+	return RESOURCED_ERROR_NONE;
+}
+
 static int load_block_config(struct parse_result *result, void *user_data)
 {
 	struct block_monitor_info *bmi;
+	char *monitoring_path;
 
 	if (!result)
 		return RESOURCED_ERROR_NO_DATA;
@@ -69,15 +103,22 @@ static int load_block_config(struct parse_result *result, void *user_data)
 	if (!strstr(result->section, BLOCK_CONF_SECTION))
 		return RESOURCED_ERROR_NO_DATA;
 
-	if (MATCH(result->name, "path")) {
-		bmi = calloc(1, sizeof(struct block_monitor_info));
-		if (!bmi) {
-			_E("Failed to create monitor info");
-			return RESOURCED_ERROR_OUT_OF_MEMORY;
+	if (MATCH(result->name, "activate")) {
+		if (!strncmp(result->value, BLOCK_CONF_ACTIVATED,
+					sizeof(BLOCK_CONF_ACTIVATED))) {
+			bmi = calloc(1, sizeof(struct block_monitor_info));
+			if (!bmi) {
+				_E("Failed to create monitor info");
+				return RESOURCED_ERROR_OUT_OF_MEMORY;
+			}
+			if (get_internal_storage_path(&monitoring_path) != RESOURCED_ERROR_NONE) {
+				_E("Failed to set monitoring path");
+				return RESOURCED_ERROR_FAIL;
+			}
+			_D("Start to monitor %s", monitoring_path);
+			strncpy(bmi->path, monitoring_path, sizeof(bmi->path));
+			block_monitor_list = g_slist_prepend(block_monitor_list, bmi);
 		}
-		strncpy(bmi->path, result->value, MAX_PATH_LENGTH-1);
-		block_monitor_list = g_slist_prepend(block_monitor_list, bmi);
-
 	} else if (MATCH(result->name, "mode")) {
 		bmi = (struct block_monitor_info *)g_slist_nth_data(block_monitor_list, 0);
 		SET_CONF(bmi->mode, convert_fanotify_mode(result->value));
