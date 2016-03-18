@@ -37,6 +37,8 @@ enum storage_type {
 
 bool is_mounted(const char* path);
 
+resourced_ret_c get_storage_root_path(int type, char **path);
+
 /**
  * @desc gets storage details
  * @param type-INTERNAL/EXTERNAL, buf-storage details

@@ -44,9 +44,11 @@
 #include "block.h"
 #include "proc-common.h"
 #include "appinfo-list.h"
+#include "storage-helper.h"
 
 #define BLOCK_CONF_FILE                  "/etc/resourced/block.conf"
 #define BLOCK_CONF_SECTION		"MONITOR"
+#define BLOCK_CONF_ACTIVATED	"TRUE"
 
 static GSList *block_monitor_list;
 
@@ -59,6 +61,7 @@ static void free_exclude_key(gpointer data)
 static int load_block_config(struct parse_result *result, void *user_data)
 {
 	struct block_monitor_info *bmi;
+	char *monitoring_path;
 
 	if (!result)
 		return RESOURCED_ERROR_NO_DATA;
@@ -69,15 +72,23 @@ static int load_block_config(struct parse_result *result, void *user_data)
 	if (!strstr(result->section, BLOCK_CONF_SECTION))
 		return RESOURCED_ERROR_NO_DATA;
 
-	if (MATCH(result->name, "path")) {
-		bmi = calloc(1, sizeof(struct block_monitor_info));
-		if (!bmi) {
-			_E("Failed to create monitor info");
-			return RESOURCED_ERROR_OUT_OF_MEMORY;
+	if (MATCH(result->name, "activate")) {
+		if (!strncmp(result->value, BLOCK_CONF_ACTIVATED,
+					sizeof(BLOCK_CONF_ACTIVATED))) {
+			bmi = calloc(1, sizeof(struct block_monitor_info));
+			if (!bmi) {
+				_E("Failed to create monitor info");
+				return RESOURCED_ERROR_OUT_OF_MEMORY;
+			}
+			if (get_storage_root_path(INTERNAL, &monitoring_path) != RESOURCED_ERROR_NONE) {
+				_E("Failed to find monitoring path");
+				return RESOURCED_ERROR_FAIL;
+			}
+			_D("Start to monitor %s", monitoring_path);
+			strncpy(bmi->path, monitoring_path, sizeof(bmi->path));
+			free(monitoring_path);
+			block_monitor_list = g_slist_prepend(block_monitor_list, bmi);
 		}
-		strncpy(bmi->path, result->value, MAX_PATH_LENGTH-1);
-		block_monitor_list = g_slist_prepend(block_monitor_list, bmi);
-
 	} else if (MATCH(result->name, "mode")) {
 		bmi = (struct block_monitor_info *)g_slist_nth_data(block_monitor_list, 0);
 		SET_CONF(bmi->mode, convert_fanotify_mode(result->value));
