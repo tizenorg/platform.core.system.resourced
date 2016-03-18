@@ -85,6 +85,7 @@ BuildRequires:  pkgconfig(leveldb)
 BuildRequires:  pkgconfig(eventsystem)
 BuildRequires:  pkgconfig(capi-system-info)
 BuildRequires:  pkgconfig(libtzplatform-config)
+BuildRequires:  pkgconfig(storage)
 
 #only for data types
 BuildRequires:  pkgconfig(tapi)
