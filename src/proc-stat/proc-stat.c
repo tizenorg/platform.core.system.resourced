@@ -155,7 +155,7 @@ static bool get_proc_cmdline(pid_t pid, char *cmdline)
 	if (fp == NULL)
 		return false;
 
-	if (fscanf(fp, "%s", buf) < 1) {
+	if (fscanf(fp, "%4096s", buf) < 1) {
 		fclose(fp);
 		return false;
 	}
