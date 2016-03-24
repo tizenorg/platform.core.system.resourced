@@ -149,13 +149,15 @@ static bool get_proc_cmdline(pid_t pid, char *cmdline)
 	char cmdline_path[sizeof(PROC_CMDLINE_PATH) + MAX_DEC_SIZE(int)] = {0};
 	char *filename;
 	FILE *fp;
+	char format[10];
 
 	snprintf(cmdline_path, sizeof(cmdline_path), PROC_CMDLINE_PATH, pid);
 	fp = fopen(cmdline_path, "r");
 	if (fp == NULL)
 		return false;
 
-	if (fscanf(fp, "%s", buf) < 1) {
+	snprintf(format, 10, "%%%ds", PATH_MAX);
+	if (fscanf(fp, format, buf) < 1) {
 		fclose(fp);
 		return false;
 	}
