@@ -153,13 +153,13 @@ void memcg_init(struct memcg *memcg)
 	memcg->cgroups = NULL;
 }
 
-int memcg_get_anon_usage(struct memcg_info *mi, unsigned int *anon_usage)
+int memcg_get_anon_usage(struct memcg_info *mi, unsigned long long *anon_usage)
 {
 	FILE *f;
 	char buf[BUF_MAX] = {0,};
 	char line[BUF_MAX] = {0, };
 	char name[BUF_MAX] = {0, };
-	unsigned int tmp, active_anon = 0, inactive_anon = 0;
+	unsigned long long tmp, active_anon = 0, inactive_anon = 0;
 
 	snprintf(buf, sizeof(buf), "%smemory.stat", mi->name);
 	_I("get mem usage anon from %s", buf);
@@ -170,7 +170,7 @@ int memcg_get_anon_usage(struct memcg_info *mi, unsigned int *anon_usage)
 		return RESOURCED_ERROR_FAIL;
 	}
 	while (fgets(line, BUF_MAX, f) != NULL) {
-		if (sscanf(line, "%s %d", name, &tmp)) {
+		if (sscanf(line, "%s %llu", name, &tmp)) {
 			if (!strncmp(name, "inactive_anon", strlen("inactive_anon")+1)) {
 				inactive_anon = tmp;
 			} else if (!strncmp(name, "active_anon", strlen("active_anon")+1)) {

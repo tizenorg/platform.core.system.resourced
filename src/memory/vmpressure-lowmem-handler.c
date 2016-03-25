@@ -484,10 +484,10 @@ static void make_memps_log(char *file, pid_t pid, char *victim_name)
 
 static int lowmem_check_current_state(struct memcg_info *mi)
 {
-	unsigned int usage, oomleave;
+	unsigned long long usage, oomleave;
 	int ret;
 
-	oomleave = mi->oomleave;
+	oomleave = (unsigned long long)(mi->oomleave);
 	ret = memcg_get_anon_usage(mi, &usage);
 
 	if (ret) {
@@ -496,11 +496,11 @@ static int lowmem_check_current_state(struct memcg_info *mi)
 	}
 
 	if (oomleave > usage) {
-		_D("%s : usage : %u, leave threshold : %u",
+		_D("%s : usage : %llu, leave threshold : %llu",
 				__func__, usage, oomleave);
 		return RESOURCED_ERROR_NONE;
 	} else {
-		_D("%s : usage : %u, leave threshold: %u",
+		_D("%s : usage : %llu, leave threshold: %llu",
 				__func__, usage, oomleave);
 		return RESOURCED_ERROR_FAIL;
 	}
@@ -1877,7 +1877,7 @@ static void lowmem_press_root_cgroup_handler(void)
 
 static void lowmem_press_cgroup_handler(int type, struct memcg_info *mi)
 {
-	unsigned int usage, threshold;
+	unsigned long long usage, threshold;
 	int ret;
 
 	ret = memcg_get_anon_usage(mi, &usage);
@@ -1886,11 +1886,11 @@ static void lowmem_press_cgroup_handler(int type, struct memcg_info *mi)
 		return;
 	}
 
-	threshold = mi->threshold[LOWMEM_MEDIUM];
+	threshold = (unsigned long long)(mi->threshold[LOWMEM_MEDIUM]);
 	if (usage >= threshold)
 		memory_cgroup_medium_act(type, mi);
 	else
-		_I("anon page %u MB < medium threshold %u MB", BtoMB(usage),
+		_I("anon page %llu MB < medium threshold %llu MB", BtoMB(usage),
 				BtoMB(threshold));
 }
 

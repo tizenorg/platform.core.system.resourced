@@ -106,7 +106,7 @@ int memcg_add_cgroups(struct memcg *memcg, int num);
  * @desc get anon memory usage of cgroup mi based on memory.stat
  * @return 0 if the value was correctly read
  */
-int memcg_get_anon_usage(struct memcg_info *mi, unsigned int *anon_usage);
+int memcg_get_anon_usage(struct memcg_info *mi, unsigned long long *anon_usage);
 
 /**
  * @desc get memory.get usage_in_bytes from cgroup mi (this is value without swap)
