@@ -208,11 +208,13 @@ static void decision_memory_updated_cb(char *data)
 	struct decision_item *di;
 	unsigned pss, uss;
 	int time, len;
+	char format[32];
 
 	if (!data)
 		return;
 
-	len = sscanf(data, "%s %s %d %u %u", appid, pkgname, &time, &pss, &uss);
+	snprintf(format, 32, "%%%ds %%%ds %%d %%u %%u", MAX_APPID_LENGTH, MAX_PKGNAME_LENGTH);
+	len = sscanf(data, format, appid, pkgname, &time, &pss, &uss);
 	if (len < 0) {
 		_E("sscanf failed");
 		return;
