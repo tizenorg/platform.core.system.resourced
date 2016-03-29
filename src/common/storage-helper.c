@@ -76,6 +76,9 @@ resourced_ret_c get_storage_root_path(int type, char **path)
 {
 	struct rd_storage target;
 
+	_I("Start getting %s root path", 
+			(type == INTERNAL ? "internal" : "external"));
+
 	if (type == INTERNAL)
 		target.type = STORAGE_TYPE_INTERNAL;
 	else if (type == EXTERNAL)
@@ -85,9 +88,16 @@ resourced_ret_c get_storage_root_path(int type, char **path)
 		return RESOURCED_ERROR_INVALID_PARAMETER;
 	}
 
+	target.id = -1;
 	if (storage_foreach_device_supported(get_storage_id,
 				&target) != STORAGE_ERROR_NONE) {
 		_E("Failed to get storage ID");
+		return RESOURCED_ERROR_FAIL;
+	}
+
+	if(target.id == -1) {
+		_E("There is no %s storage",
+				(type == INTERNAL ? "internal" : "external"));
 		return RESOURCED_ERROR_FAIL;
 	}
 
@@ -97,6 +107,10 @@ resourced_ret_c get_storage_root_path(int type, char **path)
 		return RESOURCED_ERROR_FAIL;
 	}
 
+	if (type == INTERNAL)
+		strncpy(*path, "/home/owner/content", 20);
+
+	_I("Root path = %s", *path);
 	return RESOURCED_ERROR_NONE;
 }
 

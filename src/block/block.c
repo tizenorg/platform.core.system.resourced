@@ -84,7 +84,7 @@ static int load_block_config(struct parse_result *result, void *user_data)
 				_E("Failed to find monitoring path");
 				return RESOURCED_ERROR_FAIL;
 			}
-			_D("Start to monitor %s", monitoring_path);
+			_I("Start to monitor %s", monitoring_path);
 			strncpy(bmi->path, monitoring_path, sizeof(bmi->path));
 			free(monitoring_path);
 			block_monitor_list = g_slist_prepend(block_monitor_list, bmi);
