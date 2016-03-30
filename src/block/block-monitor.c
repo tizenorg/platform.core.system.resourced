@@ -57,7 +57,7 @@
 #define FAN_MODE_ACCESS		"ACCESS"
 #define FAN_MODE_READ		"READ"
 #define FAN_MODE_WRITE		"WRITE"
-#define FAN_MODE_DISALBE	"DISALBE"
+#define FAN_MODE_DISABLE	"DISABLE"
 #define MAX_LOGGING_LIMIT	0x20000
 
 enum block_mount_type {
@@ -89,7 +89,7 @@ int convert_fanotify_mode(const char *mode)
 		famode |= FAN_CLOSE_NOWRITE;
 	else if (!strncmp(mode, FAN_MODE_WRITE, sizeof(FAN_MODE_WRITE)))
 		famode |= FAN_CLOSE_WRITE;
-	else if (!strncmp(mode, FAN_MODE_DISALBE, sizeof(FAN_MODE_DISALBE)))
+	else if (!strncmp(mode, FAN_MODE_DISABLE, sizeof(FAN_MODE_DISABLE)))
 		famode = 0;
 	return famode;
 }
