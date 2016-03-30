@@ -241,7 +241,7 @@ static void sluggish_get_summary(char *timestamp, int slug_vertical, int pid, do
 	char buf[MAX_BUF_LEN] = "";
 	char batbuf[MAX_BUF_LEN] = "";
 	char proc[MAX_FILENAME_LEN];
-	struct statvfs s;
+	struct storage_size s;
 	double int_tot = 0;
 	double int_free = 0;
 	double ext_tot = 0;
@@ -261,22 +261,22 @@ static void sluggish_get_summary(char *timestamp, int slug_vertical, int pid, do
 	*/
 
 	/* Get internal memory status */
-	memset(&s, 0x00, sizeof(struct statvfs));
+	memset(&s, 0x00, sizeof(struct storage_size));
 	if (storage_get_size(INTERNAL, &s) < 0 ) {
 		_E("Fail to get internal memory size");
 	} else {
-		int_tot = ((double)s.f_frsize * s.f_blocks) / KILOBYTE;
-		int_free = ((double)s.f_bsize * s.f_bavail) / KILOBYTE;
+		int_tot = s.total_size;
+		int_free = s.free_size;
 		_I("Internal Memory Status:Total : %lfKB, Avail : %lfKB", int_tot, int_free);
 	}
 
 	/* Get external memory status */
-	memset(&s, 0x00, sizeof(struct statvfs));
+	memset(&s, 0x00, sizeof(struct storage_size));
 	if (storage_get_size(EXTERNAL, &s) < 0 ) {
 		_E("Fail to get external memory size");
 	} else {
-		ext_tot = ((double)s.f_frsize * s.f_blocks) / KILOBYTE;
-		ext_free = ((double)s.f_bsize * s.f_bavail) / KILOBYTE;
+		ext_tot = s.total_size;
+		ext_free = s.free_size;
 		_I("External Memory Status:Total : %lfKB, Avail : %lfKB", ext_tot, ext_free);
 	}
 	snprintf(file_name, sizeof(file_name), "%s/%s/summary", SLUGGISH_PATH, timestamp);
