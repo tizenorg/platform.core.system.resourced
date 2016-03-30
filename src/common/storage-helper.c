@@ -31,9 +31,7 @@
 #include <mntent.h>
 #include <storage.h>
 
-#define PATH_MAX	256
-#define INTERNAL_MEMORY_PATH	 "/opt/usr"
-#define EXTERNAL_MEMORY_PATH	 RD_SYS_STORAGE"/sdcard"
+#define BUF_MAX	256
 
 bool is_mounted(const char* path)
 {
@@ -72,65 +70,112 @@ static bool get_storage_id(int sid, storage_type_e type, storage_state_e state,
 	return true;
 }
 
-resourced_ret_c get_storage_root_path(int type, char **path)
+resourced_ret_c get_storage_root_paths(int type, GSList **paths)
 {
 	struct rd_storage target;
+	DIR *dp;
+	struct dirent dentry;
+	struct dirent *result;
+	char *root_path;
+	char buf[BUF_MAX];
 
-	if (type == INTERNAL)
-		target.type = STORAGE_TYPE_INTERNAL;
-	else if (type == EXTERNAL)
+	switch (type) {
+	case INTERNAL:
+		_D("Start finding internal root path of all users");
+		dp = opendir("/home");
+		if (!dp) {
+			_E("Fail to open /home");
+			return RESOURCED_ERROR_FAIL;
+		}
+
+		while (!readdir_r(dp, &dentry, &result) && result != NULL) {
+			if(dentry.d_name[0] == '.')
+				continue;
+			if(snprintf(buf, BUF_MAX, "/home/%s/content", dentry.d_name) < 0) {
+				_D("Fail to make root path of %s. This path will not be included", dentry.d_name);
+				continue;
+			}
+			if (!opendir(buf)) {
+				_D("User %s doesn't have content path", dentry.d_name);
+				continue;
+			}
+			root_path = strdup(buf);
+			_D("Find new root path : %s", root_path);
+			*paths = g_slist_append(*paths, root_path);
+		}
+		break;
+	case EXTERNAL:
+		_D("Start finding external root path");
 		target.type = STORAGE_TYPE_EXTERNAL;
-	else {
+		target.id = -1;
+		if (storage_foreach_device_supported(get_storage_id,
+					&target) != STORAGE_ERROR_NONE) {
+			_E("Failed to get storage ID");
+			return RESOURCED_ERROR_FAIL;
+		}
+
+		if(target.id >= 0) {
+			if (storage_get_root_directory(target.id, &root_path)
+					!= STORAGE_ERROR_NONE) {
+				_E("Failed to get root path of storage");
+				return RESOURCED_ERROR_FAIL;
+			}
+			_D("External root path = %s", root_path);
+			*paths = g_slist_append(*paths, root_path);
+		}
+		break;
+	default:
 		_E("Invalid storage type");
 		return RESOURCED_ERROR_INVALID_PARAMETER;
-	}
+	};
 
-	if (storage_foreach_device_supported(get_storage_id,
-				&target) != STORAGE_ERROR_NONE) {
-		_E("Failed to get storage ID");
-		return RESOURCED_ERROR_FAIL;
-	}
-
-	if (storage_get_root_directory(target.id, path)
-			!= STORAGE_ERROR_NONE) {
-		_E("Failed to get root path of storage");
+	if (g_slist_length(*paths) < 1) {
+		_E("There is no %s storage",
+				(type == INTERNAL ? "internal" : "external"));
 		return RESOURCED_ERROR_FAIL;
 	}
 
 	return RESOURCED_ERROR_NONE;
 }
 
-resourced_ret_c storage_get_size(int type, struct statvfs *buf)
+void add_size(gpointer elem, gpointer acc_size)
 {
-	int ret;
-	char *path;
-	char errbuf[PATH_MAX];
+	struct statvfs buf;
+	struct storage_size *ssp = (struct storage_size*)acc_size;
+	char *path = (char*)(((GSList*)elem)->data);
+	int ret = statvfs(path, &buf);
+	if (ret) {
+		_E("statvfs() about %s failed (%d)", path, errno);
+		return;
+	}
 
-	if (get_storage_root_path(type, &path) != RESOURCED_ERROR_NONE) {
+	ssp->total_size = ((double)buf.f_frsize * buf.f_blocks) / KB;
+	ssp->free_size = ((double)buf.f_bsize * buf.f_bavail) / KB;
+}
+
+resourced_ret_c storage_get_size(int type, struct storage_size *size)
+{
+	GSList *paths = NULL;
+
+	if (get_storage_root_paths(type, &paths) != RESOURCED_ERROR_NONE) {
 		_E("Failed to get storage path");
 		goto fail;
 	}
 
-	_I("Path:%s", path);
-	if (type == EXTERNAL) {
-		if (!is_mounted(path)) {
-			memset(buf, 0, sizeof(struct statvfs));
-			goto success;
-		}
-	}
+	memset(size, 0x00, sizeof(struct storage_size));
+	g_slist_foreach(paths, add_size, size);
 
-	ret = statvfs(path, buf);
-	if (ret) {
-		_E("statvfs() failed. Path:%s err:%s", path, strerror_r(errno, errbuf, sizeof(errbuf)));
+	if (type == INTERNAL && size->total_size <= 0) {
+		_E("Failed to get internal storage size");
 		goto fail;
 	}
 	goto success;
 
 fail:
-	free(path);
+	g_slist_free(paths);
 	return RESOURCED_ERROR_FAIL;
 
 success:
-	free(path);
+	g_slist_free(paths);
 	return RESOURCED_ERROR_NONE;
 }

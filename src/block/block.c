@@ -51,6 +51,7 @@
 #define BLOCK_CONF_ACTIVATED	"TRUE"
 
 static GSList *block_monitor_list;
+static struct block_monitor_info *block_monitor_conf;
 
 static void free_exclude_key(gpointer data)
 {
@@ -58,10 +59,35 @@ static void free_exclude_key(gpointer data)
 		free(data);
 }
 
+static void add_monitoring_path(gpointer elem, gpointer not_used)
+{
+	char *monitoring_path = (char*)elem;
+	struct block_monitor_info *bmi = (struct block_monitor_info*)malloc(sizeof(struct block_monitor_info));
+	if (!bmi) {
+		_E("Failed to add monitoring path %s", monitoring_path);
+		return;
+	}
+
+	strncpy(bmi->path, monitoring_path, sizeof(bmi->path));
+	block_monitor_list = g_slist_prepend(block_monitor_list, bmi);
+}
+
+static void register_monitoring_path(gpointer elem, gpointer not_used)
+{
+	struct block_monitor_info *bmi = (struct block_monitor_info*)elem;
+
+	bmi->mode = block_monitor_conf->mode;
+	bmi->block_include_proc = block_monitor_conf->block_include_proc;
+	bmi->block_exclude_path = block_monitor_conf->block_exclude_path;
+	bmi->logging = block_monitor_conf->logging;
+
+	if (register_fanotify(bmi) != RESOURCED_ERROR_NONE)
+		_D("Fail to register monitoring path %s", bmi->path);
+}
+
 static int load_block_config(struct parse_result *result, void *user_data)
 {
-	struct block_monitor_info *bmi;
-	char *monitoring_path;
+	GSList *monitoring_paths = NULL;
 
 	if (!result)
 		return RESOURCED_ERROR_NO_DATA;
@@ -75,57 +101,48 @@ static int load_block_config(struct parse_result *result, void *user_data)
 	if (MATCH(result->name, "activate")) {
 		if (!strncmp(result->value, BLOCK_CONF_ACTIVATED,
 					sizeof(BLOCK_CONF_ACTIVATED))) {
-			bmi = calloc(1, sizeof(struct block_monitor_info));
-			if (!bmi) {
-				_E("Failed to create monitor info");
-				return RESOURCED_ERROR_OUT_OF_MEMORY;
-			}
-			if (get_storage_root_path(INTERNAL, &monitoring_path) != RESOURCED_ERROR_NONE) {
+			_D("Start to add monitoring path");
+			if (get_storage_root_paths(INTERNAL, &monitoring_paths) != RESOURCED_ERROR_NONE) {
 				_E("Failed to find monitoring path");
 				return RESOURCED_ERROR_FAIL;
 			}
-			_D("Start to monitor %s", monitoring_path);
-			strncpy(bmi->path, monitoring_path, sizeof(bmi->path));
-			free(monitoring_path);
-			block_monitor_list = g_slist_prepend(block_monitor_list, bmi);
+
+			_D("There are %d monitoring paths", g_slist_length(monitoring_paths));
+
+			g_slist_foreach(monitoring_paths, add_monitoring_path, NULL);
+			g_slist_free(monitoring_paths);
 		}
 	} else if (MATCH(result->name, "mode")) {
-		bmi = (struct block_monitor_info *)g_slist_nth_data(block_monitor_list, 0);
-		SET_CONF(bmi->mode, convert_fanotify_mode(result->value));
+		SET_CONF(block_monitor_conf->mode, convert_fanotify_mode(result->value));
 
 	} else if (MATCH(result->name, "include")) {
-			bmi = (struct block_monitor_info *)g_slist_nth_data(block_monitor_list, 0);
-			if (!bmi->block_include_proc)
-				bmi->block_include_proc = g_hash_table_new_full(
-						g_str_hash, g_str_equal, free_exclude_key, NULL);
+		if (!block_monitor_conf->block_include_proc)
+			block_monitor_conf->block_include_proc = g_hash_table_new_full(
+					g_str_hash, g_str_equal, free_exclude_key, NULL);
+		g_hash_table_insert(block_monitor_conf->block_include_proc,
+				g_strndup(result->value, strlen(result->value)),
+			    GINT_TO_POINTER(1));
 
 	} else if (MATCH(result->name, "exclude")) {
-		bmi = (struct block_monitor_info *)g_slist_nth_data(block_monitor_list, 0);
-		if (!bmi->block_exclude_path)
-			bmi->block_exclude_path = g_hash_table_new_full(
+		if (!block_monitor_conf->block_exclude_path)
+			block_monitor_conf->block_exclude_path = g_hash_table_new_full(
 				    g_str_hash, g_str_equal, free_exclude_key, NULL);
-		g_hash_table_insert(bmi->block_exclude_path, g_strndup(result->value, strlen(result->value)),
+		g_hash_table_insert(block_monitor_conf->block_exclude_path,
+				g_strndup(result->value, strlen(result->value)),
 			    GINT_TO_POINTER(1));
 
 	} else if (MATCH(result->name, "logging")) {
-		bmi = (struct block_monitor_info *)g_slist_nth_data(block_monitor_list, 0);
-		SET_CONF(bmi->logging, atoi(result->value));
+		SET_CONF(block_monitor_conf->logging, atoi(result->value));
 
 	} else if (MATCH(result->name, "configend")) {
-		int ret;
+		if (block_monitor_conf->mode)
+			g_slist_foreach(block_monitor_list, register_monitoring_path, NULL);
 
-		bmi = (struct block_monitor_info *)g_slist_nth_data(block_monitor_list, 0);
-		if (bmi->mode) {
-			ret = register_fanotify(bmi);
-			if (ret == RESOURCED_ERROR_NONE)
-				return ret;
-		}
-		block_monitor_list = g_slist_remove(block_monitor_list, bmi);
-		if (bmi->block_exclude_path)
-			g_hash_table_destroy(bmi->block_exclude_path);
-		if (bmi->block_include_proc)
-			g_hash_table_destroy(bmi->block_include_proc);
-		free(bmi);
+		if (block_monitor_conf->block_exclude_path)
+			g_hash_table_destroy(block_monitor_conf->block_exclude_path);
+		if (block_monitor_conf->block_include_proc)
+			g_hash_table_destroy(block_monitor_conf->block_include_proc);
+		g_slist_free(block_monitor_list);
 	}
        return RESOURCED_ERROR_NONE;
 }
@@ -153,7 +170,9 @@ static int block_prelaunch_state(void *data)
 
 static int block_booting_done(void *data)
 {
+	block_monitor_conf = (struct block_monitor_info*)malloc(sizeof(struct block_monitor_info));
 	config_parse(BLOCK_CONF_FILE, load_block_config, NULL);
+	free(block_monitor_conf);
 	return RESOURCED_ERROR_NONE;
 }
 
@@ -180,6 +199,7 @@ static int resourced_block_exit(void *data)
 	}
 	unregister_notifier(RESOURCED_NOTIFIER_BOOTING_DONE, block_booting_done);
 	unregister_notifier(RESOURCED_NOTIFIER_APP_PRELAUNCH, block_prelaunch_state);
+
 	return RESOURCED_ERROR_NONE;
 }
 

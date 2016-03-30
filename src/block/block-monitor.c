@@ -267,7 +267,7 @@ int register_fanotify(struct block_monitor_info *bmi)
 	if (!bmi || !strlen(bmi->path))
 		return RESOURCED_ERROR_NO_DATA;
 
-	_D("monitor register : path %s, mode %d", bmi->path, bmi->mode);
+	_D("monitor register : path %s, mode %08x", bmi->path, bmi->mode);
 
 	bmi->mfd = fanotify_init(FAN_CLOEXEC|FAN_NONBLOCK | FAN_CLASS_CONTENT,
 			    O_RDONLY | O_LARGEFILE | O_CLOEXEC | O_NOATIME);
