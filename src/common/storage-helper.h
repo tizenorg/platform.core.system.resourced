@@ -29,21 +29,35 @@
 #include "resourced.h"
 #include <stdbool.h>
 #include <sys/statvfs.h>
+#include <glib.h>
+
+#define KB 1024
 
 enum storage_type {
 	INTERNAL = 1,
 	EXTERNAL
 };
 
+struct storage_size {
+	double total_size;
+	double free_size;
+};
+
 bool is_mounted(const char* path);
 
-resourced_ret_c get_storage_root_path(int type, char **path);
+/**
+ * @desc gets storage root paths
+ * @param type-INTERNAL/EXTERNAL, paths-root paths
+ *       (internal : number of users(having content directory), external : one(=sdcard))
+ * @return negative value if error
+ */
+resourced_ret_c get_storage_root_paths(int type, GSList **paths);
 
 /**
  * @desc gets storage details
- * @param type-INTERNAL/EXTERNAL, buf-storage details
+ * @param type-INTERNAL/EXTERNAL, size-storage details
  * @return negative value if error
  */
-resourced_ret_c storage_get_size(int type, struct statvfs *buf);
+resourced_ret_c storage_get_size(int type, struct storage_size *size);
 
 #endif  /*_RESOURCED_STORAGE_HELPER_H_*/
