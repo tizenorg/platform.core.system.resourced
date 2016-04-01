@@ -171,10 +171,25 @@ int make_cgroup_subdir(const char* parentdir, const char* cgroup_name, bool *alr
 
 	cgroup_exists = is_cgroup_exists(buf);
 	if (!cgroup_exists) {
+		if (!parentdir) {
+			ret = mount("tmpfs", DEFAULT_CGROUP, "tmpfs",
+					MS_REMOUNT|MS_NOSUID|MS_NOEXEC|MS_NODEV|MS_STRICTATIME, "mode=755");
+			if (ret < 0) {
+				_E("Fail to RW mount cgroup directory. Can't make %s cgroup", cgroup_name);
+				return RESOURCED_ERROR_FAIL;
+			}
+		}
+
 		ret = create_cgroup(buf);
 		ret_value_msg_if(ret < 0, RESOURCED_ERROR_FAIL,
-			"cpu cgroup create fail : err %d, name %s", errno,
-				cgroup_name);
+			"Fail to create cgroup %s : err %d", cgroup_name, errno);
+
+		if (!parentdir) {
+			ret = mount("tmpfs", DEFAULT_CGROUP, "tmpfs",
+					MS_REMOUNT|MS_NOSUID|MS_NOEXEC|MS_NODEV|MS_STRICTATIME|MS_RDONLY, "mode=755");
+			if (ret < 0)
+				_D("Fail to RO mount");
+		}
 	}
 
 	if (already)
