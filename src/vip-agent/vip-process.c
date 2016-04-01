@@ -189,7 +189,7 @@ static int resourced_vip_process_init(void *data)
 		return RESOURCED_ERROR_NONE;
 
 	if (!is_mounted(VIP_CGROUP)) {
-		r = make_cgroup_subdir(DEFAULT_CGROUP, "vip", NULL);
+		r = make_cgroup_subdir(NULL, VIP_CGROUP, NULL);
 		if (r < 0) {
 			_E("failed to make vip cgroup");
 			return RESOURCED_ERROR_FAIL;
