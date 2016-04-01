@@ -171,7 +171,11 @@ int make_cgroup_subdir(const char* parentdir, const char* cgroup_name, bool *alr
 
 	cgroup_exists = is_cgroup_exists(buf);
 	if (!cgroup_exists) {
+		mount("tmpfs", "/sys/fs/cgroup", "tmpfs",
+				MS_REMOUNT|MS_NOSUID|MS_NOEXEC|MS_NODEV|MS_STRICTATIME, "mode=755");
 		ret = create_cgroup(buf);
+		mount("tmpfs", "/sys/fs/cgroup", "tmpfs",
+				MS_REMOUNT|MS_NOSUID|MS_NOEXEC|MS_NODEV|MS_STRICTATIME|MS_RDONLY, "mode=755");
 		ret_value_msg_if(ret < 0, RESOURCED_ERROR_FAIL,
 			"cpu cgroup create fail : err %d, name %s", errno,
 				cgroup_name);
