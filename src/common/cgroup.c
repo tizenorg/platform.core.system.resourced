@@ -171,7 +171,7 @@ int make_cgroup_subdir(const char* parentdir, const char* cgroup_name, bool *alr
 
 	cgroup_exists = is_cgroup_exists(buf);
 	if (!cgroup_exists) {
-		if (!parentdir) {
+		if (!strncmp(parentdir, DEFAULT_CGROUP, sizeof(DEFAULT_CGROUP))) {
 			ret = mount("tmpfs", DEFAULT_CGROUP, "tmpfs",
 					MS_REMOUNT|MS_NOSUID|MS_NOEXEC|MS_NODEV|MS_STRICTATIME, "mode=755");
 			if (ret < 0) {
@@ -184,7 +184,7 @@ int make_cgroup_subdir(const char* parentdir, const char* cgroup_name, bool *alr
 		ret_value_msg_if(ret < 0, RESOURCED_ERROR_FAIL,
 			"Fail to create cgroup %s : err %d", cgroup_name, errno);
 
-		if (!parentdir) {
+		if (!strncmp(parentdir, DEFAULT_CGROUP, sizeof(DEFAULT_CGROUP))) {
 			ret = mount("tmpfs", DEFAULT_CGROUP, "tmpfs",
 					MS_REMOUNT|MS_NOSUID|MS_NOEXEC|MS_NODEV|MS_STRICTATIME|MS_RDONLY, "mode=755");
 			if (ret < 0)
