@@ -1818,6 +1818,7 @@ static int create_memcgs(void)
 	GSList *iter = NULL;
 	struct memcg_info *mi;
 	char *name;
+	char parent_dir[MAX_PATH_LENGTH];
 
 	/* skip for memory cgroup */
 	for (i = 0; i < MEMCG_MAX; i++) {
@@ -1825,17 +1826,18 @@ static int create_memcgs(void)
 			continue;
 		mi = memcg_tree[i]->info;
 		name = mi->name;
-		ret = make_cgroup_subdir(NULL, name, NULL);
+		ret = make_cgroup_subdir(LOWMEM_DEFAULT_CGROUP, memcg_name[i], NULL);
+		_D("Create subcgroup of memory : name = %s, ret = %d", memcg_name[i], ret);
 		if (!memcg_tree[i]->use_hierarchy)
 			continue;
-		_D("create memory cgroup for %s, ret = %d", name, ret);
 		/* create sub cgroups */
 		gslist_for_each_item(iter, memcg_tree[i]->cgroups) {
-			mi = (struct memcg_info *)
-					iter->data;
-			name = mi->name;
-			ret = make_cgroup_subdir(NULL, name, NULL);
-			_D("make cgroup subdir for %s, ret = %d", name, ret);
+			mi = (struct memcg_info *)iter->data;
+			name = strstr(mi->name, memcg_name[i]) + strlen(memcg_name[i]) + 1;
+			snprintf(parent_dir, MAX_PATH_LENGTH,
+					"%s/%s", LOWMEM_DEFAULT_CGROUP, memcg_name[i]);
+			ret = make_cgroup_subdir(parent_dir, name, NULL);
+			_D("Create subcgroup of memory/%s : name = %s, ret = %d", memcg_name[i], name, ret);
 		}
 	}
 
