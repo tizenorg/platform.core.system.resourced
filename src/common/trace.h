@@ -70,7 +70,7 @@ extern enum log_type logtype;
 #define _I(fmt, arg...) do {				\
 	switch (logtype) {					\
 	case LOG_TYPE_DLOG:				\
-		LOGD(fmt, ##arg);			\
+		LOGI(fmt, ##arg);			\
 	default:					\
 		log_write(LOG_INFO, fmt, ##arg);	\
 	}						\
