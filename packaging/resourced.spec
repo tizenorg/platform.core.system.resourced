@@ -176,6 +176,7 @@ export FFLAGS="$FFLAGS -DTIZEN_DEBUG_ENABLE"
 	 -DTESTS_MODULE=%{tests_module} \
 	 -DMEM_STRESS=%{mem_stress} \
 	 -DDEBUG_LOG=%{debug_log} \
+	 -DRD_SYS_HOME=%{TZ_SYS_HOME} \
 	 -DRD_SYS_ETC=%{TZ_SYS_ETC} \
 	 -DRD_SYS_STORAGE=%{TZ_SYS_STORAGE} \
 	 -DRD_SYS_DATA=%{TZ_SYS_DATA} \

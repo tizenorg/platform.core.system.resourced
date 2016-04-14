@@ -82,16 +82,16 @@ resourced_ret_c get_storage_root_paths(int type, GSList **paths)
 	switch (type) {
 	case INTERNAL:
 		_D("Start finding internal root path of all users");
-		dp = opendir("/home");
+		dp = opendir(RD_SYS_HOME);
 		if (!dp) {
-			_E("Fail to open /home");
+			_E("Fail to open %s", RD_SYS_HOME);
 			return RESOURCED_ERROR_FAIL;
 		}
 
 		while (!readdir_r(dp, &dentry, &result) && result != NULL) {
 			if(dentry.d_name[0] == '.')
 				continue;
-			if(snprintf(buf, BUF_MAX, "/home/%s/content", dentry.d_name) < 0) {
+			if(snprintf(buf, BUF_MAX, "%s/%s/content", RD_SYS_HOME, dentry.d_name) < 0) {
 				_D("Fail to make root path of %s. This path will not be included", dentry.d_name);
 				continue;
 			}
