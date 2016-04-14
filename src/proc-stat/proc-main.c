@@ -232,17 +232,19 @@ struct proc_program_info *proc_add_program_list(const int type,
 
 	ppi = find_program_info(pkgname);
 	if (!ppi) {
-		_E("not found ppi : %s", pkgname);
+		_D("Can't find %s in the program list. Start to add it", pkgname);
 		ppi = calloc(sizeof(struct proc_program_info), 1);
-		if (!ppi)
+		if (!ppi) {
+			_E("Fail to add %s : not enough memory", pkgname);
 			return NULL;
+		}
 
 		if (pai->ai)
 			ppi->pkgname = pai->ai->pkgname;
 		else {
 			ppi->pkgname = strndup(pkgname, strlen(pkgname)+1);
 			if (!ppi->pkgname) {
-				_E("not enough memory");
+				_E("Fail to add %s : not enough memory", pkgname);
 				free(ppi);
 				return NULL;
 			}
