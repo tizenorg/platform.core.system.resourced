@@ -271,10 +271,10 @@ int register_fanotify(struct block_monitor_info *bmi)
 
 	bmi->mfd = fanotify_init(FAN_CLOEXEC|FAN_NONBLOCK | FAN_CLASS_CONTENT,
 			    O_RDONLY | O_LARGEFILE | O_CLOEXEC | O_NOATIME);
-	if (bmi->mfd< 0)  {
+	if (bmi->mfd< 0) {
 		_E("Failed to create fanotify fd");
 		goto error;
-        }
+	}
 	if (!check_mount_dest(bmi->path)) {
 		ret = mount(bmi->path, bmi->path, 0, MS_BIND, 0);
 		if (ret) {
@@ -284,10 +284,10 @@ int register_fanotify(struct block_monitor_info *bmi)
 		bmi->mount = BLOCK_MOUNT_BIND;
 	}
 	if (fanotify_mark(bmi->mfd, FAN_MARK_ADD | FAN_MARK_MOUNT,
-			    bmi->mode, AT_FDCWD, bmi->path) < 0) {
-		_E("Failed to mark fsnotify for %s", bmi->path);
-                goto error;
-        }
+				bmi->mode, AT_FDCWD, bmi->path) < 0) {
+		_E("Failed to mark fanotify for %s", bmi->path);
+		goto error;
+	}
 	bmi->fd_handler = ecore_main_fd_handler_add(
 		bmi->mfd, ECORE_FD_READ, block_monitor_cb, bmi, NULL, NULL);
 	block_logging_init(bmi);
