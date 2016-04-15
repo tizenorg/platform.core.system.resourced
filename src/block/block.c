@@ -62,7 +62,7 @@ static void free_exclude_key(gpointer data)
 static void add_monitoring_path(gpointer elem, gpointer not_used)
 {
 	char *monitoring_path = (char*)elem;
-	struct block_monitor_info *bmi = (struct block_monitor_info*)malloc(sizeof(struct block_monitor_info));
+	struct block_monitor_info *bmi = (struct block_monitor_info*)calloc(1, sizeof(struct block_monitor_info));
 	if (!bmi) {
 		_E("Failed to add monitoring path %s", monitoring_path);
 		return;
@@ -131,20 +131,10 @@ static int load_block_config(struct parse_result *result, void *user_data)
 				g_strndup(result->value, strlen(result->value)),
 			    GINT_TO_POINTER(1));
 
-	} else if (MATCH(result->name, "logging")) {
+	} else if (MATCH(result->name, "logging"))
 		SET_CONF(block_monitor_conf->logging, atoi(result->value));
 
-	} else if (MATCH(result->name, "configend")) {
-		if (block_monitor_conf->mode)
-			g_slist_foreach(block_monitor_list, register_monitoring_path, NULL);
-
-		if (block_monitor_conf->block_exclude_path)
-			g_hash_table_destroy(block_monitor_conf->block_exclude_path);
-		if (block_monitor_conf->block_include_proc)
-			g_hash_table_destroy(block_monitor_conf->block_include_proc);
-		g_slist_free(block_monitor_list);
-	}
-       return RESOURCED_ERROR_NONE;
+	return RESOURCED_ERROR_NONE;
 }
 
 static int block_prelaunch_state(void *data)
@@ -172,12 +162,15 @@ static int block_booting_done(void *data)
 {
 	config_parse(BLOCK_CONF_FILE, load_block_config, NULL);
 
+	if (block_monitor_conf->mode)
+		g_slist_foreach(block_monitor_list, register_monitoring_path, NULL);
+
 	return RESOURCED_ERROR_NONE;
 }
 
 static int resourced_block_init(void *data)
 {
-	block_monitor_conf = (struct block_monitor_info*)malloc(sizeof(struct block_monitor_info));
+	block_monitor_conf = (struct block_monitor_info*)calloc(1, sizeof(struct block_monitor_info));
 	if (!block_monitor_conf) {
 		_E("Fail to allocate memory");
 		return RESOURCED_ERROR_OUT_OF_MEMORY;
@@ -196,15 +189,13 @@ static int resourced_block_exit(void *data)
 	gslist_for_each_safe(block_monitor_list, iter, next, bmi) {
 		block_monitor_list = g_slist_remove(block_monitor_list, bmi);
 		unregister_fanotify(bmi);
-		if (bmi->block_exclude_path)
-			g_hash_table_destroy(bmi->block_exclude_path);
-		if (bmi->block_include_proc)
-			g_hash_table_destroy(bmi->block_include_proc);
 		free(bmi);
 	}
 	unregister_notifier(RESOURCED_NOTIFIER_BOOTING_DONE, block_booting_done);
 	unregister_notifier(RESOURCED_NOTIFIER_APP_PRELAUNCH, block_prelaunch_state);
 
+	g_hash_table_destroy(block_monitor_conf->block_include_proc);
+	g_hash_table_destroy(block_monitor_conf->block_exclude_path);
 	free(block_monitor_conf);
 
 	return RESOURCED_ERROR_NONE;
