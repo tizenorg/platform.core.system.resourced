@@ -62,7 +62,7 @@ Source2:    resourced-cpucgroup.service
 %endif
 
 %define exclude_list_file_name resourced_proc_exclude.ini
-%define exclude_list_full_path /usr/etc/%{exclude_list_file_name}
+%define exclude_list_full_path %{TZ_SYS_ETC}/%{exclude_list_file_name}
 %define exclude_list_opt_full_path %{TZ_SYS_ETC}/%{exclude_list_file_name}
 %define database_full_path %{TZ_SYS_DB}/.resourced-datausage.db
 
