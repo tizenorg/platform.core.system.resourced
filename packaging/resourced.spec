@@ -27,8 +27,6 @@ Source2:    resourced-cpucgroup.service
 
 %define swap_module ON
 %define freezer_module OFF
-%define tethering_feature OFF
-%define telephony_feature OFF
 
 %define tests_module OFF
 
@@ -38,27 +36,21 @@ Source2:    resourced-cpucgroup.service
 	%define swap_module OFF
 	%define freezer_module OFF
 	%define network_state OFF
-	%define tethering_feature OFF
 	%define wearable_noti OFF
-	%define telephony_feature OFF
 %endif
 
 %if "%{?profile}" == "wearable"
 	%define freezer_module OFF
 	%define swap_module OFF
 	%define network_state OFF
-	%define tethering_feature OFF
 	%define wearable_noti ON
-	%define telephony_feature OFF
 %endif
 
 %if "%{?profile}" == "tv"
 	%define freezer_module OFF
 	%define swap_module OFF
 	%define network_state OFF
-	%define tethering_feature OFF
 	%define wearable_noti OFF
-	%define telephony_feature OFF
 %endif
 
 %define exclude_list_file_name resourced_proc_exclude.ini
@@ -166,7 +158,6 @@ export FFLAGS="$FFLAGS -DTIZEN_DEBUG_ENABLE"
 	 -DCPU_MODULE=%{cpu_module} \
 	 -DMEMORY_ENG=%{memory_eng} \
 	 -DVIP_AGENT=%{vip_agent_module} \
-	 -DTELEPHONY_FEATURE=%{telephony_feature} \
 	 -DTIMER_SLACK=%{timer_slack} \
 	 -DHEART_MODULE=%{heart_module} \
 	 -DDATAUSAGE_TYPE=NFACCT \
