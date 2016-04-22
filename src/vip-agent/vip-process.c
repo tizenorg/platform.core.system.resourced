@@ -136,21 +136,29 @@ static void vip_create_systemd_service_groups(void)
 
 	FOREACH_STRV(pname, arg_vip_systemd_services) {
 		_cleanup_free_ char *err_msg = NULL;
-		unsigned int u = 0;
 		int r;
+		char path[128];
+		FILE *fp;
+		pid_t pid;
 
-		r = systemd_get_service_property_as_uint32(*pname,
-							  "ExecMainPID",
-							  &u,
-							  &err_msg);
-		if (r < 0 || !u) {
-			_E("failed to get ExecMainPid of "
-			   "'%s' systemd service: %s", *pname, err_msg);
+		if (snprintf(path, 128, "%s/systemd/system.slice/%s/tasks",
+					DEFAULT_CGROUP, *pname) < 0) {
+			_E("Fail to make task path");
 			continue;
 		}
 
-		if (u > 0) {
-			r = vip_create_sub_cgroup(*pname, (pid_t)u);
+		fp = fopen(path, "r");
+		if (!fp) {
+			_E("%s is user level service or not running", *pname);
+			continue;
+		}
+
+		if (fscanf(fp, "%d", &pid) < 0) {
+			_E("Fail to get pid of %s", *pname);
+			continue;
+		}
+		if (pid > 0) {
+			r = vip_create_sub_cgroup(*pname, pid);
 			if (r < 0)
 				_E("failed to create "
 				   "sub cgroup of '%s', ignoring", *pname);
