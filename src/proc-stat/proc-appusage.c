@@ -41,7 +41,7 @@
 #endif
 
 #define UPDATE_INTERVAL	DAY_TO_SEC(1)
-#define APPUSAGE_CONF_FILE      "/etc/resourced/proc.conf"
+#define APPUSAGE_CONF_FILE      RD_CONFIG_FILE(proc)
 #define APPUSAGE_CONF_SECTION	"APPUSAGE"
 
 static int favorite_count;

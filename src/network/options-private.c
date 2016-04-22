@@ -36,7 +36,7 @@
 #include <stdlib.h>
 
 #define GENERAL_SECTION "General"
-#define NET_CONF_FILE "/etc/resourced/network.conf"
+#define NET_CONF_FILE RD_CONFIG_FILE(network)
 #define NET_UPDATE_PERIOD_NAME "update_period"
 #define NET_FLUSH_PERIOD_NAME "flush_period"
 

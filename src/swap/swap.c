@@ -57,7 +57,7 @@
 #define SWAP_OFF_EXEC_PATH		"/sbin/swapoff"
 #define SWAP_MKSWAP_EXEC_PATH		"/sbin/mkswap"
 
-#define SWAP_CONF_FILE			"/etc/resourced/swap.conf"
+#define SWAP_CONF_FILE			RD_CONFIG_FILE(swap)
 #define SWAP_CONTROL_SECTION		"CONTROL"
 #define SWAP_CONF_STREAMS		"MAX_COMP_STREAMS"
 #define SWAP_CONF_ALGORITHM		"COMP_ALGORITHM"

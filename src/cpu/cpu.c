@@ -61,7 +61,7 @@
 #define CPU_CONTROL_DOWNLOAD_GROUP "/sys/fs/cgroup/cpu/background/download"
 #define CPU_CONTROL_CPUQUOTA_GROUP "/sys/fs/cgroup/cpu/background/quota"
 #define CPU_CONTROL_BANDWIDTH	"/cpu.cfs_quota_us"
-#define CPU_CONF_FILE                  "/etc/resourced/cpu.conf"
+#define CPU_CONF_FILE     RD_CONFIG_FILE(cpu)
 #define CPU_CONF_SECTION	"CONTROL"
 #define CPU_CONF_PREDEFINE	"PREDEFINE"
 #define CPU_CONF_BOOTING	"BOOTING_PREDEFINE"

@@ -46,7 +46,7 @@
 #include "module-data.h"
 #include "vip-process.h"
 
-#define VIP_CONF_FILE	  	"/etc/resourced/vip-process.conf"
+#define VIP_CONF_FILE	  	RD_CONFIG_FILE(vip-process)
 
 static char **arg_vip_proc_names = NULL;
 static char **arg_vip_systemd_services = NULL;

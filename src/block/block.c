@@ -46,7 +46,7 @@
 #include "appinfo-list.h"
 #include "storage-helper.h"
 
-#define BLOCK_CONF_FILE                  "/etc/resourced/block.conf"
+#define BLOCK_CONF_FILE         RD_CONFIG_FILE(block)
 #define BLOCK_CONF_SECTION		"MONITOR"
 #define BLOCK_CONF_ACTIVATED	"TRUE"
 

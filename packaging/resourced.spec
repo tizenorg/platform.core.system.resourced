@@ -61,6 +61,8 @@ Source2:    resourced-cpucgroup.service
 %define logging_db_full_path %{TZ_SYS_DB}/.resourced-logging.db
 %define logging_storage_db_full_path %{TZ_SYS_DB}/.resourced-logging-storage.db
 
+%define rd_config_path /etc/resourced
+
 BuildRequires:  cmake
 BuildRequires:  pkgconfig(glib-2.0)
 BuildRequires:  pkgconfig(dlog)
@@ -174,7 +176,8 @@ export FFLAGS="$FFLAGS -DTIZEN_DEBUG_ENABLE"
 	 -DRD_SYS_DB=%{TZ_SYS_DB} \
 	 -DRD_SYS_SHARE=%{TZ_SYS_SHARE} \
 	 -DRD_SYS_VAR=%{TZ_SYS_VAR} \
-	 -DRD_USER_CONTENT=%{TZ_USER_CONTENT}
+	 -DRD_USER_CONTENT=%{TZ_USER_CONTENT} \
+	 -DRD_CONFIG_PATH=%{rd_config_path}
 
 make %{?jobs:-j%jobs}
 
@@ -238,7 +241,7 @@ fi
 	%config(noreplace) %attr(660,root,app) %{database_full_path}
 	%config(noreplace) %attr(660,root,app) %{database_full_path}-journal
 	/usr/bin/datausagetool
-	%config /etc/resourced/network.conf
+	%config %{rd_config_path}/network.conf
 	%{TZ_SYS_ETC}/upgrade/500.resourced-datausage.patch.sh
 	%attr(700,root,root) %{TZ_SYS_ETC}/upgrade/500.resourced-datausage.patch.sh
 	%{_bindir}/net-cls-release
@@ -248,35 +251,35 @@ fi
 %{_unitdir}/multi-user.target.wants/resourced.service
 %{_unitdir}/resourced.socket
 %{_unitdir}/sockets.target.wants/resourced.socket
-%config /etc/resourced/memory.conf
-%config /etc/resourced/proc.conf
+%config %{rd_config_path}/memory.conf
+%config %{rd_config_path}/proc.conf
 %if %{?cpu_module} == ON
-	%config /etc/resourced/cpu.conf
+	%config %{rd_config_path}/cpu.conf
 %else
 	%{_bindir}/resourced-cpucgroup.sh
 	%{_unitdir}/resourced-cpucgroup.service
 	%{_unitdir}/graphical.target.wants/resourced-cpucgroup.service
 %endif
 %if %{?swap_module} == ON
-	%config /etc/resourced/swap.conf
+	%config %{rd_config_path}/swap.conf
 %endif
 %if %{?vip_agent_module} == ON
-	%config /etc/resourced/vip-process.conf
+	%config %{rd_config_path}/vip-process.conf
 	%attr(-,root, root) %{_bindir}/vip-release-agent
 %endif
 %if %{?timer_slack} == ON
-	%config /etc/resourced/timer-slack.conf
+	%config %{rd_config_path}/timer-slack.conf
 %endif
 %if %{?block_module} == ON
-	%config /etc/resourced/block.conf
+	%config %{rd_config_path}/block.conf
 %endif
 %if %{?freezer_module} == ON
 	%{_libdir}/libsystem-freezer.so*
-	%config /etc/resourced/freezer.conf
+	%config %{rd_config_path}/freezer.conf
 %endif
 %{exclude_list_full_path}
 %if %{?heart_module} == ON
-	%config /etc/resourced/heart.conf
+	%config %{rd_config_path}/heart.conf
 	%attr(700, root, root) %{TZ_SYS_ETC}/dump.d/module.d/dump_heart_data.sh
 	%attr(700, app, app) %{logging_storage_db_full_path}
 	%attr(700, app, app) %{logging_storage_db_full_path}-shm

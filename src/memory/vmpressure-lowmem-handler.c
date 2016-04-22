@@ -81,7 +81,7 @@
 #define MEMCG_LIMIT_PATH		"memory.limit_in_bytes"
 #define MEMCG_EVENTFD_CONTROL		"cgroup.event_control"
 #define MEMCG_EVENTFD_MEMORY_PRESSURE	"memory.pressure_level"
-#define MEM_CONF_FILE                   "/etc/resourced/memory.conf"
+#define MEM_CONF_FILE                   RD_CONFIG_FILE(memory)
 #define MEM_VIP_SECTION			"VIP_PROCESS"
 #define MEM_VIP_PREDEFINE		"PREDEFINE"
 #define MEM_POPUP_SECTION		"POPUP"
