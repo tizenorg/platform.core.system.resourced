@@ -52,7 +52,7 @@
 #define TIMER_SLACK_ROOT		NULL
 #define TIMER_STATUS_POWERSAVING 	"POWERSAVING"
 
-#define TIMER_CONF_FILE	  	"/etc/resourced/timer-slack.conf"
+#define TIMER_CONF_FILE     RD_CONFIG_FILE(timer-slack)
 #define EXCLUDE_CONF_SECTION    	"EXCLUDE_TIMER_SLACK"
 #define EXCLUDE_CONF_NAME    	"EXCLUDE_PROC_NAME"
 

@@ -28,7 +28,7 @@
 #include <stdio.h>
 #include <time.h>
 
-#define HEART_CONF_FILE_PATH			"/etc/resourced/heart.conf"
+#define HEART_CONF_FILE_PATH		RD_CONFIG_FILE(heart)
 #define HEART_FILE_PATH				RD_SYS_DATA"/heart"
 #define HEART_CONF_SECTION			"HEART"
 

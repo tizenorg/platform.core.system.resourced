@@ -12,6 +12,8 @@ ADD_DEFINITIONS("-DRD_SYS_DB=\"${RD_SYS_DB}\"")
 ADD_DEFINITIONS("-DRD_SYS_SHARE=\"${RD_SYS_SHARE}\"")
 ADD_DEFINITIONS("-DRD_SYS_VAR=\"${RD_SYS_VAR}\"")
 
+ADD_DEFINITIONS("-DRD_CONFIG_PATH=\"${RD_CONFIG_PATH}\"")
+
 INCLUDE(${CMAKE_SOURCE_DIR}/cmake/InstallSymlink.cmake)
 INCLUDE(${CMAKE_SOURCE_DIR}/cmake/ProcessGPERF.cmake)
 
@@ -107,7 +109,7 @@ IF("${NETWORK_MODULE}" STREQUAL "ON")
 	  @ONLY)
 
   INSTALL(FILES ${NETWORK_SOURCE_DIR}/network.conf
-    DESTINATION /etc/resourced)
+	  DESTINATION ${RD_CONFIG_PATH})
   INSTALL(FILES ${NETWORK_SOURCE_DIR}/500.resourced-datausage.patch.sh
 	  DESTINATION ${RD_SYS_ETC}/upgrade)
 
@@ -299,19 +301,19 @@ INSTALL(FILES ${PROJECT_NAME}
 
 IF("${MEMORY_ENG}" STREQUAL "ON")
   INSTALL(FILES ${MEMORY_SOURCE_DIR}/memory_eng.conf
-    DESTINATION /etc/resourced RENAME memory.conf)
+	  DESTINATION ${RD_CONFIG_PATH} RENAME memory.conf)
 ELSE()
   INSTALL(FILES ${MEMORY_SOURCE_DIR}/memory_user.conf
-    DESTINATION /etc/resourced RENAME memory.conf)
+    DESTINATION ${RD_CONFIG_PATH} RENAME memory.conf)
 ENDIF()
 
 IF("${SWAP_MODULE}" STREQUAL "ON")
-  INSTALL(FILES ${SWAP_SOURCE_DIR}/swap.conf DESTINATION /etc/resourced)
+	INSTALL(FILES ${SWAP_SOURCE_DIR}/swap.conf DESTINATION ${RD_CONFIG_PATH})
 ENDIF()
 
 IF("${HEART_MODULE}" STREQUAL "ON")
   INSTALL(FILES ${HEART_SOURCE_DIR}/heart.conf
-    DESTINATION /etc/resourced RENAME heart.conf)
+	  DESTINATION ${RD_CONFIG_PATH} RENAME heart.conf)
   CONFIGURE_FILE(${HEART_SOURCE_DIR}/dump_heart_data.sh.in
 	  ${HEART_SOURCE_DIR}/dump_heart_data.sh
 	  @ONLY)
@@ -321,14 +323,14 @@ ENDIF()
 
 IF("${CPU_MODULE}" STREQUAL "ON")
   INSTALL(FILES ${CPU_SOURCE_DIR}/cpu.conf
-    DESTINATION /etc/resourced RENAME cpu.conf)
+	  DESTINATION ${RD_CONFIG_PATH} RENAME cpu.conf)
 ELSE()
   INSTALL(PROGRAMS ${CMAKE_BINARY_DIR}/scripts/resourced-cpucgroup.sh DESTINATION bin)
 ENDIF()
 
 IF("${TIMER_SLACK}" STREQUAL "ON")
   INSTALL(FILES ${TIMER_SOURCE_DIR}/timer-slack.conf
-    DESTINATION /etc/resourced RENAME timer-slack.conf)
+	  DESTINATION ${RD_CONFIG_PATH} RENAME timer-slack.conf)
 ENDIF()
 
 IF("${VIP_AGENT}" STREQUAL "ON")
@@ -337,23 +339,23 @@ IF("${VIP_AGENT}" STREQUAL "ON")
   INSTALL(TARGETS vip-release-agent DESTINATION bin)
   INSTALL(FILES ${VIP_SOURCE_DIR}/vip-process.conf
     DESTINATION
-    /etc/resourced RENAME vip-process.conf)
+	${RD_CONFIG_PATH} RENAME vip-process.conf)
 ENDIF()
 
 IF("${BLOCK_MODULE}" STREQUAL "ON")
 	INSTALL(FILES ${BLOCK_SOURCE_DIR}/block.conf
-		DESTINATION /etc/resourced RENAME block.conf)
+		DESTINATION ${RD_CONFIG_PATH} RENAME block.conf)
 ENDIF()
 
 IF("${FREEZER_MODULE}" STREQUAL "ON")
   INSTALL(FILES ${FREEZER_SOURCE_DIR}/freezer.conf
-    DESTINATION /etc/resourced RENAME freezer.conf)
+	  DESTINATION ${RD_CONFIG_PATH} RENAME freezer.conf)
   INSTALL(FILES ${FREEZER_SOURCE_DIR}/libsystem-freezer.so.${ARCH} DESTINATION ${LIB_INSTALL_DIR}
     RENAME libsystem-freezer.so)
 ENDIF()
 
 INSTALL(FILES ${PROC-STAT_SOURCE_DIR}/proc.conf
-  DESTINATION /etc/resourced RENAME proc.conf)
+	DESTINATION ${RD_CONFIG_PATH} RENAME proc.conf)
 
 ADD_EXECUTABLE(hashtest ${UTILS_SOURCE_DIR}/hashtest.c)
 TARGET_LINK_LIBRARIES(hashtest ${RESOURCED_REQUIRE_PKGS_LDFLAGS})

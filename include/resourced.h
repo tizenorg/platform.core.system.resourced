@@ -42,6 +42,7 @@ extern "C" {
 #define RESOURCED_ALL_APP "RESOURCED_ALL_APPLICATION_IDENTIFIER"
 #define TETHERING_APP_NAME "RESOURCED_TETHERING_APPLICATION_IDENTIFIER"
 
+#define RD_CONFIG_FILE(name) RD_CONFIG_PATH"/"#name".conf"
 
 /**
  * @brief return code of the rsml's function
