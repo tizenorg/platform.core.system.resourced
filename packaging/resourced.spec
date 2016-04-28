@@ -34,7 +34,7 @@ Source2:    resourced-cpucgroup.service
 
 %if "%{?profile}" == "mobile"
 	%define swap_module OFF
-	%define freezer_module OFF
+	%define freezer_module ON
 	%define network_state OFF
 	%define wearable_noti OFF
 %endif
