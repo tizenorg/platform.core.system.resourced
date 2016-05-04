@@ -76,6 +76,9 @@
 #define MEMPS_LOG_PATH			"/var/log/"
 #define MEMPS_LOG_FILE			MEMPS_LOG_PATH"memps"
 #define MEMPS_EXEC_PATH			"usr/bin/memps"
+#define MAX_MEMPS_LOGS			50
+#define NUM_RM_LOGS			5
+
 #define MEMCG_MOVE_CHARGE_PATH		"memory.move_charge_at_immigrate"
 #define MEMCG_OOM_CONTROL_PATH		"memory.oom_control"
 #define MEMCG_LIMIT_PATH		"memory.limit_in_bytes"
@@ -99,9 +102,7 @@
 #define OOM_TIMER_INTERVAL		2
 #define OOM_KILLER_PRIORITY		-20
 #define MAX_FD_VICTIMS			10
-#define MAX_MEMPS_LOGS			50
 #define MAX_FGRD_KILL			3
-#define NUM_RM_LOGS			5
 #define THRESHOLD_MARGIN		10 /* MB */
 
 #define MEM_SIZE_64			64  /* MB */
@@ -174,6 +175,8 @@
 #define MEMCG_MEMORY_2048_THRES_LOW		200 /* MB */
 #define MEMCG_MEMORY_2048_THRES_MEDIUM		160 /* MB */
 #define MEMCG_MEMORY_2048_THRES_LEAVE		300 /* MB */
+
+extern int is_memps_exist;
 
 static unsigned proactive_threshold;
 static unsigned proactive_leave;
@@ -598,7 +601,7 @@ static void lowmem_kill_victim(struct task_info *tsk,
 	}
 
 	/* make memps log for killing application firstly */
-	if (!memps_log)
+	if (is_memps_exist && !memps_log)
 		make_memps_log(MEMPS_LOG_FILE, pid, appname);
 
 	total += *total_size + ((float)tsk->size * LOWMEM_RSS_RATIO);
@@ -631,7 +634,8 @@ static void lowmem_kill_victim(struct task_info *tsk,
 		lowmem_launch_oompopup();
 		oom_popup = true;
 	}
-	if (memps_log)
+
+	if (is_memps_exist && memps_log)
 		make_memps_log(MEMPS_LOG_FILE, pid, appname);
 }
 
@@ -1024,7 +1028,8 @@ static int lowmem_oom_killer_cb(int type, struct memcg_info *mi, int flags,
 			lowmem_check_current_state(mi) >= 0)
 		return count;
 
-	clear_logs(MEMPS_LOG_PATH);
+	if (is_memps_exist)
+		clear_logs(MEMPS_LOG_PATH);
 	return count;
 }
 

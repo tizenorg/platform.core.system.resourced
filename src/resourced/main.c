@@ -39,6 +39,8 @@
 #include <mcheck.h>
 #include <systemd/sd-daemon.h>
 
+int is_memps_exist;
+
 int main(int argc, char **argv)
 {
 	int ret_code = 0;
@@ -62,6 +64,16 @@ int main(int argc, char **argv)
 		modules_early_init(NULL);
 	}
 	sd_notify(0, "READY=1");
+
+	is_memps_exist = 0;
+#ifdef MEMPS_LOG
+	FILE *fp = fopen("/usr/bin/memps", "r");
+	if (fp != NULL) {
+		is_memps_exist = 1;
+		fclose(fp);
+		_D("memps logging is enabled");
+	}
+#endif
 
 	ecore_main_loop_begin();
 	modules_exit(NULL);

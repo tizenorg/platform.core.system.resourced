@@ -58,6 +58,8 @@
 
 static int sluggish_count;	/* sluggish notification count*/
 
+extern int is_memps_exist;
+
 enum sluggish_event {
 	GRAPHICS = 1,	/* Graphics vertical */
 	MULTIMEDIA	/* Multimedia vertical */
@@ -182,6 +184,8 @@ static void sluggish_get_mem_status(char *timestamp)
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(sluggish_memstat); i++) {
+		if (!strncmp(sluggish_memstat[i].type, "memps", 5) && !is_memps_exist)
+			continue;
 		sluggish_memstat[i].func(timestamp);
 	}
 }
