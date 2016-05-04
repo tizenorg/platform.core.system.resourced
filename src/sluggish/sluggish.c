@@ -182,6 +182,8 @@ static void sluggish_get_mem_status(char *timestamp)
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(sluggish_memstat); i++) {
+		if (!strncmp(sluggish_memstat[i].type, "memps", 5) && access("/usr/bin/memps", X_OK))
+			continue;
 		sluggish_memstat[i].func(timestamp);
 	}
 }

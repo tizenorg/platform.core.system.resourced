@@ -31,12 +31,14 @@ Source2:    resourced-cpucgroup.service
 %define tests_module OFF
 
 %define debug_log OFF
+%define memps_log OFF
 
 %if "%{?profile}" == "mobile"
 	%define swap_module OFF
 	%define freezer_module ON
 	%define network_state OFF
 	%define wearable_noti OFF
+	%define memps_log ON
 %endif
 
 %if "%{?profile}" == "wearable"
@@ -44,6 +46,7 @@ Source2:    resourced-cpucgroup.service
 	%define swap_module OFF
 	%define network_state OFF
 	%define wearable_noti ON
+	%define memps_log ON
 %endif
 
 %if "%{?profile}" == "tv"
@@ -51,6 +54,7 @@ Source2:    resourced-cpucgroup.service
 	%define swap_module OFF
 	%define network_state OFF
 	%define wearable_noti OFF
+	%define memps_log OFF
 %endif
 
 %define exclude_list_file_name resourced_proc_exclude.ini
@@ -169,6 +173,7 @@ export FFLAGS="$FFLAGS -DTIZEN_DEBUG_ENABLE"
 	 -DTESTS_MODULE=%{tests_module} \
 	 -DMEM_STRESS=%{mem_stress} \
 	 -DDEBUG_LOG=%{debug_log} \
+	 -DMEMPS_LOG=%{memps_log} \
 	 -DRD_SYS_HOME=%{TZ_SYS_HOME} \
 	 -DRD_SYS_ETC=%{TZ_SYS_ETC} \
 	 -DRD_SYS_STORAGE=%{TZ_SYS_STORAGE} \

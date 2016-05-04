@@ -63,6 +63,8 @@ int main(int argc, char **argv)
 	}
 	sd_notify(0, "READY=1");
 
+	is_memps_exist = 0;
+
 	ecore_main_loop_begin();
 	modules_exit(NULL);
 	resourced_deinit();
