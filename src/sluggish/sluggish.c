@@ -123,6 +123,9 @@ static void sluggish_get_memps(char *timestamp)
 	int ret;
 	char *argv[3];
 
+	if (access("/usr/bin/memps", X_OK))
+		return;
+
 	snprintf(file_name, sizeof(file_name), "%s/%s/memps", SLUGGISH_PATH, timestamp);
 	argv[0] = "memps";
 	argv[1] = "-a";
@@ -181,9 +184,8 @@ static void sluggish_get_mem_status(char *timestamp)
 	/* Get memory status using vmstat, meminfo, memps and dump to SLUGGISH_PATH */
 	int i;
 
-	for (i = 0; i < ARRAY_SIZE(sluggish_memstat); i++) {
+	for (i = 0; i < ARRAY_SIZE(sluggish_memstat); i++)
 		sluggish_memstat[i].func(timestamp);
-	}
 }
 
 static void sluggish_get_dlog(char *timestamp)
