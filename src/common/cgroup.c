@@ -161,10 +161,12 @@ int make_cgroup_subdir(const char* parentdir, const char* cgroup_name, bool *alr
 	bool cgroup_exists;
 	int ret = 0;
 
-	if (parentdir)
-		ret = snprintf(buf, sizeof(buf), "%s/%s", parentdir, cgroup_name);
-	else
-		ret = snprintf(buf, sizeof(buf), "%s", cgroup_name);
+	if (!parentdir || !cgroup_name || !already) {
+		_E("NULL parameter is not allowed");
+		return RESOURCED_ERROR_INVALID_PARAMETER;
+	}
+
+	ret = snprintf(buf, sizeof(buf), "%s/%s", parentdir, cgroup_name);
 
 	ret_value_msg_if(ret > sizeof(buf), RESOURCED_ERROR_FAIL,
 		"Not enought buffer size for %s%s", parentdir, cgroup_name);
