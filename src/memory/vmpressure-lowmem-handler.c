@@ -411,6 +411,7 @@ static int get_proc_mem_usage(pid_t pid, unsigned int *usage)
 	return RESOURCED_ERROR_FAIL;
 }
 
+#ifdef MEMPS_LOG
 int compare_func(const struct dirent **a, const struct dirent **b)
 {
 	const char *fn_a = (*a)->d_name;
@@ -421,7 +422,6 @@ int compare_func(const struct dirent **a, const struct dirent **b)
 	return strncmp(str_at, str_bt, strlen(str_bt)+1);
 }
 
-#ifdef MEMPS_LOG
 static int memps_file_select(const struct dirent *entry)
 {
    return strstr(entry->d_name, "memps") ? 1 : 0;

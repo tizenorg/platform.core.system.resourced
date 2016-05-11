@@ -117,6 +117,7 @@ static void sluggish_get_vmstat(char *timestamp)
 		_I("Copy: %s to %s SUCCESS", VMSTAT_FILE_PATH, file_name);
 }
 
+#ifdef MEMPS_LOG
 static void sluggish_get_memps(char *timestamp)
 {
 	char file_name[MAX_FILENAME_LEN];
@@ -138,6 +139,7 @@ static void sluggish_get_memps(char *timestamp)
 	else
 		_I("Cmd: memps -a  Success");
 }
+#endif
 
 static void sluggish_get_meminfo(char *timestamp)
 {
@@ -175,7 +177,9 @@ static void sluggish_get_psinfo(char *timestamp)
 
 static const struct sluggish_stat sluggish_memstat[] = {
 	{ "vmstat", sluggish_get_vmstat },
+#ifdef MEMPS_LOG
 	{ "memps", sluggish_get_memps },
+#endif
 	{ "meminfo", sluggish_get_meminfo },
 };
 
