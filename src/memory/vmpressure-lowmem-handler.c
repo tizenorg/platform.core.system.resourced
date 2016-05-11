@@ -73,11 +73,13 @@
 /* Experimently, RSS is 3 times larger than the actual allocated memory. */
 #define LOWMEM_RSS_RATIO		0.3
 
+#ifdef MEMPS_LOG
 #define MEMPS_LOG_PATH			"/var/log/"
 #define MEMPS_LOG_FILE			MEMPS_LOG_PATH"memps"
 #define MEMPS_EXEC_PATH			"/usr/bin/memps"
 #define MAX_MEMPS_LOGS			50
 #define NUM_RM_LOGS			5
+#endif
 
 #define MEMCG_MOVE_CHARGE_PATH		"memory.move_charge_at_immigrate"
 #define MEMCG_OOM_CONTROL_PATH		"memory.oom_control"
@@ -409,11 +411,6 @@ static int get_proc_mem_usage(pid_t pid, unsigned int *usage)
 	return RESOURCED_ERROR_FAIL;
 }
 
-static int memps_file_select(const struct dirent *entry)
-{
-   return strstr(entry->d_name, "memps") ? 1 : 0;
-}
-
 int compare_func(const struct dirent **a, const struct dirent **b)
 {
 	const char *fn_a = (*a)->d_name;
@@ -422,6 +419,12 @@ int compare_func(const struct dirent **a, const struct dirent **b)
 	char *str_bt = strrchr(fn_b, '_') + 1;
 
 	return strncmp(str_at, str_bt, strlen(str_bt)+1);
+}
+
+#ifdef MEMPS_LOG
+static int memps_file_select(const struct dirent *entry)
+{
+   return strstr(entry->d_name, "memps") ? 1 : 0;
 }
 
 static void clear_logs(char *dir)
@@ -485,6 +488,7 @@ static void make_memps_log(char *file, pid_t pid, char *victim_name)
 		exit(0);
 	}
 }
+#endif
 
 static int lowmem_check_current_state(struct memcg_info *mi)
 {
