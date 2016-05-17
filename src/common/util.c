@@ -38,7 +38,7 @@ int exec_cmd(char *argv[], char *filename)
 	int fd = -1;
 
 	if (fork() == 0) {
-		fd= open(filename, O_WRONLY|O_TRUNC|O_CREAT, 0644);
+		fd = open(filename, O_WRONLY|O_TRUNC|O_CREAT, 0644);
 		if (fd < 0) {
 			_E("Failed to create/open file %s", filename);
 			return RESOURCED_ERROR_FAIL;
@@ -122,19 +122,20 @@ int parse_bytes(const char *b, size_t *s)
 }
 
 /* Split a string into words. */
-char *split(const char *c, size_t *l, const char *separator, char **state) {
-        char *current;
+char *split(const char *c, size_t *l, const char *separator, char **state)
+{
+	char *current;
 
-        current = *state ? *state : (char*) c;
+	current = *state ? *state : (char*) c;
 
-        if (!*current || *c == 0)
-                return NULL;
+	if (!*current || *c == 0)
+		return NULL;
 
-        current += strspn(current, separator);
-        *l = strcspn(current, separator);
-        *state = current+*l;
+	current += strspn(current, separator);
+	*l = strcspn(current, separator);
+	*state = current + *l;
 
-        return (char*) current;
+	return (char*) current;
 }
 
 char *truncate_nl(char *s)
@@ -155,7 +156,7 @@ char *strstrip(char *s)
 
 	s += strspn(s, WHITESPACE);
 
-	for (e = strchr(s, 0); e > s; e --)
+	for (e = strchr(s, 0); e > s; e--)
 		if (!strchr(WHITESPACE, e[-1]))
 			break;
 
@@ -166,9 +167,9 @@ char *strstrip(char *s)
 
 int str_to_strv(const char *str, char ***strv, const char *seperator)
 {
-        char *w, *state, *p;
+	char *w, *state, *p;
 	char **v = NULL, **new = NULL;
-        size_t l;
+	size_t l;
 	size_t i = 0;
 
 	FOREACH_WORD_SEPARATOR(w, l, str, seperator, state) {
@@ -204,7 +205,7 @@ size_t sizeof_strv(const char **strv)
 
 	assert(strv);
 
-	while(strv[u++])
+	while (strv[u++])
 		;
 
 	return u - 1;

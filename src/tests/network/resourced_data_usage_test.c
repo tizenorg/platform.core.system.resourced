@@ -34,7 +34,7 @@ int data_usage_test_get_resourced_options()
 {
 	return get_resourced_options(NULL);
 }
- 
+
 int data_usage_test_set_net_restriction()
 {
 	return set_net_restriction(NULL, NULL);
@@ -161,7 +161,7 @@ int main(int argc, char *argv[])
 
 	TEST_START_MESSAGE("data-usage library");
 
-	for(i = 0; data_usage_tests[i].test_func; ++i) {
+	for (i = 0; data_usage_tests[i].test_func; ++i) {
 		_D("=======================================");
 		_D("Current Test: %s", data_usage_tests[i].name);
 		ret = (*data_usage_tests[i].test_func)();

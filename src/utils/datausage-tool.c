@@ -425,7 +425,8 @@ const char *state_representation[] = {
 	"EXCLUDED",
 };
 
-const char *convert_restriction_state(network_restriction_state state) {
+const char *convert_restriction_state(network_restriction_state state)
+{
 	if (state <= NETWORK_RESTRICTION_UNDEFINDED
 		&& state >= NETWORK_RESTRICTION_MAX_VALUE) {
 		fprintf(stderr, "state not in range %d", state);
@@ -536,8 +537,7 @@ int main(int argc, char **argv)
 			};
 
 			ret_code = remove_restriction_full(param.app_id, &rst);
-		}
-		else
+		} else
 			fprintf(stderr, "Revert restriction commands require -i\n");
 		if (ret_code != RESOURCED_ERROR_NONE)
 			return ret_code;

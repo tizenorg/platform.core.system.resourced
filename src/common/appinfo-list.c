@@ -43,7 +43,7 @@ static struct resourced_appinfo *resourced_appinfo_create(const char *appid,
 	assert(appid != NULL);
 	assert(pkgname != NULL);
 
-	if (!appid || !pkgname){
+	if (!appid || !pkgname) {
 		_E("appid or pkgname was null, values: %s, %s", appid, pkgname);
 		return NULL;
 	}

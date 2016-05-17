@@ -34,7 +34,7 @@
 
 #define EDBUS_INIT_RETRY_COUNT 5
 
-struct edbus_list{
+struct edbus_list {
 	char *signal_name;
 	char *signal_path;
 
@@ -220,8 +220,8 @@ static int dbus_method_sync_pairs(const char *dest, const char *path,
 		value = va_arg(args, char *);
 		_I("key(%s), value(%s)", key, value);
 		dbus_message_iter_open_container(&aiter, DBUS_TYPE_DICT_ENTRY, NULL, &piter);
-		dbus_message_iter_append_basic (&piter, DBUS_TYPE_STRING, &key);
-		dbus_message_iter_append_basic (&piter, DBUS_TYPE_STRING, &value);
+		dbus_message_iter_append_basic(&piter, DBUS_TYPE_STRING, &key);
+		dbus_message_iter_append_basic(&piter, DBUS_TYPE_STRING, &value);
 		dbus_message_iter_close_container(&aiter, &piter);
 	}
 
@@ -612,7 +612,7 @@ resourced_ret_c edbus_message_send(DBusMessage *msg)
 }
 
 int launch_system_app_by_dbus(const char *dest, const char *path,
-    const char *iface, const char *method, int num, ...)
+		const char *iface, const char *method, int num, ...)
 {
 	int ret;
 	va_list args;

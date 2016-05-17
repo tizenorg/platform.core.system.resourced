@@ -79,7 +79,7 @@ unsigned int resourced_dbus_pid_get_busnames(pid_t pid, char ***busnames)
 		if (!names)
 			return 0;
 
-		g_hash_table_iter_init (&iter, busname_hash);
+		g_hash_table_iter_init(&iter, busname_hash);
 		for (i = 0; g_hash_table_iter_next(&iter, (void **)&busname, NULL); i++)
 			names[i] = strndup(busname, strlen(busname)+1);
 
@@ -197,7 +197,7 @@ static DBusMessage *resourced_dbus_handle_get_system_bus_pid_info(E_DBus_Object 
 	dbus_message_iter_init_append(reply, &iter);
 	if (!dbus_message_iter_open_container(&iter, DBUS_TYPE_ARRAY, "s", &sub)) {
 		_E("Failed to open string array");
-		dbus_message_unref (reply);
+		dbus_message_unref(reply);
 		return NULL;
 	}
 
@@ -263,7 +263,7 @@ static DBusMessage *resourced_dbus_handle_get_system_bus_pid_info_all(E_DBus_Obj
 	dbus_message_iter_init_append(reply, &iter);
 	if (!dbus_message_iter_open_container(&iter, DBUS_TYPE_ARRAY, "{uas}", &sub)) {
 		_E("Failed to open string array");
-		dbus_message_unref (reply);
+		dbus_message_unref(reply);
 		return NULL;
 	}
 
@@ -432,7 +432,7 @@ static void resourced_dbus_get_list_names_callback(void *data, DBusMessage *msg,
 	do {
 		dbus_message_iter_get_basic(&sub, &busname);
 		resourced_dbus_get_connection_unix_process_id(busname);
-	} while(dbus_message_iter_next(&sub));
+	} while (dbus_message_iter_next(&sub));
 }
 
 static bool resourced_dbus_get_list_names(void)
@@ -584,15 +584,15 @@ static void resourced_dbus_name_owner_changed_callback(void *data, DBusMessage *
 		return;
 	}
 
-        /* If the name owner process is activated then: */
-        /* arg_0: busname */
-        /* arg_1: "" */
-        /* arg_2: ":x.xxx" */
+	/* If the name owner process is activated then: */
+	/* arg_0: busname */
+	/* arg_1: "" */
+	/* arg_2: ":x.xxx" */
 
-        /* If the name owner process is deactivated then: */
-        /* arg_0: busname */
-        /* arg_1: ":x.xxx" */
-        /* arg_2: "" */
+	/* If the name owner process is deactivated then: */
+	/* arg_0: busname */
+	/* arg_1: ":x.xxx" */
+	/* arg_2: "" */
 
 	if (is_empty(busname)) {
 		_E("NameOwnerChanged: arg_0 is empty");

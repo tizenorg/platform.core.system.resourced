@@ -159,7 +159,7 @@ int proc_set_oom_score_adj(int pid, int oom_score_adj)
 	fprintf(fp, "%d", oom_score_adj);
 	fclose(fp);
 
-	if(!lowmem) {
+	if (!lowmem) {
 		lowmem = find_module("lowmem");
 		if (!lowmem)
 			return RESOURCED_ERROR_FAIL;

@@ -49,7 +49,7 @@ void time_stamp(char *timestamp)
 	if (!localtime_r(&curTime.tv_sec, &local))
 		return;
 	/* Current timestamp */
-	strftime(ts,TIMESTAMP_LEN,"%y%m%d%H%M%S",&local);
+	strftime(ts, TIMESTAMP_LEN, "%y%m%d%H%M%S", &local);
 	/* Append milliseconds */
 	snprintf(timestamp, sizeof(ts) + 8, "%s%d", ts, milli);
 }

@@ -54,7 +54,7 @@ resourced_ret_c proc_cpu_stat(struct cpu_stat *cs)
 	}
 
 	if (!fgets(buffer, BUF_MAX, fp)) {
-		_E ("fgets() failed");
+		_E("fgets() failed");
 		fclose(fp);
 		return RESOURCED_ERROR_FAIL;
 	}

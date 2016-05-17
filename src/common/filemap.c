@@ -339,7 +339,7 @@ static struct filemap_info *filemap_entry_find(struct filemap *fm, struct filema
 		} else {
 			unsigned new_offset;
 			root = filemap_node_new(fm, remaining, str_size, &new_offset);
-			_D("insert node child remaining = %s",remaining);
+			_D("insert node child remaining = %s", remaining);
 			if (root)
 				g_atomic_int_set(&current->children, new_offset);
 		}

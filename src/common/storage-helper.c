@@ -89,9 +89,9 @@ resourced_ret_c get_storage_root_paths(int type, GSList **paths)
 		}
 
 		while (!readdir_r(dp, &dentry, &result) && result != NULL) {
-			if(dentry.d_name[0] == '.')
+			if (dentry.d_name[0] == '.')
 				continue;
-			if(snprintf(buf, BUF_MAX, "%s/%s/content", RD_SYS_HOME, dentry.d_name) < 0) {
+			if (snprintf(buf, BUF_MAX, "%s/%s/content", RD_SYS_HOME, dentry.d_name) < 0) {
 				_D("Fail to make root path of %s. This path will not be included", dentry.d_name);
 				continue;
 			}
@@ -114,7 +114,7 @@ resourced_ret_c get_storage_root_paths(int type, GSList **paths)
 			return RESOURCED_ERROR_FAIL;
 		}
 
-		if(target.id >= 0) {
+		if (target.id >= 0) {
 			if (storage_get_root_directory(target.id, &root_path)
 					!= STORAGE_ERROR_NONE) {
 				_E("Failed to get root path of storage");

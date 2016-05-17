@@ -43,7 +43,7 @@ static inline char *trim_str(char *s)
 }
 
 int config_parse(const char *file_name, int cb(struct parse_result *result,
-    void *user_data), void *user_data)
+			void *user_data), void *user_data)
 {
 	FILE *f = NULL;
 	struct parse_result result;
@@ -301,7 +301,7 @@ int config_parse_new(const char *filename, void *table)
 	r = 0;
 
 finish:
-	for (i=0; i<num_section; i++)
+	for (i = 0; i < num_section; i++)
 		if (sections[i])
 			free(sections[i]);
 

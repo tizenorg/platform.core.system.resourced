@@ -54,7 +54,7 @@ static bool is_cgroup_exists(const char *cgroup_full_path)
 
 static int create_cgroup(const char *cgroup_full_path)
 {
-	if (mkdir (cgroup_full_path,
+	if (mkdir(cgroup_full_path,
 		S_IRUSR | S_IWUSR | S_IRGRP) < 0)
 		return -errno;
 

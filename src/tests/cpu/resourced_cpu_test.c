@@ -79,7 +79,7 @@ int cpu_app_cycle_check(void)
 		req.tv_sec = time_sec; \
 		req.tv_nsec = 0; \
 		nanosleep(&req, &rem); \
-	} while(0);
+	} while (0);
 
 	printf("Checking app cycle. Launch an app and enter its pid:");
 	ret = scanf("%d", &app_pid);
