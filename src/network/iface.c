@@ -110,7 +110,7 @@ static void keep_ifname(GSList **ifnames_list, char *ifname, int iftype)
 	GSList *iter;
 	bool found = false;
 	struct iface_status *value;
-	ret_msg_if (!ifnames_list || !ifname, "Please provide valid argument!");
+	ret_msg_if(!ifnames_list || !ifname, "Please provide valid argument!");
 
 	gslist_for_each_item(iter, *ifnames_list) {
 		struct iface_status *cur = (struct iface_status *)iter->data;
@@ -127,7 +127,7 @@ static void keep_ifname(GSList **ifnames_list, char *ifname, int iftype)
 	value = (struct iface_status *)malloc(
 			sizeof(struct iface_status));
 
-	ret_msg_if (!value, "Can't allocate memory for iface_status\n");
+	ret_msg_if(!value, "Can't allocate memory for iface_status\n");
 	value->active = true; /* we're putting it => it's active now */
 	value->iftype = iftype;
 	STRING_SAVE_COPY(value->ifname, ifname);

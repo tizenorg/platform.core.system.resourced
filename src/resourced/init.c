@@ -136,7 +136,7 @@ void set_daemon_net_block_state(const enum traffic_restriction_type rst_type,
 	if (rst_type == RST_SET)
 		carg->opts->state |= RESOURCED_NET_BLOCKED_STATE; /* set bit */
 	else {
-		carg->opts->state &=(~RESOURCED_NET_BLOCKED_STATE); /* nulify bit */
+		carg->opts->state &= (~RESOURCED_NET_BLOCKED_STATE); /* nulify bit */
 		ecore_timer_thaw(carg->ecore_timer);
 	}
 }

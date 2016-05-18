@@ -239,7 +239,7 @@ static int swap_move_to_cgroup_by_pid(enum memcg_type type, pid_t pid)
 		struct child_pid *child;
 
 		child = (struct child_pid *)(iter_child->data);
-		ret= place_pid_to_cgroup_by_fullpath(mi->name, child->pid);
+		ret = place_pid_to_cgroup_by_fullpath(mi->name, child->pid);
 	}
 	pai->memory.memcg_idx = MEMCG_SWAP;
 	pai->memory.memcg_info = mi;
@@ -273,7 +273,7 @@ static int swap_move_to_cgroup(struct memcg_info *info, GArray *candidates)
 }
 
 static int swap_sort_by_oom(const struct swap_task *ta,
-    const struct swap_task *tb)
+		const struct swap_task *tb)
 {
 	/* sort by oom score adj */
 	assert(ta != NULL);
@@ -284,7 +284,7 @@ static int swap_sort_by_oom(const struct swap_task *ta,
 }
 
 static int swap_sort_by_vmrss(const struct swap_task *ta,
-    const struct swap_task *tb)
+		const struct swap_task *tb)
 {
 	/* sort by task memory usage */
 	assert(ta != NULL);

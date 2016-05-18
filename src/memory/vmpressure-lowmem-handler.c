@@ -424,7 +424,7 @@ int compare_func(const struct dirent **a, const struct dirent **b)
 
 static int memps_file_select(const struct dirent *entry)
 {
-   return strstr(entry->d_name, "memps") ? 1 : 0;
+	return strstr(entry->d_name, "memps") ? 1 : 0;
 }
 
 static void clear_logs(char *dir)
@@ -691,7 +691,7 @@ static int compare_victims(const struct task_info *ta, const struct task_info *t
 
 static int compare_victims_point(const struct task_info *ta, const struct task_info *tb)
 {
-        unsigned int pa, pb;
+	unsigned int pa, pb;
 	assert(ta != NULL);
 	assert(tb != NULL);
 
@@ -1133,7 +1133,7 @@ static void lowmem_swap_memory(enum memcg_type type, struct memcg_info *mi)
 
 	if (!swap) {
 		swap = find_module("swap");
-		if(!swap)
+		if (!swap)
 			return;
 	}
 
@@ -1472,37 +1472,37 @@ static int set_memory_config(const char *section_name, const struct parse_result
 
 static int memory_load_64_config(struct parse_result *result, void *user_data)
 {
-       return set_memory_config("Memory64", result);
+	return set_memory_config("Memory64", result);
 }
 
 static int memory_load_256_config(struct parse_result *result, void *user_data)
 {
-       return set_memory_config("Memory256", result);
+	return set_memory_config("Memory256", result);
 }
 
 static int memory_load_448_config(struct parse_result *result, void *user_data)
 {
-       return set_memory_config("Memory448", result);
+	return set_memory_config("Memory448", result);
 }
 
 static int memory_load_512_config(struct parse_result *result, void *user_data)
 {
-       return set_memory_config("Memory512", result);
+	return set_memory_config("Memory512", result);
 }
 
 static int memory_load_768_config(struct parse_result *result, void *user_data)
 {
-       return set_memory_config("Memory768", result);
+	return set_memory_config("Memory768", result);
 }
 
 static int memory_load_1024_config(struct parse_result *result, void *user_data)
 {
-       return set_memory_config("Memory1024", result);
+	return set_memory_config("Memory1024", result);
 }
 
 static int memory_load_2048_config(struct parse_result *result, void *user_data)
 {
-       return set_memory_config("Memory2048", result);
+	return set_memory_config("Memory2048", result);
 }
 
 /* setup memcg parameters depending on total ram size. */
@@ -2049,7 +2049,7 @@ static int lowmem_press_setup_eventfd(void)
 static int allocate_vip_app_list(void)
 {
 	vip_apps = g_ptr_array_new();
-	if(!vip_apps) {
+	if (!vip_apps) {
 		_E("g_ptr_array_new : out of memory");
 		return RESOURCED_ERROR_OUT_OF_MEMORY;
 	}
@@ -2102,7 +2102,7 @@ static int set_vip_list(void)
 
 static void free_vip_app_list(void)
 {
-	if(vip_apps) {
+	if (vip_apps) {
 		g_ptr_array_foreach(vip_apps, (GFunc)g_free, NULL);
 		g_ptr_array_free(vip_apps, true);
 		vip_apps = NULL;
@@ -2119,13 +2119,13 @@ int lowmem_init(void)
 	init_memcg_params();
 	setup_memcg_params();
 
-	if(allocate_vip_app_list() != RESOURCED_ERROR_NONE)
+	if (allocate_vip_app_list() != RESOURCED_ERROR_NONE)
 		_E("allocate_vip_app_list FAIL");
 
-	if(config_parse(MEM_CONF_FILE, load_vip_config, NULL))
+	if (config_parse(MEM_CONF_FILE, load_vip_config, NULL))
 		_E("(%s) parse Fail", MEM_CONF_FILE);
 
-	if(set_vip_list() != RESOURCED_ERROR_NONE)
+	if (set_vip_list() != RESOURCED_ERROR_NONE)
 		_E("set_vip_list FAIL");
 
 	/* vip_list is only needed at the set_vip_list */
@@ -2243,12 +2243,12 @@ int lowmem_proactive_oom_killer(int flags, char *appid)
 		 * above threshold_leave
 		 */
 		 if (after >= memcg_root->threshold[LOWMEM_MEDIUM])
-		 	return RESOURCED_ERROR_FAIL;
+			 return RESOURCED_ERROR_FAIL;
 
 		 should_be_freed = memcg_root->threshold_leave +
 			 THRESHOLD_MARGIN - after;
 		 _D("run history based proactive killer, should_be_freed = %u MB",
-		 	should_be_freed);
+			 should_be_freed);
 		lowmem_force_oom_killer(OOM_FORCE, should_be_freed, num_max_victims);
 
 		return RESOURCED_ERROR_NONE;

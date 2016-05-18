@@ -577,12 +577,12 @@ static resourced_cb_ret populate_entry(struct resourced_ipt_entry_info *info,
 
 typedef resourced_cb_ret (*iterate_entries_cb)(struct resourced_ipt_entry_info *info, void *user_data);
 
-static int find_nfacct_name (const struct xt_entry_match *match,
+static int find_nfacct_name(const struct xt_entry_match *match,
 			char **found_name)
 {
 	if (match && !strncmp(match->u.user.name, NFACCT_MATCH_NAME, strlen(NFACCT_MATCH_NAME)+1)) {
 		struct xt_nfacct_match_info *info = (struct xt_nfacct_match_info *)match->data;
-		*found_name = info ? info->name: NULL;
+		*found_name = info ? info->name : NULL;
 		return  1; /* means stop */
 	}
 	return 0; /* means continue */
@@ -618,7 +618,7 @@ static resourced_ret_c ipt_foreach(struct ipt_context *iptc, iterate_entries_cb 
 		info.rule_type = RESOURCED_OLD_IPT_RULE; /* TODO use enum */
 		info.entry = (void *)entries + info.offset;
 
-		for (;hook < NF_IP_NUMHOOKS; ++hook) {
+		for (; hook < NF_IP_NUMHOOKS; ++hook) {
 			if (hook_entry[hook] <= info.offset &&
 			    underflow[hook] > info.offset) {
 				info.hook = hook;
@@ -665,7 +665,7 @@ API resourced_ret_c resourced_ipt_begin(struct ipt_context *iptc)
 	ret = getsockopt(iptc->sock, IPPROTO_IP, IPT_SO_GET_INFO,
 			 iptc->info, &s);
 
-	if(ret < 0) {
+	if (ret < 0) {
 		_E("iptables support missing error %d (%s)", errno,
 			strerror_r(errno, error_buf, sizeof(error_buf)));
 		goto release_info;
@@ -780,8 +780,8 @@ static struct ipt_replace *prepare_replace(struct ipt_context *iptc)
 
 	r->size = replace_size;
 	/* xt_counters from linux/netfilter/x_ipts.h */
-	r->counters = (struct xt_counters *)malloc(sizeof(struct xt_counters)
-				* iptc->old_entries);
+	r->counters = (struct xt_counters *)malloc(sizeof(struct xt_counters) *
+				iptc->old_entries);
 	if (!r->counters) {
 		free(r);
 		_E("Not enough memory");
@@ -971,8 +971,7 @@ static void fill_ipt_entry(struct nfacct_rule *rule, struct ipt_entry *entry)
 		dest_ifname = entry->ip.iniface;
 		dest_ifmask = entry->ip.iniface_mask;
        /*         iface_flag = IPT_INV_VIA_IN;*/
-	}
-	else if (rule->iotype == NFACCT_COUNTER_OUT) {
+	} else if (rule->iotype == NFACCT_COUNTER_OUT) {
 		dest_ifname = entry->ip.outiface;
 		dest_ifmask = entry->ip.outiface_mask;
        /*         iface_flag = IPT_INV_VIA_OUT;*/
@@ -1005,7 +1004,7 @@ static int get_hook_by_iotype(struct nfacct_rule *rule)
 {
 	if (rule->iotype == NFACCT_COUNTER_IN)
 		return NF_IP_LOCAL_IN;
-	else if(rule->iotype == NFACCT_COUNTER_OUT)
+	else if (rule->iotype == NFACCT_COUNTER_OUT)
 		return NF_IP_LOCAL_OUT;
 
 	return NF_IP_NUMHOOKS;

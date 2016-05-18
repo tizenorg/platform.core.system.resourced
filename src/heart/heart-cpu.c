@@ -561,7 +561,7 @@ void heart_cpu_update(struct logging_table_form *data, void *user_data)
 	time_t curr_time = logging_get_time(CLOCK_BOOTTIME);
 	struct heart_cpu_table *table;
 	struct heart_cpu_info *ci = NULL;
-        GHashTable *cpu_usage_list = NULL;
+	GHashTable *cpu_usage_list = NULL;
 
 	if (user_data)
 		cpu_usage_list = (GHashTable *)user_data;
@@ -1166,7 +1166,7 @@ static DBusMessage *edbus_heart_get_cpu_data_list(E_DBus_Object *obj, DBusMessag
 
 	heart_cpu_update_app_list(NULL);
 
-        logging_save_to_storage(true);
+	logging_save_to_storage(true);
 	/* update data list from db */
 	logging_update(true);
 

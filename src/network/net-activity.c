@@ -63,11 +63,11 @@ static void set_socket_option(int sock)
  */
 static uint32_t convert_mcast_group_id(uint32_t group_id)
 {
-        if (group_id > 31) {
-                _E("Netlink: Use setsockopt for this group: %u\n", group_id);
-                return 0;
-        }
-        return group_id ? (1 << (group_id - 1)) : 0;
+	if (group_id > 31) {
+		_E("Netlink: Use setsockopt for this group: %u\n", group_id);
+		return 0;
+	}
+	return group_id ? (1 << (group_id - 1)) : 0;
 }
 
 static void *net_activity_func(void *user_data)
@@ -106,7 +106,7 @@ static void *net_activity_func(void *user_data)
 		else if (ret == RESOURCED_NET_ACTIVITY_CONTINUE)
 			continue;
 
-	        if (context->cb(&activity_info) == RESOURCED_CANCEL)
+		if (context->cb(&activity_info) == RESOURCED_CANCEL)
 			goto stop_net_activity;
 	}
 

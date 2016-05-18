@@ -290,7 +290,7 @@ void clear_effective_quota(const char *app_id,
 }
 
 static inline int _is_period_devisible(const int time_period,
-		                     data_usage_quota_period_t quota_period)
+		data_usage_quota_period_t quota_period)
 {
 	return time_period > quota_period &&
 		time_period % RESOURCED_PERIOD_MONTH == 0;
@@ -397,7 +397,7 @@ static resourced_cb_ret data_usage_details_cb(const data_usage_info *info,
 }
 
 static void _record_quota(const struct quota_key *key,
-		          const struct quota *app_quota)
+			  const struct quota *app_quota)
 {
 	if (!key || !app_quota) {
 		_E("Please, provide valid argument.");
@@ -501,7 +501,7 @@ static void set_effective_quota(const char *app_id,
 	const time_t cur_time = time(0);
 	char buf[30];
 
-	app_id = !strncmp(app_id, RESOURCED_ALL_APP, strlen(RESOURCED_ALL_APP)+1) ? 0: app_id;
+	app_id = !strncmp(app_id, RESOURCED_ALL_APP, strlen(RESOURCED_ALL_APP) + 1) ? 0 : app_id;
 
 	if (cur_time < start_time) {
 		_D("No need to update effective quota!");
@@ -520,7 +520,7 @@ static void set_effective_quota(const char *app_id,
 	rule.iftype = iftype;
 
 	if (data_usage_details_foreach(app_id, &rule, data_usage_details_cb,
-	                               &out_context) != RESOURCED_ERROR_NONE) {
+				       &out_context) != RESOURCED_ERROR_NONE) {
 		_E("Cant obtain sent_used_quota/rcv_used_quota");
 		return;
 	}
@@ -579,7 +579,7 @@ void update_quota_state(const char *app_id, const int quota_id,
 
 	tree_value = find_quota_in_tree(app_id, ser_quota->iftype,
 					ser_quota->roaming_type,
-				        ser_quota->imsi_hash, ser_quota->quota_type);
+					ser_quota->imsi_hash, ser_quota->quota_type);
 	if (!check_event_in_current_modem(ser_quota->imsi_hash,
 				ser_quota->iftype))
 		check_and_clear_all_noti();
@@ -599,7 +599,7 @@ void update_quota_state(const char *app_id, const int quota_id,
 				ser_quota->roaming_type, ser_quota->imsi_hash);
 	} else if (!tree_value) {
 		insert_key = malloc(sizeof(struct quota_key));
-		ret_msg_if (!insert_key, "not enough memory");
+		ret_msg_if(!insert_key, "not enough memory");
 		memset(insert_key, 0, sizeof(struct quota_key));
 		tree_value = (struct quota *)malloc(sizeof(struct quota));
 		if (!tree_value) {
@@ -667,7 +667,7 @@ void remove_quota_from_counting(const char *app_id, const resourced_iface_type i
 	const char *imsi_hash)
 {
 	struct quota_key key;
-	ret_msg_if(!app_id,"app_id must be not NULL");
+	ret_msg_if(!app_id, "app_id must be not NULL");
 
 	key.app_id = app_id;
 	key.iftype = iftype;
@@ -690,25 +690,25 @@ static resourced_ret_c _init_quotas(void)
 		return RESOURCED_ERROR_NONE;
 
 	if (sqlite3_prepare_v2(resourced_get_database(),
-	                       select_query, -1, &select_stmt,
-	                       NULL) != SQLITE_OK) {
+			       select_query, -1, &select_stmt,
+			       NULL) != SQLITE_OK) {
 		_E("Error preparing query: %s, \
 		   %s\n", select_query, sqlite3_errmsg(resourced_get_database()));
 		goto handle_error;
 	}
 
 	if (sqlite3_prepare_v2(resourced_get_database(),
-	                       insert_query, -1, &insert_stmt,
-	                       NULL) != SQLITE_OK) {
+			       insert_query, -1, &insert_stmt,
+			       NULL) != SQLITE_OK) {
 		_E("Error preparing query: %s, \
 		   %s\n", insert_query, sqlite3_errmsg(resourced_get_database()));
 		goto handle_error;
 	}
 
 	if (sqlite3_prepare_v2(resourced_get_database(),
-		               clear_effective_quota_query,
-	                       -1, &clear_effective_stmt,
-	                       NULL) != SQLITE_OK) {
+			       clear_effective_quota_query,
+			       -1, &clear_effective_stmt,
+			       NULL) != SQLITE_OK) {
 		_E("Error preparing query: %s, \
 		   %s\n", clear_effective_quota_query,
 			sqlite3_errmsg(resourced_get_database()));
@@ -731,7 +731,7 @@ handle_error:
 static resourced_ret_c load_quotas(void)
 {
 	const resourced_ret_c ret = _init_quotas();
-	ret_value_msg_if (ret != RESOURCED_ERROR_NONE, ret, "Failed to init quotas");
+	ret_value_msg_if(ret != RESOURCED_ERROR_NONE, ret, "Failed to init quotas");
 	return obtain_and_keep_quotas(select_stmt);
 }
 
@@ -877,7 +877,7 @@ static gboolean check_and_apply_node(gpointer key,
 		opts->update_period) ||
 	    app_quota->rcv_warning_threshold < app_quota->rcv_used_quota) &&
 	    (key_quota->roaming == RESOURCED_ROAMING_UNKNOWN ||
-	     key_quota->roaming == get_current_roaming())){
+	     key_quota->roaming == get_current_roaming())) {
 		data_usage_quota du_quota = {0}; /* use both for
 						    warning/restriction noti */
 
@@ -912,7 +912,7 @@ static gboolean check_and_apply_node(gpointer key,
 		 * is it current imsi or not,
 		 * just do not skip kernel op */
 		if (proc_keep_restriction(key_quota->app_id,
-				          app_quota->quota_id, &rst,
+					  app_quota->quota_id, &rst,
 					  RST_SET, false, RESOURCED_RESTRICTION_ACTIVATED) != RESOURCED_ERROR_NONE) {
 			_E("Failed to keep restriction!");
 			return FALSE;
@@ -944,8 +944,7 @@ static void check_and_apply_quota(struct counter_arg *carg)
 	g_tree_foreach(quotas, check_and_apply_node, (void *)carg);
 }
 
-struct update_all_arg
-{
+struct update_all_arg {
 	resourced_iface_type iftype;
 	char *imsi_hash;
 	struct application_stat *app_stat;
@@ -998,8 +997,7 @@ static gboolean update_pseudo_app_entry(gpointer key,
 	     (qkey->roaming == RESOURCED_ROAMING_UNKNOWN ||
 	      qkey->roaming == arg->app_stat->is_roaming) &&
 	      check_ground_state(qkey, arg->app_stat)) ||
-	    !strncmp(qkey->app_id, TETHERING_APP_NAME, strlen(TETHERING_APP_NAME)+1))
-	{
+	    !strncmp(qkey->app_id, TETHERING_APP_NAME, strlen(TETHERING_APP_NAME)+1)) {
 		/* update it */
 		total_quota->sent_used_quota += arg->app_stat->delta_snd;
 		total_quota->rcv_used_quota += arg->app_stat->delta_rcv;
@@ -1075,7 +1073,7 @@ static gboolean update_each_quota(gpointer key, gpointer value,
 	/* TODO ground is not handled for quota per application,
 	 * due GUI is not set quota per application, yet,
 	 * no such requirements */
-	qkey.imsi_hash = app_key->iftype == RESOURCED_IFACE_DATACALL ? get_imsi_hash(app_key->imsi): "";
+	qkey.imsi_hash = app_key->iftype == RESOURCED_IFACE_DATACALL ? get_imsi_hash(app_key->imsi) : "";
 	update_traffic_quota(&qkey, &app_stat->delta_snd,
 			     &app_stat->delta_rcv);
 	return FALSE;
@@ -1257,7 +1255,7 @@ resourced_ret_c get_quota_by_id(const int quota_id, data_usage_quota *du_quota)
 
 resourced_ret_c get_quota_by_appid(const char* app_id, const char *imsi_hash,
 		const resourced_iface_type iftype, resourced_roaming_type roaming,
-	        data_usage_quota *du_quota, int *quota_id, resourced_state_t ground)
+		data_usage_quota *du_quota, int *quota_id, resourced_state_t ground)
 {
 	struct quota *qt;
 	execute_once {

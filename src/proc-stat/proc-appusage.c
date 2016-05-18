@@ -62,7 +62,7 @@ static gboolean find_hash(gpointer key, gpointer value, gpointer user_data)
 	if (!user_data || !key)
 		return FALSE;
 
-	return (strstr((char *)user_data, (char *)key) ? TRUE: FALSE);
+	return (strstr((char *)user_data, (char *)key) ? TRUE : FALSE);
 }
 
 static void print_favorite_list(gpointer key, gpointer value, gpointer user_data)
@@ -91,7 +91,7 @@ static Eina_Bool appusage_update_cb(void *data)
 
 static int load_appusage_config(struct parse_result *result, void *user_data)
 {
-	if(!result)
+	if (!result)
 		return -EINVAL;
 
 	if (strncmp(result->section, APPUSAGE_CONF_SECTION, strlen(APPUSAGE_CONF_SECTION)+1))
@@ -117,7 +117,7 @@ static int proc_appusage_table_init(void)
 	int ret;
 
 	ret = config_parse(APPUSAGE_CONF_FILE, load_appusage_config, NULL);
-	if(ret || !appusage_favorite_htab)
+	if (ret || !appusage_favorite_htab)
 		return RESOURCED_ERROR_NO_DATA;
 
 	favorite_count = g_hash_table_size(appusage_favorite_htab);

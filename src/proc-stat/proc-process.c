@@ -73,7 +73,7 @@ static void proc_set_oom_score_childs(GSList *childs, int oom_score_adj)
 }
 
 static void proc_set_oom_score_services(int state, GSList *svcs,
-    int oom_score_adj)
+		int oom_score_adj)
 {
 	GSList *iter;
 
@@ -176,7 +176,7 @@ static int proc_backgrd_manage(int currentpid, int active, int oom_score_adj)
 
 			if (spi->lru_state >= PROC_BACKGROUND) {
 				spi->lru_state++;
-				if (spi->lru_state > PROC_LRU_MAX )
+				if (spi->lru_state > PROC_LRU_MAX)
 					spi->lru_state = PROC_LRU_MAX;
 				_D("BACKGRD : process %d increase lru %d", pid, spi->lru_state);
 			}

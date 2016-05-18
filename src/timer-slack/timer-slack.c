@@ -45,16 +45,16 @@
 #include <sys/types.h>
 #include <dirent.h>
 
-#define TIMER_EXCLUDE_CGROUP 	"exclude"
-#define TIMER_SERVICE_CGROUP 	"service"
-#define TIMER_BACKGRD_CGROUP 	"background"
-#define TIMER_STATUS_LCDOFF 	"LCDOFF"
+#define TIMER_EXCLUDE_CGROUP	"exclude"
+#define TIMER_SERVICE_CGROUP	"service"
+#define TIMER_BACKGRD_CGROUP	"background"
+#define TIMER_STATUS_LCDOFF	"LCDOFF"
 #define TIMER_SLACK_ROOT		NULL
-#define TIMER_STATUS_POWERSAVING 	"POWERSAVING"
+#define TIMER_STATUS_POWERSAVING	"POWERSAVING"
 
 #define TIMER_CONF_FILE     RD_CONFIG_FILE(timer-slack)
-#define EXCLUDE_CONF_SECTION    	"EXCLUDE_TIMER_SLACK"
-#define EXCLUDE_CONF_NAME    	"EXCLUDE_PROC_NAME"
+#define EXCLUDE_CONF_SECTION	"EXCLUDE_TIMER_SLACK"
+#define EXCLUDE_CONF_NAME	"EXCLUDE_PROC_NAME"
 
 #define TIMER_SLACK_MODE	"/timer_slack.timer_mode"
 #define TIMER_SLACK_VALUE	"/timer_slack.min_slack_ns"
@@ -206,7 +206,7 @@ static int load_timer_config(struct parse_result *result, void *user_data)
 				timer_slack[i].slack_value = atoi(result->value);
 		}
 	}
-       return RESOURCED_ERROR_NONE;
+	return RESOURCED_ERROR_NONE;
 }
 
 static void timer_slack_cgroup_init(void)

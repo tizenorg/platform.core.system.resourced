@@ -227,7 +227,7 @@ static int load_cpu_config(struct parse_result *result, void *user_data)
 				    CPU_CONTROL_BANDWIDTH, value);
 		}
 	}
-       return RESOURCED_ERROR_NONE;
+	return RESOURCED_ERROR_NONE;
 }
 
 static int cpu_service_state(void *data)

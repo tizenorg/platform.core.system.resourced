@@ -29,10 +29,10 @@
 
 enum swap_state swap_get_state(void)
 {
-        struct shared_modules_data *modules_data = get_shared_modules_data();
+	struct shared_modules_data *modules_data = get_shared_modules_data();
 
-        ret_value_msg_if(modules_data == NULL, RESOURCED_ERROR_FAIL,
-                         "Invalid shared modules data\n");
+	ret_value_msg_if(modules_data == NULL, RESOURCED_ERROR_FAIL,
+			 "Invalid shared modules data\n");
 
-        return modules_data->swap_data.swap_state;
+	return modules_data->swap_data.swap_state;
 }

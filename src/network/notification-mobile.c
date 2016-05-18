@@ -91,13 +91,13 @@ static int clear_datausage_noti(int *id, const char *method_name)
 	char *pa[1];
 	int ret;
 
-	ret_value_msg_if (!id || !method_name, -EINVAL, "Invalid param");
+	ret_value_msg_if(!id || !method_name, -EINVAL, "Invalid param");
 
 	snprintf(buf, sizeof(buf), "%d", *id);
 
 	pa[0] = buf;
 	ret = call_datausage_noti(method_name, "i", pa);
-	if(ret != 0) {
+	if (ret != 0) {
 		_E("clear noti id : %d", *id);
 		*id = 0;
 		return ret;
@@ -127,7 +127,7 @@ void check_and_clear_all_noti(void)
 
 static int show_restriction_noti(const char *method_name)
 {
-	ret_value_msg_if (!method_name, -EINVAL, "Invalid param");
+	ret_value_msg_if(!method_name, -EINVAL, "Invalid param");
 
 	return call_datausage_noti(method_name, NULL, NULL);
 }
@@ -170,10 +170,10 @@ static int show_restriction_popup(const char *value, data_usage_quota *du_quota)
 void send_restriction_notification(const char *appid, data_usage_quota *du_quota)
 {
 	if (broadcast_edbus_signal(RESOURCED_PATH_NETWORK,
-	                           RESOURCED_INTERFACE_NETWORK,
-	                           RESTRICTION_ACTIVE,
-	                           DBUS_TYPE_STRING,
-	                           (void *)(&appid)) != RESOURCED_ERROR_NONE) {
+				   RESOURCED_INTERFACE_NETWORK,
+				   RESTRICTION_ACTIVE,
+				   DBUS_TYPE_STRING,
+				   (void *)(&appid)) != RESOURCED_ERROR_NONE) {
 		_E("Failed to send DBUS message.");
 	}
 
@@ -191,10 +191,10 @@ void send_restriction_notification(const char *appid, data_usage_quota *du_quota
 void send_restriction_warn_notification(const char *appid, data_usage_quota *du_quota)
 {
 	if (broadcast_edbus_signal(RESOURCED_PATH_NETWORK,
-	                           RESOURCED_INTERFACE_NETWORK,
-	                           RESTRICTION_WARNING,
-	                           DBUS_TYPE_STRING,
-	                           (void *)(&appid)) != RESOURCED_ERROR_NONE) {
+				   RESOURCED_INTERFACE_NETWORK,
+				   RESTRICTION_WARNING,
+				   DBUS_TYPE_STRING,
+				   (void *)(&appid)) != RESOURCED_ERROR_NONE) {
 		_E("Failed to send DBUS message.");
 	}
 

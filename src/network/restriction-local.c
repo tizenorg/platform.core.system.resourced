@@ -87,7 +87,7 @@ static resourced_ret_c reset_restriction_db(const char *app_id,
 
 	ret_value_if(error_code != RESOURCED_ERROR_NONE, error_code);
 #ifdef DEBUG_ENABLED
-	_D("app_id %s",app_id);
+	_D("app_id %s", app_id);
 	_D("iftype %d", iftype);
 	_D("imsi %s", imsi);
 	_D("quota_id %d", quota_id);
@@ -456,7 +456,7 @@ resourced_ret_c remove_restriction_local(const char *app_id,
 	}
 
 release_ifname:
-	if(rst_info.ifname)
+	if (rst_info.ifname)
 		free((char *)rst_info.ifname);
 	return ret;
 }

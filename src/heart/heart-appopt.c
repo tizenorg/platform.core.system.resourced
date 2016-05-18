@@ -348,7 +348,7 @@ static void heart_appopt_execute_db_cmd(struct appopt_cmd *cmd)
 
 	switch (cmd->type) {
 	case APPOPT_CMD_INSERT:
-	        if (heart_appopt_db_insert_entry(appopt_db, &cmd->data) != RESOURCED_ERROR_NONE) {
+		if (heart_appopt_db_insert_entry(appopt_db, &cmd->data) != RESOURCED_ERROR_NONE) {
 			_E("Appopt data insertion failed");
 		} else {
 			/* invalidate cache on db update success */
@@ -357,7 +357,7 @@ static void heart_appopt_execute_db_cmd(struct appopt_cmd *cmd)
 		}
 		break;
 	case APPOPT_CMD_REMOVE:
-	        if (heart_appopt_db_remove_entry(appopt_db, &cmd->data) != RESOURCED_ERROR_NONE) {
+		if (heart_appopt_db_remove_entry(appopt_db, &cmd->data) != RESOURCED_ERROR_NONE) {
 			_E("Query execution failed");
 		} else {
 			/* invalidate cache on db remove success */

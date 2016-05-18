@@ -107,14 +107,12 @@ static resourced_cb_ret _restriction_iter(
 	return RESOURCED_CONTINUE;
 }
 
-enum restriction_apply_type
-{
+enum restriction_apply_type {
 	KEEP_AS_IS,
 	UNSET,
 };
 
-struct apply_param
-{
+struct apply_param {
 	enum restriction_apply_type apply_type;
 };
 
@@ -183,7 +181,7 @@ static void _reset_restrictions_iter(gpointer data, gpointer user_data)
 			_D("quota rcv: % " PRId64 ", send: % " PRId64 " ", du_quota.rcv_quota, du_quota.snd_quota);
 
 			send_restriction_notification(arg->app_id, &du_quota);
-		} else if(arg->quota_id && rst.rcv_warning_limit) {
+		} else if (arg->quota_id && rst.rcv_warning_limit) {
 			get_quota_by_id(arg->quota_id, &du_quota);
 			_D("quota rcv: % " PRId64 ", send: % " PRId64 " ", du_quota.rcv_quota, du_quota.snd_quota);
 

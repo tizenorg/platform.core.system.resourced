@@ -143,7 +143,7 @@ static int get_current_sim(void)
 			 VCONFKEY_TELEPHONY_SIM_SLOT_COUNT, &sim_slot_count) != 0, -1,
 			 "failed to get sim slot count");
 
-	if(sim_slot_count == SIM_SLOT_SINGLE) {
+	if (sim_slot_count == SIM_SLOT_SINGLE) {
 	       _D("It's single sim model");
 	       return current_sim;
 	}
@@ -180,11 +180,11 @@ static void init_available_modems(void)
 
 	dbus_error_init(&err);
 
-	dbus_message_iter_init (msg, &iter);
-	dbus_message_iter_recurse (&iter, &iter_array);
+	dbus_message_iter_init(msg, &iter);
+	dbus_message_iter_recurse(&iter, &iter_array);
 	current_sim = get_current_sim();
 
-	while (dbus_message_iter_get_arg_type (&iter_array) != DBUS_TYPE_INVALID) {
+	while (dbus_message_iter_get_arg_type(&iter_array) != DBUS_TYPE_INVALID) {
 		const char *name;
 		struct modem_state *state = (struct modem_state *)malloc(
 					      sizeof(struct modem_state));
@@ -193,9 +193,9 @@ static void init_available_modems(void)
 			return;
 		}
 		memset(state, 0, sizeof(struct modem_state));
-		dbus_message_iter_get_basic (&iter_array, &name);
+		dbus_message_iter_get_basic(&iter_array, &name);
 		_D("modem name %s", name);
-		dbus_message_iter_next (&iter_array);
+		dbus_message_iter_next(&iter_array);
 		state->name = strndup(name, strlen(name));
 		state->roaming = false;
 		modems = g_slist_prepend(modems, state);
@@ -258,16 +258,16 @@ static void fill_modem_imsi(struct modem_state *modem)
 
 	dbus_error_init(&err);
 
-	dbus_message_iter_init (msg, &iter);
+	dbus_message_iter_init(msg, &iter);
 	_D_DBUS("dbus message type %d", dbus_message_iter_get_arg_type(&iter));
-	ret_msg_if (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_STRING,
+	ret_msg_if(dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_STRING,
 		"Return for %s isn't variant type as expected",
 		DBUS_FREEDESKTOP_PROPERTIES);
-	dbus_message_iter_get_basic (&iter, &plmn);
+	dbus_message_iter_get_basic(&iter, &plmn);
 	_D_DBUS("plmn value %d", plmn);
 	plmn_len = strlen(plmn);
 	dbus_message_iter_next(&iter);
-	dbus_message_iter_get_basic (&iter, &msin);
+	dbus_message_iter_get_basic(&iter, &msin);
 	dbus_message_unref(msg);
 	dbus_error_free(&err);
 	_D_DBUS("msin value %d", msin);
@@ -322,16 +322,16 @@ static void fill_modem_state(struct modem_state *modem)
 
 	dbus_error_init(&err);
 
-	dbus_message_iter_init (msg, &iter);
+	dbus_message_iter_init(msg, &iter);
 	_D_DBUS("dbus message type %d", dbus_message_iter_get_arg_type(&iter));
-	ret_msg_if (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_VARIANT,
+	ret_msg_if(dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_VARIANT,
 		"Return for %s isn't variant type as expected", DBUS_FREEDESKTOP_PROPERTIES);
 	dbus_message_iter_recurse(&iter, &var);
 	_D_DBUS("dbus message variant type %d", dbus_message_iter_get_arg_type(&var));
-	ret_msg_if (dbus_message_iter_get_arg_type(&var) != DBUS_TYPE_BOOLEAN,
+	ret_msg_if(dbus_message_iter_get_arg_type(&var) != DBUS_TYPE_BOOLEAN,
 		"Return for %s isn't boolean type as expected", DBUS_FREEDESKTOP_PROPERTIES);
 
-	dbus_message_iter_get_basic (&var, &modem->roaming);
+	dbus_message_iter_get_basic(&var, &modem->roaming);
 	dbus_message_unref(msg);
 	dbus_error_free(&err);
 	_D("modem roaming value %d", modem->roaming);
@@ -366,16 +366,16 @@ static void fill_protocol(struct modem_state *modem)
 
 	dbus_error_init(&err);
 
-	dbus_message_iter_init (msg, &iter);
+	dbus_message_iter_init(msg, &iter);
 	_D_DBUS("dbus message type %d", dbus_message_iter_get_arg_type(&iter));
-	ret_msg_if (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_VARIANT,
+	ret_msg_if(dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_VARIANT,
 		"Return for %s isn't variant type as expected", DBUS_FREEDESKTOP_PROPERTIES);
 	dbus_message_iter_recurse(&iter, &var);
 	_D_DBUS("dbus message variant type %d", dbus_message_iter_get_arg_type(&var));
-	ret_msg_if (dbus_message_iter_get_arg_type(&var) != DBUS_TYPE_INT32,
+	ret_msg_if(dbus_message_iter_get_arg_type(&var) != DBUS_TYPE_INT32,
 		"Return for %s isn't int type as expected", DBUS_FREEDESKTOP_PROPERTIES);
 
-	dbus_message_iter_get_basic (&var, &modem->protocol);
+	dbus_message_iter_get_basic(&var, &modem->protocol);
 	dbus_message_unref(msg);
 	dbus_error_free(&err);
 	_D("modem roaming value %d", modem->protocol);
@@ -433,7 +433,7 @@ static void edbus_telephony_changed(void *data, DBusMessage *msg)
 	DBusMessageIter iter, dict, prop, bool_iter;
 
 	_D_DBUS("it's signal by %s path", dbus_message_get_path(msg));
-	dbus_message_iter_init (msg, &iter);
+	dbus_message_iter_init(msg, &iter);
 	dbus_message_iter_next(&iter);
 	/* call dbus_message_iter_next(&iter) */
 	_D_DBUS("dbus message type %d", dbus_message_iter_get_arg_type(&iter));
@@ -441,34 +441,34 @@ static void edbus_telephony_changed(void *data, DBusMessage *msg)
 	while (dbus_message_iter_get_arg_type(&iter) == DBUS_TYPE_ARRAY) {
 		dbus_message_iter_recurse(&iter, &dict);
 		_D_DBUS("dbus message variant type %d", dbus_message_iter_get_arg_type(&dict));
-		ret_msg_if (dbus_message_iter_get_arg_type(&dict) != DBUS_TYPE_DICT_ENTRY,
+		ret_msg_if(dbus_message_iter_get_arg_type(&dict) != DBUS_TYPE_DICT_ENTRY,
 			"Return for %s isn't variant type as expected",
 			 modem->path);
 
 		dbus_message_iter_recurse(&dict, &prop);
 		_D_DBUS("dbus message roaming type %d", dbus_message_iter_get_arg_type(&prop));
-		ret_msg_if (dbus_message_iter_get_arg_type(&prop) != DBUS_TYPE_STRING,
+		ret_msg_if(dbus_message_iter_get_arg_type(&prop) != DBUS_TYPE_STRING,
 			"Return for %s isn't boolean type as expected",
 			 modem->path);
 
-		dbus_message_iter_get_basic (&prop, &property);
+		dbus_message_iter_get_basic(&prop, &property);
 
 		if (strncmp(property, DBUS_TELEPHONY_ROAMING_STATUS, strlen(DBUS_TELEPHONY_ROAMING_STATUS)+1) == 0) {
 			dbus_message_iter_next(&prop); /* it's variant here, expand it */
 			dbus_message_iter_recurse(&prop, &bool_iter);
-			ret_msg_if (dbus_message_iter_get_arg_type(&bool_iter) != DBUS_TYPE_BOOLEAN,
+			ret_msg_if(dbus_message_iter_get_arg_type(&bool_iter) != DBUS_TYPE_BOOLEAN,
 			"Return for %s isn't variant type as expected", DBUS_FREEDESKTOP_PROPERTIES);
 
-			dbus_message_iter_get_basic (&bool_iter, &modem->roaming);
+			dbus_message_iter_get_basic(&bool_iter, &modem->roaming);
 			_D("Roaming state for modem %s has changed", modem->name);
 			_D("roaming state now is %d", modem->roaming);
 		} else if (strncmp(property, DBUS_TELEPHONY_SERVICE_TYPE, strlen(DBUS_TELEPHONY_SERVICE_TYPE)+1) == 0) {
 			dbus_message_iter_next(&prop); /* it's variant here, expand it */
 			dbus_message_iter_recurse(&prop, &bool_iter);
-			ret_msg_if (dbus_message_iter_get_arg_type(&bool_iter) != DBUS_TYPE_INT32,
+			ret_msg_if(dbus_message_iter_get_arg_type(&bool_iter) != DBUS_TYPE_INT32,
 			"Return for %s isn't variant type as expected", DBUS_FREEDESKTOP_PROPERTIES);
 
-			dbus_message_iter_get_basic (&bool_iter, &modem->protocol);
+			dbus_message_iter_get_basic(&bool_iter, &modem->protocol);
 			_D("Protocol for modem %s has changed", modem->name);
 			_D("protocol now is %d", modem->protocol);
 		} else {
@@ -515,7 +515,7 @@ static void edbus_sim_status_changed(void *data, DBusMessage *msg)
 	DBusMessageIter iter;
 
 	_D("it's signal by %s path", dbus_message_get_path(msg));
-	dbus_message_iter_init (msg, &iter);
+	dbus_message_iter_init(msg, &iter);
 	arg_type = dbus_message_iter_get_arg_type(&iter);
 	dbus_message_iter_get_basic(&iter, &sim_status);
 
@@ -603,7 +603,7 @@ char *get_imsi_hash(char *imsi)
 		struct modem_state *modem = (struct modem_state *)iter->data;
 		if (modem->imsi == NULL)
 			continue;
-		if(!strncmp(imsi, modem->imsi, strlen(modem->imsi)+1))
+		if (!strncmp(imsi, modem->imsi, strlen(modem->imsi)+1))
 			return modem->imsi_hash;
 	}
 	return NULL;
