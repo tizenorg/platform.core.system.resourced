@@ -118,7 +118,7 @@ void proc_set_process_memory_state(struct proc_app_info *pai,
 	if (!pai)
 		return;
 
-	pai->memory.memcg_idx= memcg_idx;
+	pai->memory.memcg_idx = memcg_idx;
 	pai->memory.memcg_info = memcg_info;
 	pai->memory.oom_score_adj = oom_score_adj;
 }
@@ -146,7 +146,7 @@ struct proc_app_info *find_app_info_by_appid(const char *appid)
 struct proc_app_info *find_app_info(const pid_t pid)
 {
 	GSList *iter = NULL;
-	struct proc_app_info *pai= NULL;
+	struct proc_app_info *pai = NULL;
 
 	gslist_for_each_item(iter, proc_app_list) {
 		pai = (struct proc_app_info *)iter->data;
@@ -716,7 +716,7 @@ void proc_set_group(pid_t ownerpid, pid_t childpid, char *pkgname)
 	struct proc_app_info *pai, *owner;
 	struct proc_status ps = {0};
 
-	if (ownerpid <= 0 || childpid <=0)
+	if (ownerpid <= 0 || childpid <= 0)
 		return;
 
 	ret = proc_get_oom_score_adj(ownerpid, &owner_oom);
@@ -741,7 +741,7 @@ void proc_set_group(pid_t ownerpid, pid_t childpid, char *pkgname)
 				ppi->app_list = g_slist_remove(ppi->app_list, pai);
 
 			ret = proc_get_oom_score_adj(childpid, &child_oom);
-			if(ret < 0) {
+			if (ret < 0) {
 				_D("can't get oom score for pid (%d)", childpid);
 				child_oom = 0;
 			}

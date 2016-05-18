@@ -218,7 +218,7 @@ API resourced_ret_c data_usage_foreach(const data_usage_selection_rule *rule,
 	resourced_tm_interval interval;
 
 	libresourced_db_initialize_once();
-	if (init_datausage_foreach(resourced_get_database())!= SQLITE_OK) {
+	if (init_datausage_foreach(resourced_get_database()) != SQLITE_OK) {
 		_D("Failed to initialize data usage statements: %s\n",
 		   sqlite3_errmsg(resourced_get_database()));
 		return RESOURCED_ERROR_DB_FAILED;
@@ -332,7 +332,7 @@ API resourced_ret_c data_usage_details_foreach(const char *app_id,
 	resourced_tm_interval interval;
 
 	libresourced_db_initialize_once();
-	if (init_datausage_foreach(resourced_get_database())!= SQLITE_OK) {
+	if (init_datausage_foreach(resourced_get_database()) != SQLITE_OK) {
 		_D("Failed to initialize data usage statements: %s\n",
 		   sqlite3_errmsg(resourced_get_database()));
 		return RESOURCED_ERROR_DB_FAILED;

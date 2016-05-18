@@ -870,7 +870,7 @@ static int heart_battery_get_batt_reset_usage_index(void)
 {
 	int i;
 
-	for(i = 0; i < BATTERY_HISTORY_RESET_MAX; i++) {
+	for (i = 0; i < BATTERY_HISTORY_RESET_MAX; i++) {
 		if (heart_battery_get_usage_reset_count(i, DISCHARGING) < BATTERY_HISTORY_COUNT_MAX
 			&& heart_battery_get_usage_reset_count(i, CHARGING) < BATTERY_HISTORY_COUNT_MAX)
 			return i;
@@ -934,7 +934,7 @@ static int heart_battery_reset(void *data)
 	batt_used.used_time_sec = 0;
 	batt_used.last_update_time = logging_get_time(CLOCK_BOOTTIME);
 
-        return RESOURCED_ERROR_NONE;
+	return RESOURCED_ERROR_NONE;
 }
 
 static long heart_battery_compute_remaining_time_in_min(int capacity_count, long sec_per_cap)
@@ -2085,7 +2085,7 @@ static int heart_battery_exit(void *data)
 	GSList *iter, *next;
 	struct heart_battery_capacity *lbc;
 
-        heart_battery_save_to_file(true);
+	heart_battery_save_to_file(true);
 	ret = pthread_mutex_lock(&heart_battery_mutex);
 	if (ret) {
 		_E("pthread_mutex_lock() failed, %d", ret);

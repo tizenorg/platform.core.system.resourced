@@ -339,7 +339,7 @@ static DBusMessage *edbus_heart_get_abnormal_data(E_DBus_Object *obj, DBusMessag
 }
 
 static struct edbus_method edbus_methods[] = {
-       { "GetAbnormalData",      "ii",   "a(si)",     edbus_heart_get_abnormal_data },
+	{ "GetAbnormalData",      "ii",   "a(si)",     edbus_heart_get_abnormal_data },
 };
 
 static int heart_abnormal_init(void *data)

@@ -737,7 +737,7 @@ error:
 }
 
 static int send_socket_with_repy(struct resourced_noti *msg,
-    char*buf, char* len_buf)
+		char *buf, char *len_buf)
 {
 	int client_len;
 	int client_sockfd;
@@ -828,7 +828,7 @@ static resourced_ret_c proc_cgroup_send_status(const int type, int num, ...)
 }
 
 static resourced_ret_c proc_send_get_status(const int type, char* pid_buf,
-    char*buf, char* len_buf)
+		char *buf, char *len_buf)
 {
 	struct resourced_noti *msg;
 	resourced_ret_c ret = RESOURCED_ERROR_NONE;
@@ -909,7 +909,7 @@ API resourced_ret_c proc_cgroup_launch(int type, pid_t pid, char *app_id, char *
 }
 
 API resourced_ret_c proc_stat_get_pid_entry(int type, pid_t pid,
-    char* buf, int len)
+		char *buf, int len)
 {
 	char pid_buf[MAX_DEC_SIZE(int)];
 	char len_buf[MAX_DEC_SIZE(int)];

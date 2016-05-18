@@ -118,7 +118,7 @@ struct nfacct_value {
 	resourced_state_t ground; /* background/foreground state */
 };
 
-struct ground_state_info{
+struct ground_state_info {
 	struct counter_arg *carg;
 	u_int32_t classid;
 	resourced_state_t state;
@@ -169,7 +169,7 @@ static resourced_ret_c del_iptables_out(struct nfacct_rule *counter)
 #endif /* CONFIG_DATAUSAGE_NFACCT */
 
 static gboolean bg_restriction(gpointer key, gpointer value,
-        gpointer data)
+		gpointer data)
 {
 	bool *bg_restriction = (bool *)data;
 
@@ -263,7 +263,7 @@ static int remove_each_counter(
 
 	nf_value = lookup_counter(counter);
 
-	ret_value_msg_if (!nf_value, FALSE, "Can't remove counter, due it's not in tree");
+	ret_value_msg_if(!nf_value, FALSE, "Can't remove counter, due it's not in tree");
 	SET_BIT(nf_value->fini, NFACCT_FINAL_REMOVE);
 
 	/* move it into _answer_func_cb */
@@ -297,8 +297,7 @@ static void remove_nfacct_counters_for_all_iface(u_int32_t classid, struct count
 	for_each_ifnames((ifnames_iterator)remove_each_counter, NULL, &counter);
 }
 
-struct match_nftree_context
-{
+struct match_nftree_context {
 	u_int32_t classid;
 	pid_t pid;
 };
@@ -420,7 +419,7 @@ static gboolean move_proc_background_cgroup(gpointer key, gpointer value,
 {
 	struct nfacct_value *nf_value = (struct nfacct_value *)value;
 	struct nfacct_key *nf_key = (struct nfacct_key *)key;
-	resourced_state_t state = (resourced_state_t )data;
+	resourced_state_t state = (resourced_state_t)data;
 	struct proc_app_info *pai = NULL;
 	resourced_restriction_info rst_info = {0};
 	char *app_id;
@@ -790,8 +789,8 @@ static int add_one_tizen_os_counter(
 	return FALSE;
 }
 
-static void add_tizen_os_counters(struct counter_arg *carg) {
-
+static void add_tizen_os_counters(struct counter_arg *carg)
+{
 	for_each_ifnames((ifnames_iterator)add_one_tizen_os_counter, NULL, carg);
 }
 
@@ -1127,7 +1126,7 @@ static int resourced_datausage_init(void *data)
 						sizeof(struct net_counter_opts));
 	struct shared_modules_data *m_data = NULL;
 
-	ret_value_msg_if (net_opts == NULL, RESOURCED_ERROR_OUT_OF_MEMORY,
+	ret_value_msg_if(net_opts == NULL, RESOURCED_ERROR_OUT_OF_MEMORY,
 			  "Not enough memory");
 
 	m_data = get_shared_modules_data();
@@ -1213,7 +1212,7 @@ static int resourced_datausage_finalize(void *data)
 #ifdef CONFIG_DATAUSAGE_NFACCT
 
 static int compare_nfcntr(gconstpointer a, gconstpointer b,
-                     gpointer UNUSED user_data)
+		gpointer UNUSED user_data)
 {
 	struct nfacct_key *key_a = (struct nfacct_key *)a;
 	struct nfacct_key *key_b = (struct nfacct_key *)b;
@@ -1354,7 +1353,7 @@ void finalize_counter(struct nfacct_rule *counter)
 	ret_msg_if(!value->iptables_rule, "There is no iptables_rule handler");
 
 	ret = value->iptables_rule(counter);
-	ret_msg_if (ret != RESOURCED_ERROR_NONE, "Failed to execute iptables rule");
+	ret_msg_if(ret != RESOURCED_ERROR_NONE, "Failed to execute iptables rule");
 	UNSET_BIT(value->fini, NFACCT_FINAL_REMOVE);
 	value->state = NFACCT_STATE_DEACTIVATED;
 #ifdef NETWORK_DEBUG_ENABLED
@@ -1454,7 +1453,7 @@ static gboolean fill_restriction_list(gpointer key, gpointer value,
 
 	if (nf_key->iotype == NFACCT_COUNTER_IN)
 		info->rcv_limit = nf_value->quota;
-	else if(nf_key->iotype == NFACCT_COUNTER_OUT)
+	else if (nf_key->iotype == NFACCT_COUNTER_OUT)
 		info->send_limit = nf_value->quota;
 	else
 		_D("Unknown iotype");
@@ -1504,7 +1503,7 @@ static int create_each_iptable_rule(gpointer key, gpointer value, void *data)
 	    (counter->state != NFACCT_STATE_ACTIVE)) {
 		ret = ctx->counter->iptables_rule(ctx->counter);
 		ret_value_msg_if(ret != RESOURCED_ERROR_NONE, RESOURCED_ERROR_FAIL,
-			         "Can't add iptables ingress rule");
+				 "Can't add iptables ingress rule");
 	}
 
 	return RESOURCED_ERROR_NONE;
@@ -1570,7 +1569,7 @@ static void trace_nf_key_value(struct nfacct_key *nfacct_key, struct nfacct_valu
 }
 
 static bool is_incomplete_counter(struct nfacct_key *nfacct_key,
-		                  struct nfacct_value *nfacct_value)
+				  struct nfacct_value *nfacct_value)
 {
 	return nfacct_key->iftype == RESOURCED_IFACE_UNKNOWN &&
 		nfacct_value->state == NFACCT_STATE_ACTIVE;
@@ -1585,7 +1584,7 @@ static bool is_incomplete_counter(struct nfacct_key *nfacct_key,
  * 3. counting is not allowed, e.g. by security reason
  */
 static bool check_skip_activating(struct nfacct_key *nfacct_key,
-			          struct nfacct_value *nfacct_value,
+				  struct nfacct_value *nfacct_value,
 				  struct iftype_context *ctx)
 {
 	/**
@@ -1746,8 +1745,7 @@ static void handle_change_allowance(resourced_iface_type iftype, bool enabled)
 		turn_off_counters(iftype, m_data->carg);
 }
 
-struct del_counter_context
-{
+struct del_counter_context {
 	struct nfacct_value *nfacct_value;
 	struct nfacct_key *nfacct_key;
 	struct counter_arg *carg;
@@ -1797,7 +1795,7 @@ static Eina_Bool del_counter_delayed(void *data)
 
 	ret = resourced_ipt_remove(&counter, del_ctx->iptc_holder->iptc);
 
-	if(ret != RESOURCED_ERROR_NONE) {
+	if (ret != RESOURCED_ERROR_NONE) {
 		_E("Can't delete counter %s",
 		   counter.name);
 		goto finalize_iptc;

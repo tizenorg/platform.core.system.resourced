@@ -60,7 +60,7 @@ static int mem_stress_allocate_memory(void **addr, size_t len)
 	do {
 		fprintf(stdout, "Try to allocate memory %zu", len);
 		p = new0(void, len);
-	} while(!p);
+	} while (!p);
 
 	r = mlock(p, len);
 	if (r < 0) {
@@ -103,7 +103,7 @@ static int mem_stress_run_loop(void)
 		return r;
 	}
 
-	while(!quite)
+	while (!quite)
 		sleep(10);
 
 	r = mem_stress_free_memory(mem, arg_size);

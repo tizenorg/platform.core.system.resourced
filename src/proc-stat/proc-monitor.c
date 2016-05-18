@@ -502,7 +502,7 @@ static void proc_dbus_exclude_signal_handler(void *data, DBusMessage *msg)
 		ps.pid = pid;
 		resourced_notify(RESOURCED_NOTIFIER_APP_WAKEUP, &ps);
 	} else if (len == 7) {
-		if(!strncmp(str, "ex", 2)) {
+		if (!strncmp(str, "ex", 2)) {
 			pe.pid = pid;
 			pe.type = PROC_EXCLUDE;
 			resourced_notify(RESOURCED_NOTIFIER_CONTROL_EXCLUDE, &pe);
@@ -561,7 +561,7 @@ static void proc_dbus_exclude_appid_signal_handler(void *data, DBusMessage *msg)
 	if (len == 6 && !strncmp(str, "wa", 2)) {
 		resourced_notify(RESOURCED_NOTIFIER_APP_WAKEUP, &ps);
 	} else if (len == 7) {
-		if(!strncmp(str, "ex", 2)) {
+		if (!strncmp(str, "ex", 2)) {
 			pe.pid = ps.pid;
 			pe.type = PROC_EXCLUDE;
 			resourced_notify(RESOURCED_NOTIFIER_CONTROL_EXCLUDE, &pe);

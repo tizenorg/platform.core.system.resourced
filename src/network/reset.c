@@ -45,7 +45,7 @@
 	"iftype=? and time_stamp between ? and ?"
 
 #define RESET_FIRST_BY_NUMBER "delete from statistics where time_stamp in " \
-       "(select time_stamp from statistics desc limit ?)"
+	"(select time_stamp from statistics desc limit ?)"
 
 /* the following array is strictly ordered
  * to find required statement the following code will be used:
@@ -101,7 +101,7 @@ API resourced_ret_c reset_data_usage_first_n_entries(int num)
 {
 	resourced_ret_c result = RESOURCED_ERROR_NONE;
 
-	ret_value_msg_if (!num, RESOURCED_ERROR_INVALID_PARAMETER,
+	ret_value_msg_if(!num, RESOURCED_ERROR_INVALID_PARAMETER,
 			"Invalid number of entries");
 	libresourced_db_initialize_once();
 

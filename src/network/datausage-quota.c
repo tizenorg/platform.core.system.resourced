@@ -126,7 +126,7 @@ API resourced_ret_c remove_datausage_quota(
 		return RESOURCED_ERROR_INVALID_PARAMETER;
 
 	return send_remove_quota_message(rule->app_id, rule->iftype,
-	         rule->roaming, rule->imsi ? rule->imsi : "", rule->quota_type);
+		rule->roaming, rule->imsi ? rule->imsi : "", rule->quota_type);
 }
 
 API resourced_ret_c remove_datausage_quota_by_iftype(

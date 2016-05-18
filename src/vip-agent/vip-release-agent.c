@@ -53,7 +53,7 @@ static int run_exec(char **argv)
 		if (wpid == 0) {
 			if (times < MAX_TIMES) {
 				sleep(WAIT_TIMEOUT);
-				times ++;
+				times++;
 			} else {
 				_D("timeout!!, kill child process(%s)\n",
 				    argv[0]);

@@ -218,7 +218,7 @@ static Eina_Bool block_monitor_cb(void *user_data, Ecore_Fd_Handler *fd_handler)
 
 		hash = bmi->block_exclude_path
 		     ? g_hash_table_find(bmi->block_exclude_path,
-		     	find_hash, (gpointer)buf)
+			find_hash, (gpointer)buf)
 		     : NULL;
 
 		if (hash) {
@@ -271,7 +271,7 @@ int register_fanotify(struct block_monitor_info *bmi)
 
 	bmi->mfd = fanotify_init(FAN_CLOEXEC|FAN_NONBLOCK | FAN_CLASS_CONTENT,
 			    O_RDONLY | O_LARGEFILE | O_CLOEXEC | O_NOATIME);
-	if (bmi->mfd< 0) {
+	if (bmi->mfd < 0) {
 		_E("Failed to create fanotify fd");
 		goto error;
 	}

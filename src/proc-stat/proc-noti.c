@@ -305,7 +305,7 @@ static int proc_noti_socket_init(void)
 	if (n > 1) {
 		_E("Error: Too many file descriptors received: %d", n);
 		return -1;
-	} else if (n==1) {
+	} else if (n == 1) {
 		fd = SD_LISTEN_FDS_START + 0;
 	} else {
 		if (access(RESOURCED_SOCKET_PATH, F_OK) == 0)

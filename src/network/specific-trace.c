@@ -46,8 +46,8 @@ gboolean print_appstat(gpointer key, gpointer value,
 		return TRUE; /*stop printing*/
 	}
 
-       _SD("appid %s, rcv %u, snd %u, classid %u, iftype %d, ifname %s," \
-               " is_roaming %d, ground %d",
+	_SD("appid %s, rcv %u, snd %u, classid %u, iftype %d, ifname %s," \
+		" is_roaming %d, ground %d",
 		appstat->application_id, appstat->rcv_count,
 		appstat->snd_count, (u_int32_t)composite_key->classid,
 		composite_key->iftype, composite_key->ifname,

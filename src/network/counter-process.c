@@ -362,7 +362,7 @@ static inline int _evaluate_warning_threshold(const int64_t quota,
 
 	threshold_part = _get_threshold_part(time_period);
 
-	return (get_quota_ceiling(quota) / 100 ) * threshold_part;
+	return (get_quota_ceiling(quota) / 100) * threshold_part;
 }
 
 static dbus_bool_t deserialize_quota(
@@ -404,7 +404,7 @@ static dbus_bool_t deserialize_quota(
 		goto release;
 	}
 
-	if(quota->iftype <= RESOURCED_IFACE_UNKNOWN ||
+	if (quota->iftype <= RESOURCED_IFACE_UNKNOWN ||
 	   quota->iftype >= RESOURCED_IFACE_LAST_ELEM) {
 		_E("Unknown network interface is inacceptable!");
 		ret = FALSE;
@@ -414,8 +414,7 @@ static dbus_bool_t deserialize_quota(
 	if (quota->roaming_type < RESOURCED_ROAMING_UNKNOWN ||
 	    quota->roaming_type >= RESOURCED_ROAMING_LAST_ELEM ||
 	    (quota->roaming_type == RESOURCED_ROAMING_UNKNOWN &&
-	     quota->iftype == RESOURCED_IFACE_DATACALL))
-	{
+	     quota->iftype == RESOURCED_IFACE_DATACALL)) {
 		_E("Bad roaming!");
 		ret = FALSE;
 		goto release;

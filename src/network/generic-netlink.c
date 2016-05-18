@@ -153,7 +153,7 @@ static uint32_t get_mcast_group_id(struct rtattr *mc_na, const char *group_name)
 	struct rtattr *multicast_general_family[NESTED_MCAST_MAX + 1] = {0};
 
 	fill_attribute_list(multicast_general_family, NESTED_MCAST_MAX,
-		            rt_na, rt_len);
+			    rt_na, rt_len);
 
 	/* for each group */
 	for (i = 0; i < NESTED_MCAST_MAX; ++i) {
@@ -171,7 +171,7 @@ static uint32_t get_mcast_group_id(struct rtattr *mc_na, const char *group_name)
 }
 
 uint32_t get_family_group_id(int sock, pid_t pid,
-	                char *family_name, char *group_name,
+			char *family_name, char *group_name,
 			uint32_t *family_id)
 {
 	struct genl family_req;
@@ -246,7 +246,7 @@ static void show_result(const struct genl *ans)
 	char *result = NULL;
 
 	if (!ans) {
-		_D ("Please provide valid argument!");
+		_D("Please provide valid argument!");
 		return;
 	}
 

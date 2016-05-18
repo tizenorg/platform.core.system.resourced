@@ -106,9 +106,9 @@ static struct nlattr *start_nest_attr(struct genl *req, uint16_t type)
 	struct nlattr *start = (struct nlattr *)(
 		 (char *)req + NLMSG_ALIGN(req->n.nlmsg_len));
 
-        start->nla_type = NLA_F_NESTED | type;
-        req->n.nlmsg_len += NLMSG_ALIGN(sizeof(struct nlattr));
-        return start;
+	start->nla_type = NLA_F_NESTED | type;
+	req->n.nlmsg_len += NLMSG_ALIGN(sizeof(struct nlattr));
+	return start;
 }
 
 static void end_nest_attr(struct genl *req, struct nlattr *start)
@@ -290,7 +290,7 @@ bool recreate_counter_by_name(char *cnt_name, struct nfacct_rule *cnt)
 		/* tbnep+:seth_w0; means comes by bt go away by mobile interface,
 		 * it's outgoing traffic, due all tethering is mobile databased */
 		iftype_part = strchr(name, ':');
-		ret_value_msg_if (iftype_part == NULL,
+		ret_value_msg_if(iftype_part == NULL,
 			false, "Invalid format of the tethering counter %s", name);
 		ifname_len = iftype_part - name - 1;
 		strncpy(ifname_buf, name + 1, ifname_len); /* skip first t */
@@ -367,7 +367,7 @@ static void _process_answer(struct netlink_serialization_params *params)
 	/* parse reply message */
 	na = (struct rtattr *)GENLMSG_DATA(ans);
 
-	while (NLMSG_OK(nlhdr, ans_len )) {
+	while (NLMSG_OK(nlhdr, ans_len)) {
 
 		fill_attribute_list(attr_list, NFACCT_MAX,
 			na, len);
@@ -543,7 +543,7 @@ static char *get_iptables_cmd(const nfacct_rule_action action)
 {
 	if (action == NFACCT_ACTION_APPEND)
 		return APPEND;
-	else if(action == NFACCT_ACTION_DELETE)
+	else if (action == NFACCT_ACTION_DELETE)
 		return DELETE;
 	else if (action == NFACCT_ACTION_INSERT)
 		return INSERT;
@@ -555,7 +555,7 @@ static char *get_iptables_chain(const nfacct_rule_direction iotype)
 {
 	if (iotype == NFACCT_COUNTER_IN)
 		return IN_RULE;
-	else if(iotype == NFACCT_COUNTER_OUT)
+	else if (iotype == NFACCT_COUNTER_OUT)
 		return OUT_RULE;
 
 	return "";
@@ -784,7 +784,7 @@ resourced_ret_c produce_net_rule(struct nfacct_rule *rule,
 
 	if (rule->classid != RESOURCED_ALL_APP_CLASSID)
 		ret = produce_app_rule(rule, send_limit,
-			               rcv_limit, action, jump,
+				       rcv_limit, action, jump,
 				       iotype);
 	else
 		ret = produce_iface_rule(rule, send_limit, rcv_limit,

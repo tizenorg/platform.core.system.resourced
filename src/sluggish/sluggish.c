@@ -268,7 +268,7 @@ static void sluggish_get_summary(char *timestamp, int slug_vertical, int pid, do
 
 	/* Get internal memory status */
 	memset(&s, 0x00, sizeof(struct storage_size));
-	if (storage_get_size(INTERNAL, &s) < 0 ) {
+	if (storage_get_size(INTERNAL, &s) < 0) {
 		_E("Fail to get internal memory size");
 	} else {
 		int_tot = s.total_size;
@@ -278,7 +278,7 @@ static void sluggish_get_summary(char *timestamp, int slug_vertical, int pid, do
 
 	/* Get external memory status */
 	memset(&s, 0x00, sizeof(struct storage_size));
-	if (storage_get_size(EXTERNAL, &s) < 0 ) {
+	if (storage_get_size(EXTERNAL, &s) < 0) {
 		_E("Fail to get external memory size");
 	} else {
 		ext_tot = s.total_size;
@@ -319,7 +319,7 @@ static void sluggish_get_summary(char *timestamp, int slug_vertical, int pid, do
 		fputs("Sluggishness type: MULTIMEDIA\n", fptr);
 
 	/* 4. Write sluggish PID and process name */
-	fprintf(fptr,"Sluggish PID:%d\n", pid);
+	fprintf(fptr, "Sluggish PID:%d\n", pid);
 
 	/* Get process name */
 	snprintf(proc, sizeof(proc), "/proc/%d/cmdline", pid);
@@ -336,7 +336,7 @@ static void sluggish_get_summary(char *timestamp, int slug_vertical, int pid, do
 	}
 
 	/* 5. Write CPU usage */
-	fprintf(fptr,"CPU used:%3.2lf%%, idle:%3.2lf%%\n", cpu_usage, (100 - cpu_usage));
+	fprintf(fptr, "CPU used:%3.2lf%%, idle:%3.2lf%%\n", cpu_usage, (100 - cpu_usage));
 	fclose(fptr);
 }
 
