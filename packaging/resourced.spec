@@ -7,55 +7,45 @@ License:    Apache-2.0
 Source0:    %{name}-%{version}.tar.gz
 Source2:    resourced-cpucgroup.service
 
-%define cpu_module ON
-%define vip_agent_module ON
-%define timer_slack OFF
+# Default setting
+%define block_module		ON
+%define cpu_module			ON
+%define freezer_module		OFF
+%define heart_module		ON
+%define memory_module		ON
+%define mem_stress			OFF
+%define network_state		OFF
+%define swap_module			OFF
+%define timer_slack			OFF
+%define vip_agent_module	ON
 
-%ifarch aarch64
-	%define heart_module OFF
-%else
-	%define heart_module ON
-%endif
+%define memory_eng			ON
+%define wearable_noti		OFF
+%define debug_log			OFF
+%define memps_log			ON
 
+%define tests_module		OFF
 
-%define memory_module ON
-%define block_module ON
-%define wearable_noti OFF
-%define network_state OFF
-%define memory_eng ON
-%define mem_stress OFF
-
-%define swap_module ON
-%define freezer_module OFF
-
-%define tests_module OFF
-
-%define debug_log OFF
-%define memps_log OFF
-
+# Module switch for each profile
+# Define only difference with default setting
 %if "%{?profile}" == "mobile"
-	%define swap_module OFF
 	%define freezer_module ON
-	%define network_state OFF
-	%define wearable_noti OFF
-	%define memps_log ON
 %endif
 
 %if "%{?profile}" == "wearable"
-	%define freezer_module OFF
-	%define swap_module OFF
-	%define network_state OFF
 	%define wearable_noti ON
-	%define memps_log ON
 %endif
 
 %if "%{?profile}" == "tv"
-	%define freezer_module OFF
-	%define swap_module OFF
-	%define network_state OFF
-	%define wearable_noti OFF
+	%define heart_module OFF
+	%define vip_agent_module OFF
 	%define memps_log OFF
 %endif
+
+%ifarch aarch64
+	%define heart_module OFF
+%endif
+
 
 %define exclude_list_file_name resourced_proc_exclude.ini
 %define exclude_list_full_path %{TZ_SYS_ETC}/%{exclude_list_file_name}
@@ -158,22 +148,22 @@ export FFLAGS="$FFLAGS -DTIZEN_DEBUG_ENABLE"
 	 -DEXCLUDE_LIST_FULL_PATH=%{exclude_list_full_path} \
 	 -DDATABASE_FULL_PATH=%{database_full_path} \
 	 -DEXCLUDE_LIST_OPT_FULL_PATH=%{exclude_list_opt_full_path} \
+	 -DBLOCK_MODULE=%{block_module} \
+	 -DCPU_MODULE=%{cpu_module} \
+	 -DFREEZER_MODULE=%{freezer_module} \
+	 -DHEART_MODULE=%{heart_module} \
+	 -DMEMORY_MODULE=%{memory_module} \
+	 -DMEM_STRESS=%{mem_stress} \
 	 -DNETWORK_MODULE=%{network_state} \
 	 -DSWAP_MODULE=%{swap_module} \
-	 -DFREEZER_MODULE=%{freezer_module} \
-	 -DCPU_MODULE=%{cpu_module} \
-	 -DMEMORY_ENG=%{memory_eng} \
-	 -DVIP_AGENT=%{vip_agent_module} \
-	 -DTIMER_SLACK=%{timer_slack} \
-	 -DHEART_MODULE=%{heart_module} \
-	 -DDATAUSAGE_TYPE=NFACCT \
-	 -DMEMORY_MODULE=%{memory_module} \
-	 -DWEARABLE_NOTI=%{wearable_noti} \
-	 -DBLOCK_MODULE=%{block_module} \
 	 -DTESTS_MODULE=%{tests_module} \
-	 -DMEM_STRESS=%{mem_stress} \
+	 -DTIMER_SLACK=%{timer_slack} \
+	 -DVIP_AGENT=%{vip_agent_module} \
+	 -DMEMORY_ENG=%{memory_eng} \
+	 -DWEARABLE_NOTI=%{wearable_noti} \
 	 -DDEBUG_LOG=%{debug_log} \
 	 -DMEMPS_LOG=%{memps_log} \
+	 -DDATAUSAGE_TYPE=NFACCT \
 	 -DRD_SYS_HOME=%{TZ_SYS_HOME} \
 	 -DRD_SYS_ETC=%{TZ_SYS_ETC} \
 	 -DRD_SYS_STORAGE=%{TZ_SYS_STORAGE} \
