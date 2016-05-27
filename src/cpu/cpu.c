@@ -77,6 +77,7 @@
 #define CPU_CONTROL_PRI 10
 #define CPU_HIGHAPP_PRI -5
 #define CPU_QUOTA_PERIOD_USEC 1000
+#define CPU_ROOT_SHARE 1024
 
 static Ecore_Timer *cpu_predefined_timer = NULL;
 static bool bCPUQuota;
@@ -206,20 +207,24 @@ static int load_cpu_config(struct parse_result *result, void *user_data)
 		}
 	} else if (!strncmp(result->name, "BACKGROUND_CPU_SHARE", strlen("BACKGROUND_CPU_SHARE")+1)) {
 		value = atoi(result->value);
-		if (value) {
-			cgroup_write_node(CPU_BACKGROUND_GROUP, CPU_SHARE, value);
-			cgroup_write_node(CPU_DOWNLOAD_GROUP, CPU_SHARE, value);
-		}
-		if (cpu_quota_enabled())
-			cgroup_write_node(CPU_CPUQUOTA_GROUP, CPU_SHARE, value);
-	} else if (!strncmp(result->name, "BACKGROUND_CPU_MAX_QUOTA", strlen("BACKGROUND_CPU_MAX_QUOTA")+1)) {
+		if (value)
+			cgroup_write_node(CPU_BACKGROUND_GROUP, CPU_SHARE, CPU_ROOT_SHARE * value / 100);
+	} else if (!strncmp(result->name, "DOWNLOAD_CPU_SHARE", strlen("DOWNLOAD_CPU_SHARE")+1)) {
+		value = atoi(result->value);
+		if (value)
+			cgroup_write_node(CPU_DOWNLOAD_GROUP, CPU_SHARE, CPU_ROOT_SHARE * value / 100);
+	} else if (!strncmp(result->name, "QUOTA_CPU_SHARE", strlen("QUOTA_CPU_SHARE")+1)) {
+		value = atoi(result->value);
+		if (value && cpu_quota_enabled())
+			cgroup_write_node(CPU_CPUQUOTA_GROUP, CPU_SHARE, CPU_ROOT_SHARE * value / 100);
+	} else if (!strncmp(result->name, "DOWNLOAD_CPU_BANDWIDTH", strlen("DOWNLOAD_CPU_BANDWIDTH")+1)) {
 		value = atoi(result->value);
 		if (value && cpu_quota_enabled()) {
 			value *= CPU_QUOTA_PERIOD_USEC;
 			cgroup_write_node(CPU_DOWNLOAD_GROUP,
 				    CPU_CONTROL_BANDWIDTH, value);
 		}
-	} else if (!strncmp(result->name, "BACKGROUND_CPU_MIN_QUOTA", strlen("BACKGROUND_CPU_MIN_QUOTA")+1)) {
+	} else if (!strncmp(result->name, "QUOTA_CPU_BANDWIDTH", strlen("QUOTA_CPU_BANDWIDTH")+1)) {
 		value = atoi(result->value);
 		if (value && cpu_quota_enabled()) {
 			value *= CPU_QUOTA_PERIOD_USEC;
