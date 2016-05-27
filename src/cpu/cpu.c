@@ -52,14 +52,14 @@
  *    preloaded service application, downloadable widget, system services
  * 3. /sys/fs/cgroup/cpu/download : control cpu.shares and maximum quota
  *    downloadable service application
- * 4. /sys/fs/cgroup/cpu/background/quota : control cpu.shares and minimum quota
+ * 4. /sys/fs/cgroup/cpu/quota : control cpu.shares and minimum quota
  *    all (preloaded and downloadable) background UI application
  */
 
 #define CPU_DEFAULT_CGROUP "/sys/fs/cgroup/cpu"
-#define CPU_CONTROL_GROUP "/sys/fs/cgroup/cpu/background"
-#define CPU_CONTROL_DOWNLOAD_GROUP "/sys/fs/cgroup/cpu/background/download"
-#define CPU_CONTROL_CPUQUOTA_GROUP "/sys/fs/cgroup/cpu/background/quota"
+#define CPU_BACKGROUND_GROUP CPU_DEFAULT_CGROUP"/background"
+#define CPU_DOWNLOAD_GROUP CPU_DEFAULT_CGROUP"/download"
+#define CPU_CPUQUOTA_GROUP CPU_DEFAULT_CGROUP"/quota"
 #define CPU_CONTROL_BANDWIDTH	"/cpu.cfs_quota_us"
 #define CPU_CONF_FILE     RD_CONFIG_FILE(cpu)
 #define CPU_CONF_SECTION	"CONTROL"
@@ -164,7 +164,7 @@ static int load_cpu_config(struct parse_result *result, void *user_data)
 	if (!strncmp(result->name, CPU_CONF_PREDEFINE, strlen(CPU_CONF_PREDEFINE)+1)) {
 		pid = find_pid_from_cmdline(result->value);
 		if (pid > 0) {
-			cpu_move_cgroup(pid, CPU_CONTROL_GROUP);
+			cpu_move_cgroup(pid, CPU_BACKGROUND_GROUP);
 			def_list.control[def_list.num].pid = pid;
 			def_list.control[def_list.num++].type = SET_DEFAUT;
 		} else {
@@ -173,7 +173,7 @@ static int load_cpu_config(struct parse_result *result, void *user_data)
 	} else if (!strncmp(result->name, CPU_CONF_BOOTING, strlen(CPU_CONF_BOOTING)+1)) {
 		pid = find_pid_from_cmdline(result->value);
 		if (pid > 0) {
-			cpu_move_cgroup(pid, CPU_CONTROL_GROUP);
+			cpu_move_cgroup(pid, CPU_BACKGROUND_GROUP);
 			def_list.control[def_list.num].pid = pid;
 			def_list.control[def_list.num++].type = SET_BOOTING;
 			setpriority(PRIO_PROCESS, pid, CPU_BACKGROUND_PRI);
@@ -181,7 +181,7 @@ static int load_cpu_config(struct parse_result *result, void *user_data)
 	} else if (!strncmp(result->name, CPU_CONF_WRT, strlen(CPU_CONF_WRT)+1)) {
 		pid = find_pid_from_cmdline(result->value);
 		if (pid > 0) {
-			cpu_move_cgroup(pid, CPU_CONTROL_GROUP);
+			cpu_move_cgroup(pid, CPU_BACKGROUND_GROUP);
 			def_list.control[def_list.num].pid = pid;
 			def_list.control[def_list.num++].type = SET_WRT;
 			setpriority(PRIO_PROCESS, pid, CPU_CONTROL_PRI);
@@ -196,7 +196,7 @@ static int load_cpu_config(struct parse_result *result, void *user_data)
 	} else if (!strncmp(result->name, CPU_CONF_SYSTEM, strlen(CPU_CONF_SYSTEM)+1)) {
 		pid = find_pid_from_cmdline(result->value);
 		if (pid > 0)
-			cpu_move_cgroup(pid, CPU_CONTROL_GROUP);
+			cpu_move_cgroup(pid, CPU_BACKGROUND_GROUP);
 	} else if (!strncmp(result->name, CPU_CONF_HOME, strlen(CPU_CONF_HOME)+1)) {
 		pid = find_pid_from_cmdline(result->value);
 		if (pid > 0) {
@@ -207,23 +207,23 @@ static int load_cpu_config(struct parse_result *result, void *user_data)
 	} else if (!strncmp(result->name, "BACKGROUND_CPU_SHARE", strlen("BACKGROUND_CPU_SHARE")+1)) {
 		value = atoi(result->value);
 		if (value) {
-			cgroup_write_node(CPU_CONTROL_GROUP, CPU_SHARE, value);
-			cgroup_write_node(CPU_CONTROL_DOWNLOAD_GROUP, CPU_SHARE, value);
+			cgroup_write_node(CPU_BACKGROUND_GROUP, CPU_SHARE, value);
+			cgroup_write_node(CPU_DOWNLOAD_GROUP, CPU_SHARE, value);
 		}
 		if (cpu_quota_enabled())
-			cgroup_write_node(CPU_CONTROL_CPUQUOTA_GROUP, CPU_SHARE, value);
+			cgroup_write_node(CPU_CPUQUOTA_GROUP, CPU_SHARE, value);
 	} else if (!strncmp(result->name, "BACKGROUND_CPU_MAX_QUOTA", strlen("BACKGROUND_CPU_MAX_QUOTA")+1)) {
 		value = atoi(result->value);
 		if (value && cpu_quota_enabled()) {
 			value *= CPU_QUOTA_PERIOD_USEC;
-			cgroup_write_node(CPU_CONTROL_DOWNLOAD_GROUP,
+			cgroup_write_node(CPU_DOWNLOAD_GROUP,
 				    CPU_CONTROL_BANDWIDTH, value);
 		}
 	} else if (!strncmp(result->name, "BACKGROUND_CPU_MIN_QUOTA", strlen("BACKGROUND_CPU_MIN_QUOTA")+1)) {
 		value = atoi(result->value);
 		if (value && cpu_quota_enabled()) {
 			value *= CPU_QUOTA_PERIOD_USEC;
-			cgroup_write_node(CPU_CONTROL_CPUQUOTA_GROUP,
+			cgroup_write_node(CPU_CPUQUOTA_GROUP,
 				    CPU_CONTROL_BANDWIDTH, value);
 		}
 	}
@@ -239,9 +239,9 @@ static int cpu_service_state(void *data)
 	if (pai && CHECK_BIT(pai->categories, PROC_BG_SYSTEM))
 		return RESOURCED_ERROR_NONE;
 	else if (pai && CHECK_BIT(pai->flags, PROC_DOWNLOADAPP))
-		cpu_move_cgroup(ps->pid, CPU_CONTROL_DOWNLOAD_GROUP);
+		cpu_move_cgroup(ps->pid, CPU_DOWNLOAD_GROUP);
 	else
-		cpu_move_cgroup(ps->pid, CPU_CONTROL_GROUP);
+		cpu_move_cgroup(ps->pid, CPU_BACKGROUND_GROUP);
 	return RESOURCED_ERROR_NONE;
 }
 
@@ -252,7 +252,7 @@ static int cpu_widget_state(void *data)
 
 	_D("widget background: pid = %d, appname = %s", ps->pid, ps->appid);
 	if (pai && CHECK_BIT(pai->flags, PROC_DOWNLOADAPP))
-		cpu_move_cgroup(ps->pid, CPU_CONTROL_GROUP);
+		cpu_move_cgroup(ps->pid, CPU_BACKGROUND_GROUP);
 	return RESOURCED_ERROR_NONE;
 }
 
@@ -274,7 +274,7 @@ static int cpu_background_state(void *data)
 	struct proc_status *ps = (struct proc_status *)data;
 	_D("app background: pid = %d, appname = %s", ps->pid, ps->appid);
 	setpriority(PRIO_PGRP, ps->pid, CPU_BACKGROUND_PRI);
-	cpu_move_cgroup(ps->pid, CPU_CONTROL_GROUP);
+	cpu_move_cgroup(ps->pid, CPU_BACKGROUND_GROUP);
 	return RESOURCED_ERROR_NONE;
 }
 
@@ -284,7 +284,7 @@ static int cpu_restrict_state(void *data)
 	_D("app suspend: pid = %d, appname = %s", ps->pid, ps->appid);
 	if (CHECK_BIT(ps->pai->categories, PROC_BG_MEDIA))
 		return RESOURCED_ERROR_NONE;
-	cpu_move_cgroup(ps->pid, CPU_CONTROL_CPUQUOTA_GROUP);
+	cpu_move_cgroup(ps->pid, CPU_CPUQUOTA_GROUP);
 	return RESOURCED_ERROR_NONE;
 }
 
@@ -326,7 +326,7 @@ static int cpu_system_state(void *data)
 	struct proc_status *ps = (struct proc_status *)data;
 
 	_D("system service : pid = %d", ps->pid);
-	cpu_move_cgroup(ps->pid, CPU_CONTROL_GROUP);
+	cpu_move_cgroup(ps->pid, CPU_BACKGROUND_GROUP);
 	return RESOURCED_ERROR_NONE;
 }
 
@@ -343,7 +343,7 @@ static int cpu_exclude_state(void *data)
 	if (check_predefined(pe->pid) != SET_DEFAUT)
 		return RESOURCED_ERROR_NONE;
 	if (pe->type == PROC_INCLUDE)
-		cpu_move_cgroup(pe->pid, CPU_CONTROL_GROUP);
+		cpu_move_cgroup(pe->pid, CPU_BACKGROUND_GROUP);
 	else
 		cpu_move_cgroup(pe->pid, CPU_DEFAULT_CGROUP);
 	return RESOURCED_ERROR_NONE;
@@ -355,7 +355,7 @@ static Eina_Bool cpu_predefined_cb(void *data)
 
 	for (i = 0; i < def_list.num; i++) {
 		if (def_list.control[i].type == SET_LAZY) {
-			cpu_move_cgroup(def_list.control[i].pid, CPU_CONTROL_GROUP);
+			cpu_move_cgroup(def_list.control[i].pid, CPU_BACKGROUND_GROUP);
 		} else if (def_list.control[i].type == SET_BOOTING) {
 			cpu_move_cgroup(def_list.control[i].pid, CPU_DEFAULT_CGROUP);
 			setpriority(PRIO_PROCESS, def_list.control[i].pid, 0);
@@ -378,11 +378,11 @@ static int resourced_cpu_init(void *data)
 	_D("resourced_cpu_init");
 	ret_code = make_cgroup_subdir(CPU_DEFAULT_CGROUP, "background", NULL);
 	ret_value_msg_if(ret_code < 0, ret_code, "cpu init failed\n");
-	ret_code = make_cgroup_subdir(CPU_CONTROL_GROUP, "download", NULL);
+	ret_code = make_cgroup_subdir(CPU_DEFAULT_CGROUP, "download", NULL);
 	ret_value_msg_if(ret_code < 0, ret_code, "cpu init failed\n");
 	cpu_check_cpuquota();
 	if (cpu_quota_enabled()) {
-		ret_code = make_cgroup_subdir(CPU_CONTROL_GROUP, "quota", NULL);
+		ret_code = make_cgroup_subdir(CPU_DEFAULT_CGROUP, "quota", NULL);
 		ret_value_msg_if(ret_code < 0, ret_code, "create service cgroup failed\n");
 	}
 	config_parse(CPU_CONF_FILE, load_cpu_config, NULL);
