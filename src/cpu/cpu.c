@@ -49,12 +49,11 @@
 #define CPU_BACKGROUND_GROUP CPU_DEFAULT_CGROUP"/background"
 #define CPU_CPUQUOTA_GROUP CPU_DEFAULT_CGROUP"/quota"
 #define CPU_CONTROL_BANDWIDTH	"/cpu.cfs_quota_us"
+#define CPU_CONTROL_FULL_BANDWIDTH "/cpu.cfs_period_us"
 #define CPU_CONF_FILE     RD_CONFIG_FILE(cpu)
 #define CPU_CONF_SECTION	"CONTROL"
 #define CPU_CONF_PREDEFINE	"PREDEFINE"
 #define CPU_CONF_BOOTING	"BOOTING_PREDEFINE"
-#define CPU_CONF_SYSTEM	"SYSTEM_PREDEFINE"
-#define CPU_CONF_HOME		"HOME_PREDEFINE"
 #define CPU_CONF_WRT	"WRT_PREDEFINE"
 #define CPU_CONF_LAZY	"LAZY_PREDEFINE"
 #define CPU_SHARE	"/cpu.shares"
@@ -141,6 +140,19 @@ static void cpu_check_cpuquota(void)
 		bCPUQuota = true;
 }
 
+static int get_relative_value(const char *cgroup_name,
+		const char *file_name, int percent)
+{
+	unsigned int val;
+
+	if (cgroup_read_node(cgroup_name, file_name, &val) != RESOURCED_ERROR_NONE) {
+		_E("Can't read %s%s. value is set to 1000", cgroup_name, file_name);
+		val = 1000;
+	}
+
+	return val * percent / 100;
+}
+
 static int load_cpu_config(struct parse_result *result, void *user_data)
 {
 	pid_t pid = 0, value;
@@ -181,37 +193,24 @@ static int load_cpu_config(struct parse_result *result, void *user_data)
 			def_list.control[def_list.num].pid = pid;
 			def_list.control[def_list.num++].type = SET_LAZY;
 		}
-	} else if (!strncmp(result->name, CPU_CONF_SYSTEM, strlen(CPU_CONF_SYSTEM)+1)) {
-		pid = find_pid_from_cmdline(result->value);
-		if (pid > 0)
-			cpu_move_cgroup(pid, CPU_BACKGROUND_GROUP);
-	} else if (!strncmp(result->name, CPU_CONF_HOME, strlen(CPU_CONF_HOME)+1)) {
-		pid = find_pid_from_cmdline(result->value);
-		if (pid > 0) {
-			setpriority(PRIO_PROCESS, pid, CPU_HIGHAPP_PRI);
-			def_list.control[def_list.num].pid = pid;
-			def_list.control[def_list.num++].type = SET_BOOTING;
-		}
 	} else if (!strncmp(result->name, "BACKGROUND_CPU_SHARE", strlen("BACKGROUND_CPU_SHARE")+1)) {
 		value = atoi(result->value);
-		if (value) {
-			cgroup_write_node(CPU_BACKGROUND_GROUP, CPU_SHARE, value);
-		}
-		if (cpu_quota_enabled())
-			cgroup_write_node(CPU_CPUQUOTA_GROUP, CPU_SHARE, value);
-	} else if (!strncmp(result->name, "BACKGROUND_CPU_MAX_QUOTA", strlen("BACKGROUND_CPU_MAX_QUOTA")+1)) {
+		if (value)
+			cgroup_write_node(CPU_BACKGROUND_GROUP, CPU_SHARE,
+					get_relative_value(CPU_DEFAULT_CGROUP, CPU_SHARE, value));
+	} else if (!strncmp(result->name, "QUOTA_CPU_SHARE", strlen("QUOTA_CPU_SHARE")+1)) {
 		value = atoi(result->value);
-		if (value && cpu_quota_enabled()) {
-			value *= CPU_QUOTA_PERIOD_USEC;
-		}
-	} else if (!strncmp(result->name, "BACKGROUND_CPU_MIN_QUOTA", strlen("BACKGROUND_CPU_MIN_QUOTA")+1)) {
+		if (value && cpu_quota_enabled())
+			cgroup_write_node(CPU_CPUQUOTA_GROUP, CPU_SHARE,
+					get_relative_value(CPU_DEFAULT_CGROUP, CPU_SHARE, value));
+	} else if (!strncmp(result->name, "QUOTA_MAX_BANDWIDTH", strlen("QUOTA_MAX_BANDWIDTH")+1)) {
 		value = atoi(result->value);
-		if (value && cpu_quota_enabled()) {
-			value *= CPU_QUOTA_PERIOD_USEC;
-			cgroup_write_node(CPU_CPUQUOTA_GROUP,
-				    CPU_CONTROL_BANDWIDTH, value);
-		}
+		if (value && cpu_quota_enabled())
+			cgroup_write_node(CPU_CPUQUOTA_GROUP, CPU_CONTROL_BANDWIDTH,
+					get_relative_value(CPU_CPUQUOTA_GROUP,
+						CPU_CONTROL_FULL_BANDWIDTH, value));
 	}
+
 	return RESOURCED_ERROR_NONE;
 }
 
