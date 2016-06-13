@@ -53,8 +53,6 @@
 #define CPU_CONF_SECTION	"CONTROL"
 #define CPU_CONF_PREDEFINE	"PREDEFINE"
 #define CPU_CONF_BOOTING	"BOOTING_PREDEFINE"
-#define CPU_CONF_SYSTEM	"SYSTEM_PREDEFINE"
-#define CPU_CONF_HOME		"HOME_PREDEFINE"
 #define CPU_CONF_WRT	"WRT_PREDEFINE"
 #define CPU_CONF_LAZY	"LAZY_PREDEFINE"
 #define CPU_SHARE	"/cpu.shares"
@@ -65,6 +63,7 @@
 #define CPU_CONTROL_PRI 10
 #define CPU_HIGHAPP_PRI -5
 #define CPU_QUOTA_PERIOD_USEC 1000
+#define CPU_ROOT_SHARE 1024
 
 static Ecore_Timer *cpu_predefined_timer = NULL;
 static bool bCPUQuota;
@@ -181,36 +180,14 @@ static int load_cpu_config(struct parse_result *result, void *user_data)
 			def_list.control[def_list.num].pid = pid;
 			def_list.control[def_list.num++].type = SET_LAZY;
 		}
-	} else if (!strncmp(result->name, CPU_CONF_SYSTEM, strlen(CPU_CONF_SYSTEM)+1)) {
-		pid = find_pid_from_cmdline(result->value);
-		if (pid > 0)
-			cpu_move_cgroup(pid, CPU_BACKGROUND_GROUP);
-	} else if (!strncmp(result->name, CPU_CONF_HOME, strlen(CPU_CONF_HOME)+1)) {
-		pid = find_pid_from_cmdline(result->value);
-		if (pid > 0) {
-			setpriority(PRIO_PROCESS, pid, CPU_HIGHAPP_PRI);
-			def_list.control[def_list.num].pid = pid;
-			def_list.control[def_list.num++].type = SET_BOOTING;
-		}
 	} else if (!strncmp(result->name, "BACKGROUND_CPU_SHARE", strlen("BACKGROUND_CPU_SHARE")+1)) {
 		value = atoi(result->value);
-		if (value) {
-			cgroup_write_node(CPU_BACKGROUND_GROUP, CPU_SHARE, value);
-		}
-		if (cpu_quota_enabled())
-			cgroup_write_node(CPU_CPUQUOTA_GROUP, CPU_SHARE, value);
-	} else if (!strncmp(result->name, "BACKGROUND_CPU_MAX_QUOTA", strlen("BACKGROUND_CPU_MAX_QUOTA")+1)) {
+		if (value)
+			cgroup_write_node(CPU_BACKGROUND_GROUP, CPU_SHARE, CPU_ROOT_SHARE * value / 100);
+	} else if (!strncmp(result->name, "QUOTA_CPU_SHARE", strlen("QUOTA_CPU_SHARE")+1)) {
 		value = atoi(result->value);
-		if (value && cpu_quota_enabled()) {
-			value *= CPU_QUOTA_PERIOD_USEC;
-		}
-	} else if (!strncmp(result->name, "BACKGROUND_CPU_MIN_QUOTA", strlen("BACKGROUND_CPU_MIN_QUOTA")+1)) {
-		value = atoi(result->value);
-		if (value && cpu_quota_enabled()) {
-			value *= CPU_QUOTA_PERIOD_USEC;
-			cgroup_write_node(CPU_CPUQUOTA_GROUP,
-				    CPU_CONTROL_BANDWIDTH, value);
-		}
+		if (value && cpu_quota_enabled())
+			cgroup_write_node(CPU_CPUQUOTA_GROUP, CPU_SHARE, CPU_ROOT_SHARE * value / 100);
 	}
 	return RESOURCED_ERROR_NONE;
 }
