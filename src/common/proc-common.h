@@ -116,6 +116,8 @@ enum proc_lru_state {
 	PROC_ACTIVE = 0,
 	PROC_BACKGROUND	= 1,
 	PROC_LRU_MAX	= 15,
+	PROC_FAVORITE = 16,
+	PROC_FAVORITE_LRU_MAX = 35,
 };
 
 extern GSList *proc_app_list;
