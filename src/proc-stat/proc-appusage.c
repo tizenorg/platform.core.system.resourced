@@ -67,7 +67,7 @@ static gboolean find_hash(gpointer key, gpointer value, gpointer user_data)
 
 static void print_favorite_list(gpointer key, gpointer value, gpointer user_data)
 {
-	_D("favorit app list : %s", (char*)key);
+	_D("favorite app list : %s", (char*)key);
 }
 
 #ifdef HEART_SUPPORT
@@ -136,19 +136,7 @@ static int proc_appusage_table_init(void)
 
 static int booting_done(void *data)
 {
-	static const struct module_ops *swap;
 	int ret;
-
-	/*
-	 * When kernel enables swap feature,
-	 * resourced can control favorite applications because it will
-	 * apply early swap and late oom kill.
-	 */
-	if (!swap) {
-		swap = find_module("swap");
-		if (!swap)
-			return RESOURCED_ERROR_NO_DATA;
-	}
 
 	ret = proc_appusage_table_init();
 	if (ret)

@@ -100,6 +100,7 @@ static int proc_backgrd_manage(int currentpid, int active, int oom_score_adj)
 	GSList *iter;
 	struct proc_program_info *ppi;
 	struct proc_app_info *pai = find_app_info(currentpid);
+	int is_favorite = 0;
 
 	if (!pai || pai->proc_exclude) {
 		_D("pid %d wont be managed", currentpid);
@@ -126,6 +127,14 @@ static int proc_backgrd_manage(int currentpid, int active, int oom_score_adj)
 	if (active)
 		goto set_oom;
 
+	pai->lru_state = PROC_BACKGROUND;
+	if (proc_check_favorite_app(pai->appid)) {
+		_D("detect favorite application : %s", pai->appid);
+		oom_score_adj = OOMADJ_FAVORITE;
+		pai->lru_state = PROC_FAVORITE;
+		is_favorite = 1;
+	}
+
 	if (checkprevpid != currentpid) {
 		gslist_for_each_item(iter, proc_app_list) {
 			struct proc_app_info *spi = (struct proc_app_info *)iter->data;
@@ -149,7 +158,8 @@ static int proc_backgrd_manage(int currentpid, int active, int oom_score_adj)
 			}
 			cur_oom = atoi(buf);
 
-			if (spi->lru_state == PROC_BACKGROUND) {
+			if (spi->lru_state == PROC_BACKGROUND ||
+					spi->lru_state == PROC_FAVORITE) {
 				memset(&ps, 0, sizeof(struct proc_status));
 				ps.pai = spi;
 				ps.pid = pid;
@@ -173,31 +183,42 @@ static int proc_backgrd_manage(int currentpid, int active, int oom_score_adj)
 					    &ps);
 			}
 
-			if (spi->lru_state >= PROC_BACKGROUND) {
-				spi->lru_state++;
-				if (spi->lru_state > PROC_LRU_MAX)
-					spi->lru_state = PROC_LRU_MAX;
-				_D("BACKGRD : process %d increase lru %d", pid, spi->lru_state);
-			}
+			if (is_favorite) {
+				if (spi->lru_state >= PROC_FAVORITE &&
+						spi->lru_state < PROC_FAVORITE_LRU_MAX) {
+					spi->lru_state++;
+					_D("FAVORITE : process %d increase lru %d",
+							pid, spi->lru_state - PROC_FAVORITE + 1);
+				}
 
-			if (cur_oom >= OOMADJ_APP_MAX) {
-				fclose(fp);
-				continue;
-			} else if (cur_oom >= OOMADJ_BACKGRD_UNLOCKED) {
-				new_oom = cur_oom + OOMADJ_APP_INCREASE;
-				_D("BACKGRD : process %d set score %d (before %d)",
-						pid, new_oom, cur_oom);
-				proc_set_oom_score_adj(pid, new_oom);
-				proc_set_oom_score_childs(spi->childs, new_oom);
+				if (cur_oom >= OOMADJ_FAVORITE &&
+						cur_oom < OOMADJ_FAVORITE_APP_MAX) {
+					new_oom = cur_oom + OOMADJ_FAVORITE_APP_INCREASE;
+					_D("FAVORITE : process %d set score %d (beford %d)",
+							pid, new_oom, cur_oom);
+					proc_set_oom_score_adj(pid, new_oom);
+					proc_set_oom_score_childs(spi->childs, new_oom);
+				}
+			} else {
+				if (spi->lru_state >= PROC_BACKGROUND &&
+						spi->lru_state < PROC_LRU_MAX) {
+					spi->lru_state++;
+					_D("BACKGRD : process %d increase lru %d", pid, spi->lru_state);
+				}
+
+				if (cur_oom >= OOMADJ_APP_MAX) {
+					fclose(fp);
+					continue;
+				} else if (cur_oom >= OOMADJ_BACKGRD_UNLOCKED) {
+					new_oom = cur_oom + OOMADJ_APP_INCREASE;
+					_D("BACKGRD : process %d set score %d (before %d)",
+							pid, new_oom, cur_oom);
+					proc_set_oom_score_adj(pid, new_oom);
+					proc_set_oom_score_childs(spi->childs, new_oom);
+				}
 			}
 			fclose(fp);
 		}
-	}
-
-	pai->lru_state = PROC_BACKGROUND;
-	if (proc_check_favorite_app(pai->appid)) {
-		_D("detect favorite application : %s", pai->appid);
-		oom_score_adj = OOMADJ_FAVORITE;
 	}
 
 set_oom:
@@ -359,11 +380,12 @@ int proc_set_foregrd(pid_t pid, int oom_score_adj)
 		break;
 	case OOMADJ_BACKGRD_UNLOCKED:
 	case OOMADJ_INIT:
-	case OOMADJ_FAVORITE:
 		ret = proc_foregrd_manage(pid, OOMADJ_FOREGRD_UNLOCKED);
 		break;
 	default:
-		if (oom_score_adj > OOMADJ_BACKGRD_UNLOCKED)
+		if (oom_score_adj > OOMADJ_BACKGRD_UNLOCKED ||
+				(oom_score_adj >= OOMADJ_FAVORITE &&
+				 oom_score_adj <= OOMADJ_FAVORITE_APP_MAX))
 			ret = proc_foregrd_manage(pid, OOMADJ_FOREGRD_UNLOCKED);
 		else
 			ret = -1;
