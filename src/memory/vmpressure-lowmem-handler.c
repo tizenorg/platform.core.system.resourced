@@ -1766,7 +1766,7 @@ static void lowmem_move_memcgroup(int pid, int oom_score_adj)
 	} else if (oom_score_adj >= OOMADJ_PREVIOUS_BACKGRD) {
 		memcg_idx = MEMCG_PREVIOUS;
 		mi = memcg_tree[memcg_idx]->info;
-	} else if (oom_score_adj == OOMADJ_FAVORITE) {
+	} else if (oom_score_adj >= OOMADJ_FAVORITE) {
 		memcg_idx = MEMCG_FAVORITE;
 		mi = memcg_tree[memcg_idx]->info;
 		should_swap = 1;
