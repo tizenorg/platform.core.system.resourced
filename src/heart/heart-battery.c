@@ -959,12 +959,16 @@ static void heart_battery_calculate_prediction(enum charging_goal goal)
 	struct heart_battery_capacity *lbc = NULL;
 	GArray *arrays = NULL;
 
-	if (goal == CHARGING) {
+	if (goal == CHARGING)
 		capacity = REMAIN_CAPACITY(batt_stat.curr_capacity);
-	} else {
+	else {
 		capacity = batt_stat.curr_capacity;
-	}
 
+		if (goal != DISCHARGING) {
+			_E("Wrong charging status is written. Suppose discharging");
+			goal = DISCHARGING;
+		}
+	}
 
 	/* PREDICTION METHOD: total average */
 	total_time = 0;
