@@ -32,7 +32,6 @@ INCLUDE_DIRECTORIES(${RESOURCED_INCLUDEDIR}
   ${MEMORY_SOURCE_DIR}
   ${PROC-STAT_SOURCE_DIR}/include
   ${APP-STAT_SOURCE_DIR}/include
-  ${NETWORK_SOURCE_DIR}/include
   ${BLOCK_SOURCE_DIR}/include
   ${RESOURCED_DBUS_SOURCE_DIR}/include
   ${FREEZER_SOURCE_DIR}/include
@@ -61,69 +60,6 @@ IF("${MEMPS_LOG}" STREQUAL "ON")
 ENDIF()
 
 INSTALL(FILES ${DATA_DIR}/${EXCLUDE_LIST_FILE_NAME} DESTINATION ${RD_SYS_ETC})
-#network module
-IF("${NETWORK_MODULE}" STREQUAL "ON")
-  SET(SOURCES ${SOURCES}
-    ${NETWORK_SOURCE_DIR}/counter.c
-    )
-  IF("${DATAUSAGE_TYPE}" STREQUAL "NFACCT")
-    SET(CONFIG_DATAUSAGE_NFACCT 1)
-    SET(SOURCES ${SOURCES}
-      ${NETWORK_SOURCE_DIR}/nfacct-rule.c
-      ${NETWORK_SOURCE_DIR}/nf-restriction.c
-      )
-  ELSE()
-    SET(SOURCES ${SOURCES}
-      ${NETWORK_SOURCE_DIR}/generic-netlink.c
-      ${NETWORK_SOURCE_DIR}/ktgrabber-restriction.c
-      ${NETWORK_SOURCE_DIR}/ktgrabber-parser.c
-      )
-  ENDIF()
-
-  IF("${WEARABLE_NOTI}" STREQUAL "ON")
-    SET(SOURCES ${SOURCES}
-      ${NETWORK_SOURCE_DIR}/notification-wearable.c
-      )
-  ELSE()
-    SET(SOURCES ${SOURCES}
-      ${NETWORK_SOURCE_DIR}/notification-mobile.c
-      )
-  ENDIF()
-
-  SET(SOURCES ${SOURCES}
-    ${NETWORK_SOURCE_DIR}/counter-process.c
-    ${NETWORK_SOURCE_DIR}/options-private.c
-    ${NETWORK_SOURCE_DIR}/datausage-quota-processing.c
-    ${NETWORK_SOURCE_DIR}/datausage-vconf-callbacks.c
-    ${NETWORK_SOURCE_DIR}/datausage-vconf-common.c
-    ${NETWORK_SOURCE_DIR}/specific-trace.c
-    ${NETWORK_SOURCE_DIR}/datausage-common.c
-    ${NETWORK_SOURCE_DIR}/iface-cb.c
-    ${NETWORK_SOURCE_DIR}/nl-helper.c
-    ${NETWORK_SOURCE_DIR}/restriction-handler.c
-    ${NETWORK_SOURCE_DIR}/restriction-helper.c
-    ${NETWORK_SOURCE_DIR}/restriction-local.c
-    ${NETWORK_SOURCE_DIR}/tethering-restriction.c
-    ${NETWORK_SOURCE_DIR}/db-guard.c
-    )
-
-  CONFIGURE_FILE(${NETWORK_SOURCE_DIR}/500.resourced-datausage.patch.sh.in
-	  ${NETWORK_SOURCE_DIR}/500.resourced-datausage.patch.sh
-	  @ONLY)
-
-  INSTALL(FILES ${NETWORK_SOURCE_DIR}/network.conf
-	  DESTINATION ${RD_CONFIG_PATH})
-  INSTALL(FILES ${NETWORK_SOURCE_DIR}/500.resourced-datausage.patch.sh
-	  DESTINATION ${RD_SYS_ETC}/upgrade)
-
-  SET(REQUIRES_LIST ${REQUIRES_LIST}
-    openssl
-    tapi
-    )
-
-
-ENDIF()
-
 
 #freezer module
 IF("${FREEZER_MODULE}" STREQUAL "ON")
@@ -237,11 +173,6 @@ FOREACH(FILE ${FILES})
   SET(RESOURCED_INCLUDE_HEADERS ${RESOURCED_INCLUDE_HEADERS} ${FILE})
 ENDFOREACH()
 
-SET(RESOURCED_INCLUDE_HEADERS ${RESOURCED_INCLUDE_HEADERS}
-  ${NETWORK_SOURCE_DIR}/include/datausage-vconf-callbacks.h
-  ${NETWORK_SOURCE_DIR}/include/iface-cb.h
-  )
-
 FILE(GLOB FILES "${COMMON_SOURCE_DIR}/*.c")
 FOREACH(FILE ${FILES})
   SET(RESOURCED_SHARED_SOURCES ${RESOURCED_SHARED_SOURCES} ${FILE})
@@ -270,30 +201,6 @@ INSTALL(FILES
   DESTINATION lib/systemd/system)
 INSTALL_SYMLINK(../${RESOURCED}.socket lib/systemd/system/sockets.target.wants/${RESOURCED}.socket)
 INSTALL_SYMLINK(../${RESOURCED}.service lib/systemd/system/multi-user.target.wants/${RESOURCED}.service)
-
-IF("${NETWORK_MODULE}" STREQUAL "ON")
-  TARGET_LINK_LIBRARIES(${PROJECT_NAME}
-    resourced
-    app-stat
-    storage
-    settings
-    net-cls
-    telephony
-    net-iface
-    )
-
-  IF("${CMAKE_BUILD_TYPE}" STREQUAL  "DEBUG")
-    ADD_EXECUTABLE(test-udp-server ${UTILS_SOURCE_DIR}/udp-server.c ${UTILS_SOURCE_DIR}/udp-common.c)
-    ADD_EXECUTABLE(test-udp-client ${UTILS_SOURCE_DIR}/udp-client.c ${UTILS_SOURCE_DIR}/udp-common.c)
-    ADD_EXECUTABLE(iface-test ${UTILS_SOURCE_DIR}/iface-test.c)
-    TARGET_LINK_LIBRARIES(iface-test net-iface ${RESOURCED_REQUIRE_PKGS_LDFLAGS})
-  ENDIF()
-
-  INSTALL(FILES ${DATA_DIR}/traffic_db.sql
-    DESTINATION /usr/share)
-  INSTALL(FILES ${DATA_DIR}/exception_db.sql
-    DESTINATION /usr/share)
-ENDIF()
 
 INSTALL(FILES ${INCLUDE_PUBLIC_DIR}/resourced.h DESTINATION include/system)
 
@@ -367,7 +274,6 @@ IF("${MEM_STRESS}" STREQUAL "ON")
 	ADD_SUBDIRECTORY(mem-stress)
 ENDIF()
 ADD_SUBDIRECTORY(${PROC-STAT_SOURCE_DIR})
-ADD_SUBDIRECTORY(${NETWORK_SOURCE_DIR})
 IF("${TESTS_MODULE}" STREQUAL "ON")
   ADD_SUBDIRECTORY(${TESTS_SOURCE_DIR})
 ENDIF()

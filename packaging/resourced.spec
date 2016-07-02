@@ -14,7 +14,6 @@ Source2:    resourced-cpucgroup.service
 %define heart_module		ON
 %define memory_module		ON
 %define mem_stress			OFF
-%define network_state		OFF
 %define swap_module			OFF
 %define timer_slack			OFF
 %define vip_agent_module	ON
@@ -154,7 +153,6 @@ export FFLAGS="$FFLAGS -DTIZEN_DEBUG_ENABLE"
 	 -DHEART_MODULE=%{heart_module} \
 	 -DMEMORY_MODULE=%{memory_module} \
 	 -DMEM_STRESS=%{mem_stress} \
-	 -DNETWORK_MODULE=%{network_state} \
 	 -DSWAP_MODULE=%{swap_module} \
 	 -DTESTS_MODULE=%{tests_module} \
 	 -DTIMER_SLACK=%{timer_slack} \
@@ -192,15 +190,6 @@ cp -f LICENSE %{buildroot}/usr/share/license/libresourced
 	touch %{buildroot}%{logging_storage_db_full_path}-wal
 %endif
 
-%if %{?network_state} == ON
-	mkdir -p %{buildroot}/%{TZ_SYS_DB}
-	sqlite3 %{buildroot}%{database_full_path} < %{buildroot}/usr/share/traffic_db.sql
-	rm %{buildroot}/usr/share/traffic_db.sql
-	sqlite3 %{buildroot}%{database_full_path} < %{buildroot}/usr/share/exception_db.sql
-	rm %{buildroot}/usr/share/exception_db.sql
-%endif
-
-
 %if %{?cpu_module} == OFF
 	%install_service graphical.target.wants resourced-cpucgroup.service
 %endif
@@ -232,15 +221,6 @@ fi
 /usr/share/license/%{name}
 %attr(-,root, root) %{_bindir}/resourced
 %manifest resourced.manifest
-%if %{?network_state} == ON
-	%config(noreplace) %attr(660,root,app) %{database_full_path}
-	%config(noreplace) %attr(660,root,app) %{database_full_path}-journal
-	/usr/bin/datausagetool
-	%config %{rd_config_path}/network.conf
-	%{TZ_SYS_ETC}/upgrade/500.resourced-datausage.patch.sh
-	%attr(700,root,root) %{TZ_SYS_ETC}/upgrade/500.resourced-datausage.patch.sh
-	%{_bindir}/net-cls-release
-%endif
 %config %{_sysconfdir}/dbus-1/system.d/resourced.conf
 %{_unitdir}/resourced.service
 %{_unitdir}/multi-user.target.wants/resourced.service
@@ -309,8 +289,6 @@ fi
 /usr/share/license/libresourced
 #proc-stat part
 %{_libdir}/libproc-stat.so.*
-#network part
-%{_libdir}/libresourced.so*
 
 %files -n libresourced-devel
 %defattr(-,root,root,-)
@@ -319,6 +297,4 @@ fi
 #proc-stat part
 %{_includedir}/system/proc_stat.h
 %{_libdir}/libproc-stat.so
-#network part
-%{_libdir}/libresourced.so
-%{_includedir}/system/data_usage.h
+
