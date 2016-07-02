@@ -309,8 +309,6 @@ fi
 /usr/share/license/libresourced
 #proc-stat part
 %{_libdir}/libproc-stat.so.*
-#network part
-%{_libdir}/libresourced.so*
 
 %files -n libresourced-devel
 %defattr(-,root,root,-)
@@ -319,6 +317,4 @@ fi
 #proc-stat part
 %{_includedir}/system/proc_stat.h
 %{_libdir}/libproc-stat.so
-#network part
-%{_libdir}/libresourced.so
-%{_includedir}/system/data_usage.h
+

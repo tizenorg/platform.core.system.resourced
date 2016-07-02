@@ -24,7 +24,6 @@
  **/
 
 #include "const.h"
-#include "counter.h"
 #include "edbus-handler.h"
 #include "cgroup.h"
 #include "init.h"
@@ -116,27 +115,7 @@ void resourced_quit_mainloop(void)
 
 	struct shared_modules_data *shared_data = get_shared_modules_data();
 
-	if (shared_data && shared_data->carg && shared_data->carg->ecore_timer) {
-		SET_BIT(shared_data->carg->opts->state, RESOURCED_FORCIBLY_QUIT_STATE);
-		/* save data on exit, it's impossible to do in fini
-		 * module function, due it executes right after ecore stopped */
-#ifdef NETWORK_MODULE
-		reschedule_count_timer(shared_data->carg, 0);
-#endif
-	}
 	ecore_timer_thaw(shared_data->darg->ecore_quit);
 }
 
-void set_daemon_net_block_state(const enum traffic_restriction_type rst_type,
-	const struct counter_arg *carg)
-{
-	ret_msg_if(carg == NULL,
-		"Please provide valid counter arg!");
 
-	if (rst_type == RST_SET)
-		carg->opts->state |= RESOURCED_NET_BLOCKED_STATE; /* set bit */
-	else {
-		carg->opts->state &= (~RESOURCED_NET_BLOCKED_STATE); /* nulify bit */
-		ecore_timer_thaw(carg->ecore_timer);
-	}
-}
