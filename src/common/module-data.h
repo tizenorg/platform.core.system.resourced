@@ -25,7 +25,6 @@
 #ifndef __MODULE_DATA_HANDLE_H__
 #define __MODULE_DATA_HANDLE_H__
 
-#include "counter.h"
 #include "init.h"
 
 struct swap_module_data {
@@ -33,7 +32,6 @@ struct swap_module_data {
 };
 
 struct shared_modules_data {
-	struct counter_arg *carg;
 	struct daemon_arg *darg;
 	struct swap_module_data swap_data;
 };
