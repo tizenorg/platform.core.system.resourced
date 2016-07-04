@@ -691,12 +691,14 @@ out:
 
 void edbus_init(void)
 {
-	int retry = RESOURCED_ERROR_NONE;
+	int retry = 0;
 	int i;
 retry_init:
 	edbus_init_val = e_dbus_init();
-	if (edbus_init_val)
+	if (edbus_init_val) {
+		retry = 0;
 		goto retry_bus_get;
+	}
 	if (retry == EDBUS_INIT_RETRY_COUNT) {
 		_E("fail to init edbus");
 		return;
@@ -705,10 +707,11 @@ retry_init:
 	goto retry_init;
 
 retry_bus_get:
-	retry = 0;
 	edbus_conn = e_dbus_bus_get(DBUS_BUS_SYSTEM);
-	if (edbus_conn)
+	if (edbus_conn) {
+		retry = 0;
 		goto retry_bus_request;
+	}
 	if (retry == EDBUS_INIT_RETRY_COUNT) {
 		_E("fail to get edbus");
 		return;
@@ -717,7 +720,6 @@ retry_bus_get:
 	goto retry_bus_get;
 
 retry_bus_request:
-	retry = 0;
 	edbus_request_name = e_dbus_request_name(edbus_conn, RESOURCED_DBUS_BUS_NAME,
 			DBUS_NAME_FLAG_REPLACE_EXISTING, request_name_cb, NULL);
 	if (edbus_request_name)
