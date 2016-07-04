@@ -602,12 +602,15 @@ resourced_ret_c edbus_message_send(DBusMessage *msg)
 {
 	DBusPendingCall *pending;
 
-	pending = e_dbus_message_send(edbus_conn, msg, NULL, -1, NULL);
+	pending = e_dbus_message_send(edbus_conn, msg, NULL, 1, NULL);
 	if (!pending) {
 		_E("sending message over dbus failed, connection disconnected!");
 		return RESOURCED_ERROR_FAIL;
 	}
 
+	dbus_pending_call_cancel(pending);
+	dbus_pending_call_unref(pending);
+	
 	return RESOURCED_ERROR_NONE;
 }
 
