@@ -200,7 +200,7 @@ error:
 send_message:
 	/* Send the reply message back to the caller. Best effort feature. */
 	_D("task %s: sending reply dbus message", rt_task->task_name);
-	ret = edbus_message_send(reply);
+	ret = dbus_message_reply(reply);
 	if (ret != RESOURCED_ERROR_NONE)
 		_E("task %s: sending message failed. not attempting again!!!", rt_task->task_name);
 

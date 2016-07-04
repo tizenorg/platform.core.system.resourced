@@ -57,6 +57,7 @@ static struct edbus_object edbus_objects[] = {
 
 static Eina_List *edbus_handler_list;
 static int edbus_init_val;
+static DBusConnection *dbus_conn;
 static E_DBus_Connection *edbus_conn;
 static DBusPendingCall *edbus_request_name;
 
@@ -598,17 +599,14 @@ resourced_ret_c edbus_add_signals(
 	return RESOURCED_ERROR_NONE;
 }
 
-resourced_ret_c edbus_message_send(DBusMessage *msg)
+resourced_ret_c dbus_message_reply(DBusMessage *msg)
 {
-	DBusPendingCall *pending;
-
-	pending = e_dbus_message_send(edbus_conn, msg, NULL, -1, NULL);
-	if (!pending) {
-		_E("sending message over dbus failed, connection disconnected!");
+	if (dbus_connection_send(dbus_conn, msg, NULL))
+		return RESOURCED_ERROR_NONE;
+	else {
+		_E("Fail to reply dbus message");
 		return RESOURCED_ERROR_FAIL;
 	}
-
-	return RESOURCED_ERROR_NONE;
 }
 
 int launch_system_app_by_dbus(const char *dest, const char *path,
@@ -693,6 +691,11 @@ void edbus_init(void)
 {
 	int retry = 0;
 	int i;
+	DBusError err;
+
+	dbus_threads_init_default();
+	dbus_error_init(&err);
+
 retry_init:
 	edbus_init_val = e_dbus_init();
 	if (edbus_init_val) {
@@ -707,17 +710,30 @@ retry_init:
 	goto retry_init;
 
 retry_bus_get:
-	edbus_conn = e_dbus_bus_get(DBUS_BUS_SYSTEM);
+	dbus_conn = dbus_bus_get(DBUS_BUS_SYSTEM, &err);
+	if (dbus_conn) {
+		retry = 0;
+		goto retry_connection_setup;
+	}
+	if (retry == EDBUS_INIT_RETRY_COUNT) {
+		_E("fail to get dbus");
+		goto err1;
+	}
+	retry++;
+	goto retry_bus_get;
+
+retry_connection_setup:
+	edbus_conn = e_dbus_connection_setup(dbus_conn);
 	if (edbus_conn) {
 		retry = 0;
 		goto retry_bus_request;
 	}
 	if (retry == EDBUS_INIT_RETRY_COUNT) {
 		_E("fail to get edbus");
-		return;
+		goto err2;
 	}
 	retry++;
-	goto retry_bus_get;
+	goto retry_connection_setup;
 
 retry_bus_request:
 	edbus_request_name = e_dbus_request_name(edbus_conn, RESOURCED_DBUS_BUS_NAME,
@@ -726,7 +742,7 @@ retry_bus_request:
 		goto register_objects;
 	if (retry == EDBUS_INIT_RETRY_COUNT) {
 		_E("fail to request edbus name");
-		return;
+		goto err3;
 	}
 	retry++;
 	goto retry_bus_request;
@@ -746,6 +762,14 @@ register_objects:
 	}
 
 	_I("start edbus service");
+	return;
+
+err3:
+	e_dbus_connection_close(edbus_conn);
+err2:
+	dbus_connection_set_exit_on_disconnect(dbus_conn, FALSE);
+err1:
+	e_dbus_shutdown();
 }
 
 void edbus_exit(void)

@@ -246,7 +246,7 @@ resourced_ret_c edbus_add_methods(const char *path,
 resourced_ret_c edbus_add_signals(
 		       const struct edbus_signal *const edbus_signals,
 		       const size_t size);
-resourced_ret_c edbus_message_send(DBusMessage *msg);
+resourced_ret_c dbus_message_reply(DBusMessage *msg);
 int register_edbus_interface(struct edbus_object *object);
 int check_dbus_active(void);
 
