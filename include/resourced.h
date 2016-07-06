@@ -72,17 +72,6 @@ typedef enum {
 	RESOURCED_CONTINUE = 1,		/**< continue */
 } resourced_cb_ret;
 
-/**
- * @desc After invoking this function, application will be in
- *   the monitored scope.
- * @details It creates an appropriate cgroup,
- *   it generates classid for the network performance control.
- * @param app_id[in] - application identifier, it's package name now
- * @param pid - pid to put in to cgroup, or self pid of 0
- * @return 0 if success or error code
- */
-resourced_ret_c join_app_performance(const char *app_id, const pid_t pid);
-
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */

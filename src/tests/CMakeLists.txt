@@ -24,7 +24,6 @@ SET(SRC_CPU_TEST	${TESTS_SOURCE_DIR}/cpu/resourced_cpu_test.c
 SET(SRC_DUMMY_PROCESS 	${TESTS_SOURCE_DIR}/util/resourced_dummy_process.c)
 SET(SRC_MEMORY_HOG 	${TESTS_SOURCE_DIR}/util/resourced_hogger_memory.c)
 SET(SRC_PROC_STAT_TEST 	${TESTS_SOURCE_DIR}/proc-stat/resourced_proc_stat_test.c)
-SET(SRC_DATA_USAGE_TEST	${TESTS_SOURCE_DIR}/network/resourced_data_usage_test.c)
 
 #Linking flags
 INCLUDE(FindPkgConfig)

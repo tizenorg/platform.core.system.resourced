@@ -57,19 +57,6 @@ struct edbus_signal {
 #define RESOURCED_DBUS_INTERFACE_NAME	RESOURCED_DBUS_BUS_NAME
 
 /*
- * The EDbus method to update the resourced counters
- * Signal is generated after the database update
- * and store new values of the counters
- */
-#define RESOURCED_NETWORK_UPDATE		"Update"
-#define RESOURCED_NETWORK_UPDATE_FINISH		"UpdateFinish"
-#define RESOURCED_NETWORK_PROCESS_RESTRICTION	"ProcessRestriction"
-#define RESOURCED_NETWORK_CREATE_QUOTA		"CreateQuota"
-#define RESOURCED_NETWORK_REMOVE_QUOTA		"RemoveQuota"
-#define RESOURCED_NETWORK_JOIN_NET_STAT		"JoinNetStat"
-#define RESOURCED_NETWORK_GET_STATS		"GetStats"
-
-/*
  * Core service
  *   get/set swap status
  *   operations about swap
@@ -82,9 +69,6 @@ struct edbus_signal {
 
 #define RESOURCED_PATH_OOM		RESOURCED_DBUS_OBJECT_PATH"/Oom"
 #define RESOURCED_INTERFACE_OOM		RESOURCED_DBUS_INTERFACE_NAME".oom"
-
-#define RESOURCED_PATH_NETWORK		RESOURCED_DBUS_OBJECT_PATH"/Network"
-#define RESOURCED_INTERFACE_NETWORK	RESOURCED_DBUS_INTERFACE_NAME".network"
 
 #define RESOURCED_PATH_PROCESS		RESOURCED_DBUS_OBJECT_PATH"/Process"
 #define RESOURCED_INTERFACE_PROCESS	RESOURCED_DBUS_INTERFACE_NAME".process"

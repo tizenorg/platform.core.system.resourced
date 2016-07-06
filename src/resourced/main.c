@@ -44,10 +44,6 @@ int main(int argc, char **argv)
 	int ret_code = 0;
 	struct daemon_arg darg = { argc, argv, NULL };
 
-#ifdef NETWORK_DEBUG_ENABLED
-	mtrace();
-	mcheck(0);
-#endif
 	ret_code = resourced_init(&darg);
 	ret_value_msg_if(ret_code < 0, ret_code,
 			 "Resourced initialization failed\n");
