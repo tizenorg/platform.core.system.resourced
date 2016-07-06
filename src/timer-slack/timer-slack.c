@@ -266,7 +266,7 @@ static int resourced_timer_slack_finalize(void *data)
 	return RESOURCED_ERROR_NONE;
 }
 
-static struct module_ops timer_modules_ops = {
+static const struct module_ops timer_modules_ops = {
 	.priority = MODULE_PRIORITY_NORMAL,
 	.name = TIMER_MODULE_NAME,
 	.init = resourced_timer_slack_init,
