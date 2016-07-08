@@ -73,7 +73,7 @@ static bool get_storage_id(int sid, storage_type_e type, storage_state_e state,
 resourced_ret_c get_storage_root_paths(int type, GSList **paths)
 {
 	struct rd_storage target;
-	DIR *dp;
+	DIR *dp_root, *dp_user;
 	struct dirent dentry;
 	struct dirent *result;
 	char *root_path;
@@ -82,27 +82,30 @@ resourced_ret_c get_storage_root_paths(int type, GSList **paths)
 	switch (type) {
 	case INTERNAL:
 		_D("Start finding internal root path of all users");
-		dp = opendir(RD_SYS_HOME);
-		if (!dp) {
+		dp_root = opendir(RD_SYS_HOME);
+		if (!dp_root) {
 			_E("Fail to open %s", RD_SYS_HOME);
 			return RESOURCED_ERROR_FAIL;
 		}
 
-		while (!readdir_r(dp, &dentry, &result) && result != NULL) {
+		while (!readdir_r(dp_root, &dentry, &result) && result != NULL) {
 			if (dentry.d_name[0] == '.')
 				continue;
 			if (snprintf(buf, BUF_MAX, "%s/%s/content", RD_SYS_HOME, dentry.d_name) < 0) {
 				_D("Fail to make root path of %s. This path will not be included", dentry.d_name);
 				continue;
 			}
-			if (!opendir(buf)) {
+			dp_user = opendir(buf);
+			if (!dp_user) {
 				_D("User %s doesn't have content path", dentry.d_name);
 				continue;
 			}
+			closedir(dp_user);
 			root_path = strdup(buf);
 			_D("Find new root path : %s", root_path);
 			*paths = g_slist_append(*paths, root_path);
 		}
+		closedir(dp_root);
 		break;
 	case EXTERNAL:
 		_D("Start finding external root path");
