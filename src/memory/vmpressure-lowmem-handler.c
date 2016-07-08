@@ -2215,7 +2215,11 @@ int lowmem_proactive_oom_killer(int flags, char *appid)
 		return RESOURCED_ERROR_FAIL;
 
 #ifdef HEART_SUPPORT
-	md = heart_memory_get_data(appid, DATA_6HOUR);
+
+	/* Get HEART-memory data only if this module is enabled */
+	md = NULL;
+	if (find_module("MEMORY") != NULL)
+		md = heart_memory_get_data(appid, DATA_6HOUR);
 
 	if (md) {
 		unsigned int uss;
