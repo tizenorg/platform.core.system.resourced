@@ -106,7 +106,7 @@ int logging_read_foreach(char *name, char *appid, char *pkgid,
 void logging_update(int force);
 void logging_save_to_storage(int force);
 int logging_leveldb_put(char *key, unsigned int key_len, char *value, unsigned int value_len);
-int logging_leveldb_putv(char *key, unsigned int key_len, const char *fmt, ... );
+int logging_leveldb_putv(char *key, unsigned int key_len, const char *fmt, ...);
 int logging_leveldb_read(char *key, unsigned int key_len, char *value, unsigned int value_len);
 int logging_leveldb_delete(char *key, unsigned int key_len);
 

@@ -165,9 +165,8 @@ static struct logging_module *logging_find_module(char *name)
 	for (i = 0; i < logging_modules->len; i++) {
 		struct logging_module *module = g_array_index(logging_modules,
 				struct logging_module *, i);
-		if (!strncmp(name, module->name, namelen)) {
+		if (!strncmp(name, module->name, namelen))
 			return module;
-		}
 	}
 
 	return NULL;
@@ -226,9 +225,8 @@ int logging_module_init_with_db_path(char *name, enum logging_period max_period,
 			_E("Skip set busy handler.");
 		} else {
 			/* Set how many times we'll repeat our attempts for sqlite_step */
-			if (sqlite3_busy_handler(db, logging_db_busy, NULL) != SQLITE_OK) {
+			if (sqlite3_busy_handler(db, logging_db_busy, NULL) != SQLITE_OK)
 				_E("Couldn't set busy handler!");
-			}
 		}
 
 		path = db_path;
@@ -921,8 +919,8 @@ void logging_update(int force)
 			case SQLITE_DONE:
 				break;
 			case SQLITE_ERROR:
-				_E("select %s table failed %s", module->name, 
-									sqlite3_errmsg(module->db));
+				_E("select %s table failed %s", module->name,
+						sqlite3_errmsg(module->db));
 				/* FALLTHROUGH */
 			default:
 				sqlite3_finalize(stmt);
@@ -1264,9 +1262,8 @@ int logging_init(void *data)
 	}
 
 	/* Set how many times we'll repeat our attempts for sqlite_step */
-	if (sqlite3_busy_handler(logging_db, logging_db_busy, NULL) != SQLITE_OK) {
+	if (sqlite3_busy_handler(logging_db, logging_db_busy, NULL) != SQLITE_OK)
 		_E("Couldn't set busy handler!");
-	}
 
 	options = leveldb_options_create();
 	leveldb_options_set_create_if_missing(options, 1);

@@ -40,7 +40,7 @@ struct parse_result {
  * @return 0 on success, negative if failed
  */
 int config_parse(const char *file_name, int cb(struct parse_result *result,
-    void *user_data), void *user_data);
+			void *user_data), void *user_data);
 
 /* Prototype for a parser for a specific configuration setting */
 typedef int (*ConfigParserCallback)(

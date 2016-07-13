@@ -131,9 +131,8 @@ void serialize_params(char *params[], size_t n, ...)
 	va_list va;
 	int i = 0;
 	va_start(va, n);
-	for (i = 0; i < n; ++i) {
+	for (i = 0; i < n; ++i)
 		params[i] = va_arg(va, char *);
-	}
 	va_end(va);
 }
 

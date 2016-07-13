@@ -790,9 +790,8 @@ struct heart_cpu_data *heart_cpu_get_data(char *appid, enum heart_data_period pe
 		return NULL;
 	}
 	table = g_hash_table_lookup(heart_cpu_app_list, (gconstpointer)appid);
-	if (!table) {
+	if (!table)
 		goto unlock_exit;
-	}
 	data = malloc(sizeof(struct heart_cpu_data));
 	if (!data) {
 		_E("malloc failed");
@@ -1108,9 +1107,8 @@ static DBusMessage *edbus_heart_get_cpu_data(E_DBus_Object *obj, DBusMessage *ms
 	}
 
 	table = g_hash_table_lookup(heart_cpu_app_list, (gconstpointer)appid);
-	if (!table) {
+	if (!table)
 		goto unlock_exit;
-	}
 	if (period == DATA_LATEST) {
 		utime = table->total_utime;
 		stime = table->total_stime;

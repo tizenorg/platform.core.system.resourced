@@ -672,9 +672,8 @@ static void heart_battery_insert_capacity(GSList **history_list, int capacity,
 	old_reset_mark = lbc->reset_mark;
 	*history_list = g_slist_append(*history_list, (gpointer)lbc);
 	ret = pthread_mutex_unlock(&heart_battery_mutex);
-	if (ret) {
+	if (ret)
 		_E("pthread_mutex_unlock() failed, %d", ret);
-	}
 }
 
 /* ======================== Serialization/Deserialization ==================== */
@@ -819,14 +818,12 @@ static void heart_battery_save_to_file(bool force)
 		return;
 
 	ret = heart_battery_status_save_to_db();
-	if (ret) {
+	if (ret)
 		_E("failed to save status db");
-	}
 
 	ret = heart_battery_capacity_save_to_file(HEART_BATTERY_CAPACITY_DATA_FILE);
-	if (ret) {
+	if (ret)
 		_E("failed to save capacity file");
-	}
 	heart_battery_set_file_commit_timestamp(now);
 }
 
@@ -1059,9 +1056,8 @@ static void heart_battery_calculate_prediction(enum charging_goal goal)
 		_E("Failed to get battery capacity history");
 		return;
 	}
-	if (!arrays->len) {
+	if (!arrays->len)
 		_E("No battery capacity history data");
-	}
 	total_time = 0;
 	total_count = 0;
 	for (i = 0; i < arrays->len; i++) {
@@ -1100,9 +1096,8 @@ static void heart_battery_calculate_prediction(enum charging_goal goal)
 		_E("Failed to get battery capacity history");
 		return;
 	}
-	if (!arrays->len) {
+	if (!arrays->len)
 		_E("No battery capacity history data");
-	}
 	total_time = 0;
 	total_count = 0;
 	for (i = 0; i < arrays->len; i++) {
@@ -1868,25 +1863,21 @@ static void heart_battery_status_init(void)
 	}
 
 	ret = heart_battery_status_read_from_db();
-	if (ret < 0) {
+	if (ret < 0)
 		_E("Failed to read battery status data");
-	}
 
 	battery_learning_mode = heart_battery_get_learning_mode();
 
 	ret = heart_battery_capacity_read_from_file(HEART_BATTERY_CAPACITY_DATA_FILE);
-	if (ret < 0) {
+	if (ret < 0)
 		_E("Failed to read battery capacity data");
-	}
 
 	capacity = heart_battery_get_capacity();
-	if (capacity > 0) {
+	if (capacity > 0)
 		batt_stat.curr_capacity = capacity;
-	}
 	status = heart_battery_get_charger_status();
-	if (status >= 0) {
+	if (status >= 0)
 		batt_stat.curr_charger_status = status;
-	}
 	heart_battery_used_time_init(batt_stat.curr_charger_status);
 	heart_battery_calculate_prediction(batt_stat.curr_charger_status);
 	batt_stat.last_event_wall_time = logging_get_time(CLOCK_BOOTTIME);
@@ -1964,16 +1955,14 @@ static int heart_battery_init(void *data)
 	ret = register_edbus_signal_handler(DEVICED_PATH_BATTERY,
 			DEVICED_INTERFACE_BATTERY, GET_BATTERY_CAPACITY,
 			heart_battery_capacity_status, NULL);
-	if (ret < 0) {
+	if (ret < 0)
 		_E("Failed to add a capacity status signal handler");
-	}
 
 	ret = register_edbus_signal_handler(DEVICED_PATH_BATTERY,
 			DEVICED_INTERFACE_BATTERY, GET_CHARGER_STATUS,
 			heart_battery_charger_status, NULL);
-	if (ret < 0) {
+	if (ret < 0)
 		_E("Failed to add a charger status signal handler");
-	}
 
 	config_parse(HEART_CONF_FILE_PATH, heart_battery_config, NULL);
 
@@ -2091,9 +2080,8 @@ static int heart_battery_exit(void *data)
 
 	heart_battery_save_to_file(true);
 	ret = pthread_mutex_lock(&heart_battery_mutex);
-	if (ret) {
+	if (ret)
 		_E("pthread_mutex_lock() failed, %d", ret);
-	}
 
 	gslist_for_each_safe(capacity_history_list, iter, next, lbc) {
 		capacity_history_list = g_slist_remove(capacity_history_list, lbc);
@@ -2102,9 +2090,8 @@ static int heart_battery_exit(void *data)
 	capacity_history_list = NULL;
 
 	ret = pthread_mutex_unlock(&heart_battery_mutex);
-	if (ret) {
+	if (ret)
 		_E("pthread_mutex_unlock() failed, %d", ret);
-	}
 
 	unregister_notifier(RESOURCED_NOTIFIER_LOW_BATTERY, low_battery_handler);
 	unregister_notifier(RESOURCED_NOTIFIER_DATA_RESET, heart_battery_reset);

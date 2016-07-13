@@ -230,7 +230,7 @@ int register_edbus_interface(struct edbus_object *object);
 int check_dbus_active(void);
 
 int launch_system_app_by_dbus(const char *dest, const char *path,
-    const char *iface, const char *method, int num, ...);
+		const char *iface, const char *method, int num, ...);
 
 void edbus_init(void);
 void edbus_exit(void);

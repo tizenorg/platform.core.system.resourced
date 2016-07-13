@@ -174,9 +174,8 @@ static int resourced_heart_init(void *data)
 	}
 
 	ret = edbus_add_methods(RESOURCED_PATH_LOGGING, edbus_methods, ARRAY_SIZE(edbus_methods));
-	if (ret != RESOURCED_ERROR_NONE) {
+	if (ret != RESOURCED_ERROR_NONE)
 		_E("DBus method registration for %s is failed", RESOURCED_PATH_LOGGING);
-	}
 
 	heart_module_init(data);
 

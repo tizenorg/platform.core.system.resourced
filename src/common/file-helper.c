@@ -217,9 +217,8 @@ int copy_file(char *dest, char *src)
 		return -errno;
 	}
 
-	while ((size = fread(buf, 1, BUF_MAX, fps))) {
+	while ((size = fread(buf, 1, BUF_MAX, fps)))
 		fwrite(buf, 1, size, fpd);
-	}
 
 	return RESOURCED_ERROR_NONE;
 }

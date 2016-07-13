@@ -239,11 +239,11 @@ static Eina_Bool block_monitor_cb(void *user_data, Ecore_Fd_Handler *fd_handler)
 			}
 		}
 
-	logging:
+logging:
 		bmi->last_monitor_pid = m->pid;
 		block_logging(bmi, m->pid, label, buf);
 
-	next:
+next:
 		if (m->fd >= 0)
 			close(m->fd);
 	}

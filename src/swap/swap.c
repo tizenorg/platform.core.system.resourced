@@ -594,7 +594,7 @@ static void swap_activate_in_module(void)
 
 	if (swap_get_state() == SWAP_ON)
 		return;
-	
+
 	disksize = swap_get_disksize_bytes();
 	if (disksize <= 0) {
 		if (swap_zram_activate() < 0) {

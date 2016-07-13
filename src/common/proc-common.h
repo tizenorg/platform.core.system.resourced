@@ -101,9 +101,9 @@ enum proc_prelaunch_flags {
  * System : hidden category for system applications like home
  */
 enum proc_background_category {
-	PROC_BG_NONE 		= 0x0,
-	PROC_BG_MEDIA 		= 0x1,
-	PROC_BG_DOWNLOAD 	= 0x2,
+	PROC_BG_NONE		= 0x0,
+	PROC_BG_MEDIA		= 0x1,
+	PROC_BG_DOWNLOAD	= 0x2,
 	PROC_BG_NETWORK		= 0x4,
 	PROC_BG_LOCATION	= 0x8,
 	PROC_BG_SENSOR		= 0x10,

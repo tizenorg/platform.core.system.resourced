@@ -364,11 +364,10 @@ int proc_set_foregrd(pid_t pid, int oom_score_adj)
 		ret = proc_foregrd_manage(pid, OOMADJ_FOREGRD_UNLOCKED);
 		break;
 	default:
-		if (oom_score_adj > OOMADJ_BACKGRD_UNLOCKED) {
+		if (oom_score_adj > OOMADJ_BACKGRD_UNLOCKED)
 			ret = proc_foregrd_manage(pid, OOMADJ_FOREGRD_UNLOCKED);
-		} else {
+		else
 			ret = -1;
-		}
 		break;
 
 	}
@@ -395,11 +394,10 @@ int proc_set_backgrd(int pid, int oom_score_adj)
 		ret = proc_set_oom_score_adj(pid, OOMADJ_BACKGRD_UNLOCKED);
 		break;
 	default:
-		if (oom_score_adj > OOMADJ_BACKGRD_UNLOCKED) {
+		if (oom_score_adj > OOMADJ_BACKGRD_UNLOCKED)
 			ret = 0;
-		} else {
+		else
 			ret = -1;
-		}
 		break;
 	}
 	return ret;
@@ -471,11 +469,10 @@ int proc_set_inactive(int pid, int oom_score_adj)
 		}
 		break;
 	default:
-		if (oom_score_adj > OOMADJ_BACKGRD_UNLOCKED) {
+		if (oom_score_adj > OOMADJ_BACKGRD_UNLOCKED)
 			ret = 0;
-		} else {
+		else
 			ret = -1;
-		}
 		break;
 
 	}

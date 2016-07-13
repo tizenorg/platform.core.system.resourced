@@ -147,7 +147,7 @@
 	     _slist_foreach_copy_list = _slist_foreach_copy_list->next)
 
 #define gslist_for_each_item(item, list)				\
-	for(item = list; item != NULL; item = g_slist_next(item))
+	for (item = list; item != NULL; item = g_slist_next(item))
 
 #define gslist_for_each(head, elem, node)				\
 	for (elem = head, node = NULL; elem && ((node = elem->data) != NULL); elem = elem->next, node = NULL)

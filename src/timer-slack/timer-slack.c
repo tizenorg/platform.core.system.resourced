@@ -234,7 +234,7 @@ static int resourced_timer_slack_check_runtime_support(void *data)
 
 static int resourced_timer_slack_init(void *data)
 {
-	timer_ops = &timer_modules_ops;	
+	timer_ops = &timer_modules_ops;
 
 	timer_slack_cgroup_init();
 

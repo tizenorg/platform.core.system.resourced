@@ -333,9 +333,8 @@ static DBusMessage *edbus_get_cpu_list(E_DBus_Object *obj, DBusMessage *msg)
 		pai = (struct proc_app_info *)giter->data;
 		if (!pai->main_pid)
 			continue;
-		if (proc_get_cpu_time(pai->main_pid, &utime, &stime) != RESOURCED_ERROR_NONE) {
+		if (proc_get_cpu_time(pai->main_pid, &utime, &stime) != RESOURCED_ERROR_NONE)
 			continue;
-		}
 		total += utime;
 		total += stime;
 	}
@@ -348,9 +347,8 @@ static DBusMessage *edbus_get_cpu_list(E_DBus_Object *obj, DBusMessage *msg)
 		pai = (struct proc_app_info *)giter->data;
 		if (!pai->main_pid)
 			continue;
-		if (proc_get_cpu_time(pai->main_pid, &utime, &stime) != RESOURCED_ERROR_NONE) {
+		if (proc_get_cpu_time(pai->main_pid, &utime, &stime) != RESOURCED_ERROR_NONE)
 			continue;
-		}
 		appid = pai->appid;
 		dbus_message_iter_open_container(&arr, DBUS_TYPE_STRUCT, NULL, &sub);
 		dbus_message_iter_append_basic(&sub, DBUS_TYPE_STRING, &appid);
@@ -432,9 +430,8 @@ static DBusMessage *edbus_get_cpu_lists(E_DBus_Object *obj, DBusMessage *msg)
 			continue;
 		if (type != PROC_TYPE_MAX && pai->type != type)
 			continue;
-		if (proc_get_cpu_time(pai->main_pid, &utime, &stime) != RESOURCED_ERROR_NONE) {
+		if (proc_get_cpu_time(pai->main_pid, &utime, &stime) != RESOURCED_ERROR_NONE)
 			continue;
-		}
 		total += utime;
 		total += stime;
 	}
@@ -449,9 +446,8 @@ static DBusMessage *edbus_get_cpu_lists(E_DBus_Object *obj, DBusMessage *msg)
 			continue;
 		if (type != PROC_TYPE_MAX && pai->type != type)
 			continue;
-		if (proc_get_cpu_time(pai->main_pid, &utime, &stime) != RESOURCED_ERROR_NONE) {
+		if (proc_get_cpu_time(pai->main_pid, &utime, &stime) != RESOURCED_ERROR_NONE)
 			continue;
-		}
 		appid = pai->appid;
 		dbus_message_iter_open_container(&arr, DBUS_TYPE_STRUCT, NULL, &sub);
 		dbus_message_iter_append_basic(&sub, DBUS_TYPE_STRING, &appid);
@@ -785,7 +781,7 @@ static void proc_dbus_watchdog_handler(void *data, DBusMessage *msg)
 			return;
 		}
 	}
-	
+
 	resourced_proc_status_change(PROC_CGROUP_SET_TERMINATE_REQUEST,
 		    pid, NULL, NULL, PROC_TYPE_NONE);
 	kill(pid, SIGABRT);
@@ -1288,7 +1284,7 @@ static const struct edbus_signal edbus_signals[] = {
 	    SIGNAL_DUMP, proc_dbus_dump_handler, NULL},
 	{DEVICED_PATH_CORE, DEVICED_INTERFACE_CORE,
 	    SIGNAL_DEVICED_EARLY_BOOTING_DONE,
-	    early_booting_done_signal_handler, NULL},    
+	    early_booting_done_signal_handler, NULL},
 	{DEVICED_PATH_TIME, DEVICED_INTERFACE_TIME,
 	    SIGNAL_DEVICED_SYSTEMTIME_CHANGED,
 	    systemtime_changed_signal_handler, NULL},

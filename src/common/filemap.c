@@ -361,9 +361,8 @@ static struct filemap_info *filemap_entry_find(struct filemap *fm, struct filema
 	}
 
 	*offset = g_atomic_int_get(&current->info);
-	if (*offset) {
+	if (*offset)
 		return filemap_to_info(fm, &current->info);
-	}
 
 	fi = filemap_info_new(fm, key, keylen, value, valuelen, offset);
 

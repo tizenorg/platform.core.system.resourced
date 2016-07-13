@@ -89,9 +89,9 @@ static inline void closedirp(DIR **d)
 #define GBYTE_TO_KBYTE(g) ((g) << 20)
 #define GBYTE_TO_MBYTE(g) ((g) << 10)
 
-#define streq(a,b) (strncmp((a),(b), strlen(b)+1) == 0)
+#define streq(a, b) (strncmp((a), (b), strlen(b)+1) == 0)
 #define strneq(a, b, n) (strncmp((a), (b), (n)) == 0)
-#define strcaseeq(a,b) (strcasecmp((a),(b)) == 0)
+#define strcaseeq(a, b) (strcasecmp((a), (b)) == 0)
 #define strncaseeq(a, b, n) (strncasecmp((a), (b), (n)) == 0)
 
 #define new(t, n) ((t*) malloc(sizeof(t) * (n)))
@@ -109,12 +109,12 @@ static inline bool strstart_with(const char *str, const char *with)
 }
 
 #define FOREACH_WORD_SEPARATOR(word, length, s, separator, state)       \
-        for ((state) = NULL, (word) = split((s), &(length), (separator), &(state)); \
+	for ((state) = NULL, (word) = split((s), &(length), (separator), &(state)); \
 	     (word);							\
 	     (word) = split((s), &(length), (separator), &(state)))
 
 #define FOREACH_WORD(word, length, s, state)                            \
-        FOREACH_WORD_SEPARATOR(word, length, s, WHITESPACE, state)
+	FOREACH_WORD_SEPARATOR(word, length, s, WHITESPACE, state)
 
 #define FOREACH_DIRENT(de, d, result, on_error)						\
 	for (errno  = readdir_r(d, &de, &result);; errno = readdir_r(d, &de, &result))	\
@@ -128,7 +128,7 @@ static inline bool strstart_with(const char *str, const char *with)
 		else
 
 #define FOREACH_STRV(s, l)                      \
-        for ((s) = (l); (s) && *(s); (s)++)
+	for ((s) = (l); (s) && *(s); (s)++)
 
 /**
  * @desc executes given command and dumps output to a file

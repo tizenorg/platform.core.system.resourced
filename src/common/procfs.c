@@ -227,7 +227,7 @@ unsigned int proc_get_mem_available(void)
 	struct meminfo mi;
 	int r;
 	char buf[256];
-	
+
 	r = proc_get_meminfo(&mi, MEMINFO_MASK_MEM_AVAILABLE);
 	if (r < 0) {
 		_E("Failed to get %s: %s",
@@ -270,13 +270,12 @@ int proc_get_cpu_time(pid_t pid, unsigned long *utime,
 	if (fp == NULL)
 		return RESOURCED_ERROR_FAIL;
 
-	if (fscanf(fp, "%*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %*s") < 0) {
+	if (fscanf(fp, "%*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %*s %*s") < 0)
 		return RESOURCED_ERROR_FAIL;
-	}
 
-	if (fscanf(fp, "%lu %lu", utime, stime) < 1) {
+	if (fscanf(fp, "%lu %lu", utime, stime) < 1)
 		return RESOURCED_ERROR_FAIL;
-	}
+
 	return RESOURCED_ERROR_NONE;
 }
 

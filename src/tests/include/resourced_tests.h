@@ -38,7 +38,7 @@
 #define _D(fmt, arg...) sd_journal_print(LOG_DEBUG, "[%s,%d] "fmt, __FUNCTION__, __LINE__, ##arg)
 #define _I(fmt, arg...) sd_journal_print(LOG_INFO, "[%s,%d] "fmt, __FUNCTION__, __LINE__, ##arg)
 
-struct resourced_test_t{
+struct resourced_test_t {
 	char name[STRING_MAX];
 	int (*test_func)(void);
 };

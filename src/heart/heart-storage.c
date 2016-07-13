@@ -68,9 +68,8 @@ static DBusMessage *edbus_insert_log(E_DBus_Object *obj, DBusMessage *msg)
 
 	_SD("Insert record (%s, %s)", pkgid, data);
 	ret = logging_write(STORAGE_NAME, pkgid, pkgid, time(NULL), data);
-	if (ret != RESOURCED_ERROR_NONE) {
+	if (ret != RESOURCED_ERROR_NONE)
 		_E("Write request failed");
-	}
 
 	reply = dbus_message_new_method_return(msg);
 	return reply;
@@ -242,9 +241,8 @@ static int heart_storage_init(void *data)
 	}
 
 	ret = edbus_add_methods(RESOURCED_PATH_LOGGING, edbus_methods, ARRAY_SIZE(edbus_methods));
-	if (ret != RESOURCED_ERROR_NONE) {
+	if (ret != RESOURCED_ERROR_NONE)
 		_E("DBus method registration for %s is failed", RESOURCED_PATH_LOGGING);
-	}
 
 	register_notifier(RESOURCED_NOTIFIER_LOGGING_WRITE, heart_storage_write);
 	return RESOURCED_ERROR_NONE;

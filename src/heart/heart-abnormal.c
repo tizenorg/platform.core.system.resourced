@@ -108,9 +108,8 @@ void heart_abnormal_fill_array(struct logging_table_form *entry, void *data)
 
 unlock_exit:
 	ret = pthread_mutex_unlock(&heart_abnormal_mutex);
-	if (ret) {
+	if (ret)
 		_E("pthread_mutex_unlock() failed, %d", ret);
-	}
 }
 
 static void heart_abnormal_launch_popup(char *appid, int count)
@@ -195,9 +194,8 @@ static void heart_abnormal_process_crashed(void *data, DBusMessage *msg)
 	snprintf(info, sizeof(info), "%s %s %d %d ", process_name, exepath, notify, FC);
 	_D("info : %s %d", info, count);
 	ret = logging_write(ABNORMAL_NAME, appid, pkgid, time(NULL), info);
-	if (ret != RESOURCED_ERROR_NONE) {
+	if (ret != RESOURCED_ERROR_NONE)
 		_E("Failed to logging_write %s", info);
-	}
 }
 
 static int heart_abnormal_anr(void *data)
@@ -215,9 +213,8 @@ static int heart_abnormal_anr(void *data)
 	snprintf(info, sizeof(info), "%d ANR %d ", ps->pid, ANR);
 	_D("info : %s", info);
 	ret = logging_write(ABNORMAL_NAME, appid, pkgid, time(NULL), info);
-	if (ret != RESOURCED_ERROR_NONE) {
+	if (ret != RESOURCED_ERROR_NONE)
 		_E("Failed to logging_write %s", info);
-	}
 	return ret;
 }
 
@@ -361,9 +358,8 @@ static int heart_abnormal_init(void *data)
 	ret = register_edbus_signal_handler(CRASH_PATH_CRASH,
 			CRASH_INTERFACE_CRASH, PROCESS_CRASHED,
 			heart_abnormal_process_crashed, NULL);
-	if (ret < 0) {
+	if (ret < 0)
 		_E("Failed to add a capacity status signal handler");
-	}
 	heart_abnormal_list = g_hash_table_new_full(
 			g_str_hash,
 			g_str_equal,

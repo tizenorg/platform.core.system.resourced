@@ -43,7 +43,7 @@ void lowmem_trigger_swap(pid_t pid, int memcg_idx);
 int lowmem_get_memcg(enum memcg_type type, struct memcg **memcg_ptr);
 
 enum oom_killer_cb_flags {
-	OOM_NONE 		= 0x00000000,	/* for main oom killer thread */
+	OOM_NONE		= 0x00000000,	/* for main oom killer thread */
 	OOM_FORCE		= 0x00000001,	/* for forced kill */
 	OOM_TIMER_CHECK		= 0x00000002,	/* for timer oom killer cb */
 	OOM_NOMEMORY_CHECK	= 0x00000004,	/* check victims' memory */

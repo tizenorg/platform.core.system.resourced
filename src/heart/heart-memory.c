@@ -611,9 +611,8 @@ struct heart_memory_data *heart_memory_get_data(char *appid, enum heart_data_per
 	}
 
 	table = g_hash_table_lookup(heart_memory_app_list, (gconstpointer)appid);
-	if (!table) {
+	if (!table)
 		goto unlock_exit;
-	}
 	md = malloc(sizeof(struct heart_memory_data));
 	if (!md) {
 		_E("malloc failed");

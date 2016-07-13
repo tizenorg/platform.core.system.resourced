@@ -123,6 +123,6 @@ static inline void smaps_freep(struct smaps **maps)
 		smaps_free(*maps);
 }
 
-#define _cleanup_smaps_free_ _cleanup_ (smaps_freep)
+#define _cleanup_smaps_free_ _cleanup_(smaps_freep)
 
 #endif  /* _RESOURCED_SMAPS_H_ */
