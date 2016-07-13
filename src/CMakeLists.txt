@@ -47,7 +47,6 @@ SET(SOURCES
   ${PROC-STAT_SOURCE_DIR}/proc-usage-stats-helper.c
   ${PROC-STAT_SOURCE_DIR}/proc-appusage.c
   ${PROC-STAT_SOURCE_DIR}/proc-info.c
-  ${SLUGGISH_SOURCE_DIR}/sluggish.c
   ${RESOURCED_SOURCE_DIR}/init.c
   ${RESOURCED_SOURCE_DIR}/main.c
   ${COMMON_SOURCE_DIR}/procfs.c
