@@ -73,14 +73,6 @@
 /* Experimently, RSS is 3 times larger than the actual allocated memory. */
 #define LOWMEM_RSS_RATIO		0.3
 
-#ifdef MEMPS_LOG
-#define MEMPS_LOG_PATH			"/var/log/"
-#define MEMPS_LOG_FILE			MEMPS_LOG_PATH"memps"
-#define MEMPS_EXEC_PATH			"/usr/bin/memps"
-#define MAX_MEMPS_LOGS			50
-#define NUM_RM_LOGS			5
-#endif
-
 #define MEMCG_MOVE_CHARGE_PATH		"memory.move_charge_at_immigrate"
 #define MEMCG_OOM_CONTROL_PATH		"memory.oom_control"
 #define MEMCG_LIMIT_PATH		"memory.limit_in_bytes"
@@ -411,85 +403,6 @@ static int get_proc_mem_usage(pid_t pid, unsigned int *usage)
 	return RESOURCED_ERROR_FAIL;
 }
 
-#ifdef MEMPS_LOG
-int compare_func(const struct dirent **a, const struct dirent **b)
-{
-	const char *fn_a = (*a)->d_name;
-	const char *fn_b = (*b)->d_name;
-	char *str_at = strrchr(fn_a, '_') + 1;
-	char *str_bt = strrchr(fn_b, '_') + 1;
-
-	return strncmp(str_at, str_bt, strlen(str_bt)+1);
-}
-
-static int memps_file_select(const struct dirent *entry)
-{
-	return strstr(entry->d_name, "memps") ? 1 : 0;
-}
-
-static void clear_logs(char *dir)
-{
-	struct dirent **namelist;
-	int n, i, ret;
-	char fname[BUF_MAX];
-
-	n = scandir(dir, &namelist, memps_file_select, compare_func);
-	_D("num of log files %d", n);
-	if (n < MAX_MEMPS_LOGS) {
-		while (n--)
-			free(namelist[n]);
-		free(namelist);
-		return;
-	}
-
-	for (i = 0; i < n; i++) {
-		if (i < NUM_RM_LOGS) {
-			snprintf(fname, sizeof(fname), "%s%s", dir, namelist[i]->d_name);
-			_D("remove log file %s", fname);
-			ret = remove(fname);
-			if (ret < 0)
-				_E("%s file cannot removed", fname);
-		}
-
-		free(namelist[i]);
-	}
-	free(namelist);
-}
-
-static void make_memps_log(char *file, pid_t pid, char *victim_name)
-{
-	time_t now;
-	struct tm cur_tm;
-	char new_log[BUF_MAX];
-	static pid_t old_pid;
-
-	if (access(MEMPS_EXEC_PATH, X_OK))
-		return;
-
-	if (old_pid == pid)
-		return;
-	old_pid = pid;
-
-	now = time(NULL);
-
-	if (localtime_r(&now, &cur_tm) == NULL) {
-		_E("Fail to get localtime");
-		return;
-	}
-
-	snprintf(new_log, sizeof(new_log),
-		 "%s_%s_%d_%.4d%.2d%.2d%.2d%.2d%.2d", file, victim_name,
-		 pid, (1900 + cur_tm.tm_year), 1 + cur_tm.tm_mon,
-		 cur_tm.tm_mday, cur_tm.tm_hour, cur_tm.tm_min,
-		 cur_tm.tm_sec);
-
-	if (fork() == 0) {
-		execl(MEMPS_EXEC_PATH, MEMPS_EXEC_PATH, "-r", "-f", new_log, (char *)NULL);
-		exit(0);
-	}
-}
-#endif
-
 static int lowmem_check_current_state(struct memcg_info *mi)
 {
 	unsigned long long usage, oomleave;
@@ -581,7 +494,7 @@ static int lowmem_get_task_info_array_for_memcg(struct memcg_info *mi, GArray *t
 }
 
 static void lowmem_kill_victim(struct task_info *tsk,
-	int flags, int memps_log, unsigned int *total_size)
+		int flags, unsigned int *total_size)
 {
 	pid_t pid;
 	int ret;
@@ -604,12 +517,6 @@ static void lowmem_kill_victim(struct task_info *tsk,
 		_E("%s(%d) was selected, skip it", appname, pid);
 		return;
 	}
-
-#ifdef MEMPS_LOG
-	/* make memps log for killing application firstly */
-	if (!memps_log)
-		make_memps_log(MEMPS_LOG_FILE, pid, appname);
-#endif
 
 	total += *total_size + ((float)tsk->size * LOWMEM_RSS_RATIO);
 
@@ -641,11 +548,6 @@ static void lowmem_kill_victim(struct task_info *tsk,
 		lowmem_launch_oompopup();
 		oom_popup = true;
 	}
-
-#ifdef MEMPS_LOG
-	if (memps_log)
-		make_memps_log(MEMPS_LOG_FILE, pid, appname);
-#endif
 }
 
 /* return RESOURCED_ERROR_NONE when kill should be continued */
@@ -753,7 +655,7 @@ static int lowmem_kill_cgroup_victims(int type, struct memcg_info *mi,
 			break;
 		}
 
-		lowmem_kill_victim(tsk, flags, i, &total_victim_size);
+		lowmem_kill_victim(tsk, flags, &total_victim_size);
 	}
 
 	victim = i;
@@ -797,7 +699,7 @@ static int lowmem_kill_subcgroup_victims(int type, int max_victims, int flags,
 		if (ret == RESOURCED_ERROR_FAIL)
 			break;
 
-		lowmem_kill_victim(tsk, flags, i, &total_victim_size);
+		lowmem_kill_victim(tsk, flags, &total_victim_size);
 	}
 
 	victim = i;
@@ -919,7 +821,7 @@ static int lowmem_kill_memory_cgroup_victims(int flags)
 			victim = i;
 			return victim;
 		}
-		lowmem_kill_victim(tsk, flags, i, &total_victim_size);
+		lowmem_kill_victim(tsk, flags, &total_victim_size);
 	}
 	victim = i;
 	g_array_free(candidates, true);
@@ -1037,9 +939,6 @@ static int lowmem_oom_killer_cb(int type, struct memcg_info *mi, int flags,
 			lowmem_check_current_state(mi) >= 0)
 		return count;
 
-#ifdef MEMPS_LOG
-	clear_logs(MEMPS_LOG_PATH);
-#endif
 	return count;
 }
 

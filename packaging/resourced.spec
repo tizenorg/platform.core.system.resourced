@@ -21,7 +21,6 @@ Source2:    resourced-cpucgroup.service
 %define memory_eng			ON
 %define wearable_noti		OFF
 %define debug_log			OFF
-%define memps_log			ON
 
 %define tests_module		OFF
 
@@ -38,7 +37,6 @@ Source2:    resourced-cpucgroup.service
 %if "%{?profile}" == "tv"
 	%define heart_module OFF
 	%define vip_agent_module OFF
-	%define memps_log OFF
 %endif
 
 %ifarch aarch64
@@ -160,7 +158,6 @@ export FFLAGS="$FFLAGS -DTIZEN_DEBUG_ENABLE"
 	 -DMEMORY_ENG=%{memory_eng} \
 	 -DWEARABLE_NOTI=%{wearable_noti} \
 	 -DDEBUG_LOG=%{debug_log} \
-	 -DMEMPS_LOG=%{memps_log} \
 	 -DDATAUSAGE_TYPE=NFACCT \
 	 -DRD_SYS_HOME=%{TZ_SYS_HOME} \
 	 -DRD_SYS_ETC=%{TZ_SYS_ETC} \
