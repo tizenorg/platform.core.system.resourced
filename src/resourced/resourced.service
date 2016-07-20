@@ -4,6 +4,7 @@ After=wm_ready.service
 
 [Service]
 Type=simple
+SmackProcessLabel=System::Privileged
 ExecStart=/usr/bin/resourced
 MemoryLimit=30M
 Restart=on-failure
