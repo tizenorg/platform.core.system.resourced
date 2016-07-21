@@ -22,8 +22,6 @@ Source2:    resourced-cpucgroup.service
 %define wearable_noti		OFF
 %define debug_log			OFF
 
-%define tests_module		OFF
-
 # Module switch for each profile
 # Define only difference with default setting
 %if "%{?profile}" == "mobile"
@@ -152,7 +150,6 @@ export FFLAGS="$FFLAGS -DTIZEN_DEBUG_ENABLE"
 	 -DMEMORY_MODULE=%{memory_module} \
 	 -DMEM_STRESS=%{mem_stress} \
 	 -DSWAP_MODULE=%{swap_module} \
-	 -DTESTS_MODULE=%{tests_module} \
 	 -DTIMER_SLACK=%{timer_slack} \
 	 -DVIP_AGENT=%{vip_agent_module} \
 	 -DMEMORY_ENG=%{memory_eng} \
@@ -262,20 +259,6 @@ fi
 %attr(-,root, root) %{_bindir}/mem-stress
 %{_unitdir}/mem-stress.service
 %{_unitdir}/graphical.target.wants/mem-stress.service
-%endif
-%if %{?tests_module} == ON
-%defattr(-,root,root,-)
-%{_bindir}/resourced_memory_test
-%defattr(-,root,root,-)
-%{_bindir}/resourced_cpu_test
-%defattr(-,root,root,-)
-%{_bindir}/resourced_proc_stat_test
-%defattr(-,root,root,-)
-%{_bindir}/resourced_dummy_process
-%defattr(-,root,root,-)
-%{_bindir}/resourced_hogger_memory
-%{_bindir}/resourced_dbus_sender.sh
-%{_bindir}/resourced_util_memory_test.sh
 %endif
 
 %files -n libresourced
