@@ -1940,7 +1940,7 @@ static int heart_battery_init(void *data)
 	int ret;
 
 	ret = logging_module_init(BATTERY_NAME, ONE_DAY, TEN_MINUTE,
-			heart_battery_update, HEART_BATTERY_UPDATE_INTERVAL);
+			heart_battery_update, HEART_BATTERY_UPDATE_INTERVAL, OWN);
 	if (ret != RESOURCED_ERROR_NONE) {
 		_E("logging module init failed");
 		return RESOURCED_ERROR_FAIL;

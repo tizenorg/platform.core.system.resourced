@@ -343,7 +343,7 @@ static int heart_abnormal_init(void *data)
 {
 	int ret;
 
-	ret = logging_module_init(ABNORMAL_NAME, ONE_WEEK, HALF_HOUR, NULL, 0);
+	ret = logging_module_init(ABNORMAL_NAME, ONE_WEEK, HALF_HOUR, NULL, 0, SYSTEM);
 	if (ret != RESOURCED_ERROR_NONE) {
 		_E("logging module init failed");
 		return RESOURCED_ERROR_FAIL;
