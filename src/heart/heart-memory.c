@@ -433,7 +433,7 @@ int heart_memory_get_query(GArray *arrays, enum heart_data_period period)
 {
 	int count, result;
 	time_t curr_time = time(NULL);
-	sqlite3 *heart_db;
+	sqlite3 *heart_db = NULL;
 	sqlite3_stmt *stmt = NULL;
 	gpointer value;
 	gpointer key;
@@ -464,11 +464,8 @@ int heart_memory_get_query(GArray *arrays, enum heart_data_period period)
 		return RESOURCED_ERROR_FAIL;
 	}
 
-	result = sqlite3_open(LOGGING_DB_FILE_NAME, &heart_db);
-	if (result != SQLITE_OK) {
-		_E("Can't open database %s: %s\n", MEM_NAME,
-				sqlite3_errmsg(heart_db));
-		sqlite3_close(heart_db);
+	if (logging_get_db(MEM_NAME, heart_db) != RESOURCED_ERROR_NONE) {
+		_E("Fail to get DB path");
 		return RESOURCED_ERROR_FAIL;
 	}
 
@@ -1426,7 +1423,8 @@ static int heart_memory_init(void *data)
 {
 	int ret;
 
-	ret = logging_module_init(MEM_NAME, ONE_DAY, TEN_MINUTE, heart_memory_update, TEN_MINUTE);
+	ret = logging_module_init(MEM_NAME, ONE_DAY, TEN_MINUTE,
+			heart_memory_update, TEN_MINUTE, SYSTEM_DEFAULT);
 
 	if (ret != RESOURCED_ERROR_NONE) {
 		_E("logging module init failed");
