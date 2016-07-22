@@ -234,7 +234,7 @@ static int heart_storage_init(void *data)
 	}
 	g_queue_init(queue);
 
-	ret = logging_module_init_with_db_path(STORAGE_NAME, FOUR_MONTH, FIVE_MINUTE, NULL, 0, HEART_STORAGE_DB);
+	ret = logging_module_init(STORAGE_NAME, FOUR_MONTH, FIVE_MINUTE, NULL, 0, SYSTEM_OWN);
 	if (ret != RESOURCED_ERROR_NONE) {
 		_E("logging module init failed");
 		return RESOURCED_ERROR_FAIL;

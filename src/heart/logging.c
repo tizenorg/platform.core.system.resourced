@@ -27,7 +27,6 @@
 
 #include <leveldb/c.h>
 #include <Ecore.h>
-#include <sqlite3.h>
 #include <unistd.h>
 #include <pthread.h>
 #include <glib.h>
@@ -88,6 +87,7 @@ struct logging_module {
 	char *name;
 	char *db_path;
 	sqlite3 *db;
+	enum logging_db_type db_type;
 	enum logging_period max_period;
 	pthread_mutex_t cache_mutex;
 	logging_info_cb func;
@@ -126,7 +126,7 @@ static pthread_cond_t logging_update_cond = PTHREAD_COND_INITIALIZER;
 static Ecore_Timer *logging_update_timer = NULL;
 
 static GArray *logging_modules;
-static sqlite3 *logging_db;
+static sqlite3 *system_default_db;
 static leveldb_t *logging_leveldb;
 static leveldb_options_t *options;
 static leveldb_readoptions_t *roptions;
@@ -184,13 +184,27 @@ static int logging_db_busy(void * UNUSED user, int attempts)
 	return 1;
 }
 
-int logging_module_init_with_db_path(char *name, enum logging_period max_period,
-		enum logging_interval save_interval, logging_info_cb func, enum logging_interval update_interval, const char *db_path)
+int logging_get_db(char *name, sqlite3 *db)
+{
+	struct logging_module *module = logging_find_module(name);
+	if (!module) {
+		_E("HEART-%s is disabled", name);
+		return RESOURCED_ERROR_FAIL;
+	}
+
+	db = module->db;
+	return RESOURCED_ERROR_NONE;
+}
+
+int logging_module_init(char *name, enum logging_period max_period,
+		enum logging_interval save_interval, logging_info_cb func,
+		enum logging_interval update_interval, enum logging_db_type db_type)
 {
 	int ret;
 	sqlite3 *db = NULL;
 	const char *path = NULL;
 	sqlite3_stmt *stmt = NULL;
+	char db_path[LOGGING_BUF_MAX];
 	char buf[LOGGING_BUF_MAX] = {0, };
 	struct logging_module *module;
 
@@ -206,51 +220,69 @@ int logging_module_init_with_db_path(char *name, enum logging_period max_period,
 
 	logging_instance->ref++;
 
-	/* check*/
 	if (logging_find_module(name)) {
 		_E("%s is already exist", name);
 		return RESOURCED_ERROR_INVALID_PARAMETER;
 	}
 
-	if (db_path) {
-		/* DB create */
+	/* DB create */
+	switch (db_type) {
+	case SYSTEM_DEFAULT:
+		db = system_default_db;
+		path = SYSTEM_DEFAULT_DB_NAME;
+		break;
+	case SYSTEM_OWN:
+		snprintf(db_path, LOGGING_BUF_MAX, SYSTEM_OWN_DB_NAME, name);
 		if (sqlite3_open(db_path, &db) != SQLITE_OK) {
 			_E("%s DB open failed (%s)", db_path, sqlite3_errmsg(db));
-			return RESOURCED_ERROR_FAIL;
+			return RESOURCED_ERROR_DB_FAILED;
 		}
-
 		ret = sqlite3_exec(db, "PRAGMA locking_mode = NORMAL", 0, 0, 0);
 		if (ret != SQLITE_OK) {
 			_E("Can't set locking mode %s", sqlite3_errmsg(db));
 			_E("Skip set busy handler.");
 		} else {
 			/* Set how many times we'll repeat our attempts for sqlite_step */
-			if (sqlite3_busy_handler(db, logging_db_busy, NULL) != SQLITE_OK)
+			if (sqlite3_busy_handler(system_default_db, logging_db_busy, NULL) != SQLITE_OK)
 				_E("Couldn't set busy handler!");
 		}
-
 		path = db_path;
-	} else {
-		db = logging_db;
-		path = LOGGING_DB_FILE_NAME;
+		/* You MUST define schema at the sub-module */
+		break;
+	case LEVELDB:
+		/* LevelDB isn't handled by module structure */
+		db = NULL;
+		path = NULL;
+		break;
+	case USER_DEFAULT:
+	case USER_OWN:
+		_E("Not implemented yet");
+		return RESOURCED_ERROR_NOTIMPL;
+		break;
+	default:
+		_E("Unknown DB type");
+		return RESOURCED_ERROR_INVALID_PARAMETER;
+		break;
 	}
 
-	/* create table using module name and field_forms */
-	snprintf(buf, LOGGING_BUF_MAX, CREATE_QUERY, name);
-	ret = sqlite3_prepare_v2(db, buf, read_until_null, &stmt, NULL);
-	if (ret != SQLITE_OK) {
-		_E("create %s table failed %s", name, sqlite3_errmsg(db));
+	if (db_type == SYSTEM_DEFAULT) {
+		/* create table using module name and field_forms */
+		snprintf(buf, LOGGING_BUF_MAX, CREATE_QUERY, name);
+		ret = sqlite3_prepare_v2(db, buf, read_until_null, &stmt, NULL);
+		if (ret != SQLITE_OK) {
+			_E("create %s table failed %s", name, sqlite3_errmsg(db));
+			sqlite3_finalize(stmt);
+			return RESOURCED_ERROR_DB_FAILED;
+		}
+
+		if (sqlite3_step(stmt) != SQLITE_DONE) {
+			_E("create %s table failed %s", name, sqlite3_errmsg(db));
+			sqlite3_finalize(stmt);
+			return RESOURCED_ERROR_DB_FAILED;
+		}
+
 		sqlite3_finalize(stmt);
-		return RESOURCED_ERROR_DB_FAILED;
 	}
-
-	if (sqlite3_step(stmt) != SQLITE_DONE) {
-		_E("create %s table failed %s", name, sqlite3_errmsg(db));
-		sqlite3_finalize(stmt);
-		return RESOURCED_ERROR_DB_FAILED;
-	}
-
-	sqlite3_finalize(stmt);
 
 	module = malloc(sizeof(struct logging_module));
 
@@ -261,6 +293,7 @@ int logging_module_init_with_db_path(char *name, enum logging_period max_period,
 
 	/* make logging_module_inform and set module_inform */
 	module->db = db;
+	module->db_type = db_type;
 	module->func = func;
 	module->latest_update_time = time(NULL);
 	module->save_interval = save_interval;
@@ -307,12 +340,6 @@ int logging_module_init_with_db_path(char *name, enum logging_period max_period,
 	g_array_append_val(logging_modules, module);
 
 	return RESOURCED_ERROR_NONE;
-}
-
-int logging_module_init(char *name, enum logging_period max_period,
-		enum logging_interval save_interval, logging_info_cb func, enum logging_interval update_interval)
-{
-	return logging_module_init_with_db_path(name, max_period, save_interval, func, update_interval, NULL);
 }
 
 int logging_module_exit(void)
@@ -961,7 +988,7 @@ void logging_save_to_storage(int force)
 		pthread_mutex_lock(&(module->cache_mutex));
 		len = g_queue_get_length(module->cache);
 		if (!len) {
-			_I("%s cache is empty", module->name);
+			_D("%s cache is empty", module->name);
 			pthread_mutex_unlock(&(module->cache_mutex));
 			continue;
 		}
@@ -1026,6 +1053,10 @@ void logging_save_to_storage(int force)
 
 	for (i = 0; i < logging_modules->len; i++) {
 		module = g_array_index(logging_modules, struct logging_module *, i);
+
+		/* Ignore sub-module using their own DB */
+		if (module->db == NULL)
+			continue;
 
 		/* Check storage limitation by maximum period and storage size (50MiB) */
 		if (logging_check_storage_size(module->db_path) == RESOURCED_ERROR_FAIL) {
@@ -1248,26 +1279,26 @@ int logging_init(void *data)
 		return RESOURCED_ERROR_OUT_OF_MEMORY;
 	}
 
-	/* DB create */
-	if (sqlite3_open(LOGGING_DB_FILE_NAME, &logging_db) != SQLITE_OK) {
-		_E("%s DB open failed (%s)", LOGGING_DB_FILE_NAME, sqlite3_errmsg(logging_db));
-		return RESOURCED_ERROR_FAIL;
+	/* Create default DB */
+	if (sqlite3_open(SYSTEM_DEFAULT_DB_NAME, &system_default_db) != SQLITE_OK) {
+		_E("%s DB open failed (%s)", SYSTEM_DEFAULT_DB_NAME,
+				sqlite3_errmsg(system_default_db));
+		return RESOURCED_ERROR_DB_FAILED;
 	}
-
-	ret = sqlite3_exec(logging_db, "PRAGMA locking_mode = NORMAL", 0, 0, 0);
+	ret = sqlite3_exec(system_default_db, "PRAGMA locking_mode = NORMAL", 0, 0, 0);
 	if (ret != SQLITE_OK) {
-		_E("Can't set locking mode %s", sqlite3_errmsg(logging_db));
+		_E("Can't set locking mode %s", sqlite3_errmsg(system_default_db));
 		_E("Skip set busy handler.");
 		return RESOURCED_ERROR_DB_FAILED;
 	}
-
 	/* Set how many times we'll repeat our attempts for sqlite_step */
-	if (sqlite3_busy_handler(logging_db, logging_db_busy, NULL) != SQLITE_OK)
+	if (sqlite3_busy_handler(system_default_db, logging_db_busy, NULL) != SQLITE_OK)
 		_E("Couldn't set busy handler!");
 
+	/* Create leveldb */
 	options = leveldb_options_create();
 	leveldb_options_set_create_if_missing(options, 1);
-	logging_leveldb = leveldb_open(options, LOGGING_LEVEL_DB_FILE_NAME, &err);
+	logging_leveldb = leveldb_open(options, SYSTEM_LEVEL_DB_DIR, &err);
 	if (err != NULL) {
 		_E("Failed to open leveldb");
 		free(err);
@@ -1325,7 +1356,7 @@ int logging_exit(void *data)
 	g_array_free(logging_modules, true);
 
 	/* DB close */
-	sqlite3_close(logging_db);
+	sqlite3_close(system_default_db);
 	if (logging_leveldb)
 		leveldb_close(logging_leveldb);
 	_D("logging_exit");

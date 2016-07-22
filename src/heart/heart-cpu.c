@@ -1339,7 +1339,8 @@ static int heart_cpu_init(void *data)
 {
 	int ret;
 
-	ret = logging_module_init(CPU_NAME, ONE_DAY, TEN_MINUTE, heart_cpu_update, TEN_MINUTE);
+	ret = logging_module_init(CPU_NAME, ONE_DAY, TEN_MINUTE, heart_cpu_update,
+			TEN_MINUTE, SYSTEM_DEFAULT);
 	if (ret != RESOURCED_ERROR_NONE) {
 		_E("logging module init failed");
 		return RESOURCED_ERROR_FAIL;

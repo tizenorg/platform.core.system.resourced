@@ -47,8 +47,7 @@ Source2:    resourced-cpucgroup.service
 %define exclude_list_opt_full_path %{TZ_SYS_ETC}/%{exclude_list_file_name}
 %define database_full_path %{TZ_SYS_GLOBALUSER_DB}/.resourced-datausage.db
 
-%define logging_db_full_path %{TZ_SYS_GLOBALUSER_DB}/.resourced-logging.db
-%define logging_storage_db_full_path %{TZ_SYS_GLOBALUSER_DB}/.resourced-logging-storage.db
+%define logging_storage_db_full_path %{TZ_SYS_GLOBALUSER_DB}/.resourced-heart-storage.db
 
 %define rd_config_path /etc/resourced
 
@@ -178,7 +177,6 @@ cp -f LICENSE %{buildroot}/usr/share/license/libresourced
 %if %{?heart_module} == ON
 	mkdir -p %{buildroot}/%{TZ_SYS_GLOBALUSER_DATA}/heart
 	mkdir -p %{buildroot}/%{TZ_SYS_GLOBALUSER_DB}
-	sqlite3 %{buildroot}%{logging_db_full_path}
 	sqlite3 --line %{buildroot}%{logging_storage_db_full_path} 'PRAGMA journal_mode = WAL'
 	touch %{buildroot}%{logging_storage_db_full_path}-shm
 	touch %{buildroot}%{logging_storage_db_full_path}-wal
