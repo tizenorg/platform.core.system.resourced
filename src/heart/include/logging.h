@@ -36,8 +36,7 @@
 #define STRINGFY(x) #x
 #define KEY_TO_STRING(x) STRINGFY(x)
 
-#define LOGGING_DB_FILE_NAME			RD_SYS_DB"/.resourced-logging.db"
-#define LOGGING_LEVEL_DB_FILE_NAME		RD_SYS_DB"/.resourced-logging-leveldb"
+#define LEVEL_DB_FILE_NAME			RD_SYS_DB"/.resourced-heart-leveldb"
 #define HOUR_TO_SEC(x)				(x*3600)
 #define DAY_TO_SEC(x)				(x*HOUR_TO_SEC(24))
 #define MONTH_TO_SEC(x)				(x*DAY_TO_SEC(30))
@@ -65,6 +64,12 @@ enum logging_operation {
 	DELETE
 };
 
+enum logging_unit {
+	SYSTEM = 0,
+	USER,
+	OWN /* Use their own DB */
+};
+
 struct logging_table_form {
 	char appid[MAX_APPID_LENGTH];
 	char pkgid[MAX_PKGNAME_LENGTH];
@@ -90,11 +95,10 @@ int logging_init(void *data);
 int logging_exit(void *data);
 time_t logging_get_time(int clk_id);
 long logging_get_time_ms(void);
+int logging_get_db_path(char *name, char *db_path);
 int logging_module_init(char *name, enum logging_period max_period,
-		enum logging_interval save_interval, logging_info_cb func, enum logging_interval update_interval);
-int logging_module_init_with_db_path(char *name, enum logging_period max_period,
-		enum logging_interval save_interval, logging_info_cb func, enum logging_interval update_interval,
-		const char *db_path);
+		enum logging_interval save_interval, logging_info_cb func,
+		enum logging_interval update_interval, enum logging_unit unit);
 int logging_module_exit(void);
 int logging_register_listener(char *name, logging_listener_cb listener);
 int logging_unregister_listener(char *name, logging_listener_cb listener);

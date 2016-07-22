@@ -56,6 +56,8 @@
 #define LOGGING_BUF_MAX			1024
 #define LOGGING_PTIORITY		20
 
+#define SYSTEM_DB_FULL_NAME		RD_SYS_DB"/.resourced-heart-%s.db"
+
 #define DB_SIZE_THRESHOLD		(50<<20)
 #define LOGGING_FILE_PATH		HEART_FILE_PATH
 #define CREATE_QUERY			"CREATE TABLE IF NOT EXISTS %s (appid TEXT, pkgid TEXT, time INT, data TEXT, idx INT, PRIMARY KEY(time, idx));"
@@ -126,7 +128,6 @@ static pthread_cond_t logging_update_cond = PTHREAD_COND_INITIALIZER;
 static Ecore_Timer *logging_update_timer = NULL;
 
 static GArray *logging_modules;
-static sqlite3 *logging_db;
 static leveldb_t *logging_leveldb;
 static leveldb_options_t *options;
 static leveldb_readoptions_t *roptions;
@@ -184,13 +185,27 @@ static int logging_db_busy(void * UNUSED user, int attempts)
 	return 1;
 }
 
-int logging_module_init_with_db_path(char *name, enum logging_period max_period,
-		enum logging_interval save_interval, logging_info_cb func, enum logging_interval update_interval, const char *db_path)
+int logging_get_db_path(char *name, char *db_path)
+{
+	struct logging_module *module = logging_find_module(name);
+	if (!module) {
+		_E("HEART-%s is disabled", name);
+		return RESOURCED_ERROR_FAIL;
+	}
+
+	db_path = strdup(module->db_path);
+	return RESOURCED_ERROR_NONE;
+}
+
+int logging_module_init(char *name, enum logging_period max_period,
+		enum logging_interval save_interval, logging_info_cb func,
+		enum logging_interval update_interval, enum logging_unit unit)
 {
 	int ret;
 	sqlite3 *db = NULL;
 	const char *path = NULL;
 	sqlite3_stmt *stmt = NULL;
+	char db_path[LOGGING_BUF_MAX];
 	char buf[LOGGING_BUF_MAX] = {0, };
 	struct logging_module *module;
 
@@ -212,13 +227,14 @@ int logging_module_init_with_db_path(char *name, enum logging_period max_period,
 		return RESOURCED_ERROR_INVALID_PARAMETER;
 	}
 
-	if (db_path) {
-		/* DB create */
+	/* DB create */
+	switch (unit) {
+	case SYSTEM:
+		snprintf(db_path, LOGGING_BUF_MAX, SYSTEM_DB_FULL_NAME, name);
 		if (sqlite3_open(db_path, &db) != SQLITE_OK) {
 			_E("%s DB open failed (%s)", db_path, sqlite3_errmsg(db));
 			return RESOURCED_ERROR_FAIL;
 		}
-
 		ret = sqlite3_exec(db, "PRAGMA locking_mode = NORMAL", 0, 0, 0);
 		if (ret != SQLITE_OK) {
 			_E("Can't set locking mode %s", sqlite3_errmsg(db));
@@ -228,29 +244,40 @@ int logging_module_init_with_db_path(char *name, enum logging_period max_period,
 			if (sqlite3_busy_handler(db, logging_db_busy, NULL) != SQLITE_OK)
 				_E("Couldn't set busy handler!");
 		}
-
 		path = db_path;
-	} else {
-		db = logging_db;
-		path = LOGGING_DB_FILE_NAME;
+		break;
+	case USER:
+		// TODO : implement per-user DB
+		_E("Not implememted yet!");
+		return RESOURCED_ERROR_FAIL;
+		break;
+	case OWN:
+		/* This module create their DB for themselves */
+		break;
+	default:
+		_E("Unknown DB unit");
+		return RESOURCED_ERROR_FAIL;
+		break;
 	}
 
-	/* create table using module name and field_forms */
-	snprintf(buf, LOGGING_BUF_MAX, CREATE_QUERY, name);
-	ret = sqlite3_prepare_v2(db, buf, read_until_null, &stmt, NULL);
-	if (ret != SQLITE_OK) {
-		_E("create %s table failed %s", name, sqlite3_errmsg(db));
+	if (unit != OWN) {
+		/* create table using module name and field_forms */
+		snprintf(buf, LOGGING_BUF_MAX, CREATE_QUERY, name);
+		ret = sqlite3_prepare_v2(db, buf, read_until_null, &stmt, NULL);
+		if (ret != SQLITE_OK) {
+			_E("create %s table failed %s", name, sqlite3_errmsg(db));
+			sqlite3_finalize(stmt);
+			return RESOURCED_ERROR_DB_FAILED;
+		}
+
+		if (sqlite3_step(stmt) != SQLITE_DONE) {
+			_E("create %s table failed %s", name, sqlite3_errmsg(db));
+			sqlite3_finalize(stmt);
+			return RESOURCED_ERROR_DB_FAILED;
+		}
+
 		sqlite3_finalize(stmt);
-		return RESOURCED_ERROR_DB_FAILED;
 	}
-
-	if (sqlite3_step(stmt) != SQLITE_DONE) {
-		_E("create %s table failed %s", name, sqlite3_errmsg(db));
-		sqlite3_finalize(stmt);
-		return RESOURCED_ERROR_DB_FAILED;
-	}
-
-	sqlite3_finalize(stmt);
 
 	module = malloc(sizeof(struct logging_module));
 
@@ -260,7 +287,10 @@ int logging_module_init_with_db_path(char *name, enum logging_period max_period,
 	}
 
 	/* make logging_module_inform and set module_inform */
-	module->db = db;
+	if (unit != OWN)
+		module->db = db;
+	else
+		module->db = NULL;
 	module->func = func;
 	module->latest_update_time = time(NULL);
 	module->save_interval = save_interval;
@@ -307,12 +337,6 @@ int logging_module_init_with_db_path(char *name, enum logging_period max_period,
 	g_array_append_val(logging_modules, module);
 
 	return RESOURCED_ERROR_NONE;
-}
-
-int logging_module_init(char *name, enum logging_period max_period,
-		enum logging_interval save_interval, logging_info_cb func, enum logging_interval update_interval)
-{
-	return logging_module_init_with_db_path(name, max_period, save_interval, func, update_interval, NULL);
 }
 
 int logging_module_exit(void)
@@ -961,7 +985,7 @@ void logging_save_to_storage(int force)
 		pthread_mutex_lock(&(module->cache_mutex));
 		len = g_queue_get_length(module->cache);
 		if (!len) {
-			_I("%s cache is empty", module->name);
+			_D("%s cache is empty", module->name);
 			pthread_mutex_unlock(&(module->cache_mutex));
 			continue;
 		}
@@ -1026,6 +1050,10 @@ void logging_save_to_storage(int force)
 
 	for (i = 0; i < logging_modules->len; i++) {
 		module = g_array_index(logging_modules, struct logging_module *, i);
+
+		/* Ignore sub-module using their own DB */
+		if (module->db == NULL)
+			continue;
 
 		/* Check storage limitation by maximum period and storage size (50MiB) */
 		if (logging_check_storage_size(module->db_path) == RESOURCED_ERROR_FAIL) {
@@ -1248,26 +1276,10 @@ int logging_init(void *data)
 		return RESOURCED_ERROR_OUT_OF_MEMORY;
 	}
 
-	/* DB create */
-	if (sqlite3_open(LOGGING_DB_FILE_NAME, &logging_db) != SQLITE_OK) {
-		_E("%s DB open failed (%s)", LOGGING_DB_FILE_NAME, sqlite3_errmsg(logging_db));
-		return RESOURCED_ERROR_FAIL;
-	}
-
-	ret = sqlite3_exec(logging_db, "PRAGMA locking_mode = NORMAL", 0, 0, 0);
-	if (ret != SQLITE_OK) {
-		_E("Can't set locking mode %s", sqlite3_errmsg(logging_db));
-		_E("Skip set busy handler.");
-		return RESOURCED_ERROR_DB_FAILED;
-	}
-
-	/* Set how many times we'll repeat our attempts for sqlite_step */
-	if (sqlite3_busy_handler(logging_db, logging_db_busy, NULL) != SQLITE_OK)
-		_E("Couldn't set busy handler!");
-
+	/* Create leveldb */
 	options = leveldb_options_create();
 	leveldb_options_set_create_if_missing(options, 1);
-	logging_leveldb = leveldb_open(options, LOGGING_LEVEL_DB_FILE_NAME, &err);
+	logging_leveldb = leveldb_open(options, LEVEL_DB_FILE_NAME, &err);
 	if (err != NULL) {
 		_E("Failed to open leveldb");
 		free(err);
@@ -1325,7 +1337,6 @@ int logging_exit(void *data)
 	g_array_free(logging_modules, true);
 
 	/* DB close */
-	sqlite3_close(logging_db);
 	if (logging_leveldb)
 		leveldb_close(logging_leveldb);
 	_D("logging_exit");
