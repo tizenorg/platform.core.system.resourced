@@ -217,10 +217,10 @@ static int load_cpu_config(struct parse_result *result, void *user_data)
 static int cpu_service_state(void *data)
 {
 	struct proc_status *ps = (struct proc_status *)data;
-	struct proc_app_info *pai = ps->pai;
+	assert(ps && ps->pai);
 
-	_D("service launch: pid = %d, appname = %s", ps->pid, ps->appid);
-	if (pai && CHECK_BIT(pai->categories, PROC_BG_SYSTEM))
+	_D("service launch: pid = %d, appname = %s", ps->pid, ps->pai->appid);
+	if (ps->pai && CHECK_BIT(ps->pai->categories, PROC_BG_SYSTEM))
 		return RESOURCED_ERROR_NONE;
 	else
 		cpu_move_cgroup(ps->pid, CPU_BACKGROUND_GROUP);
@@ -230,10 +230,10 @@ static int cpu_service_state(void *data)
 static int cpu_widget_state(void *data)
 {
 	struct proc_status *ps = (struct proc_status *)data;
-	struct proc_app_info *pai = ps->pai;
+	assert(ps && ps->pai);
 
-	_D("widget background: pid = %d, appname = %s", ps->pid, ps->appid);
-	if (pai && CHECK_BIT(pai->flags, PROC_DOWNLOADAPP))
+	_D("widget background: pid = %d, appname = %s", ps->pid, ps->pai->appid);
+	if (ps->pai && CHECK_BIT(ps->pai->flags, PROC_DOWNLOADAPP))
 		cpu_move_cgroup(ps->pid, CPU_BACKGROUND_GROUP);
 	return RESOURCED_ERROR_NONE;
 }
@@ -242,7 +242,9 @@ static int cpu_foreground_state(void *data)
 {
 	struct proc_status *ps = (struct proc_status *)data;
 	int pri;
-	_D("app foreground: pid = %d, appname = %s", ps->pid, ps->appid);
+
+	assert(ps && ps->pai);
+	_D("app foreground: pid = %d, appname = %s", ps->pid, ps->pai->appid);
 	pri = getpriority(PRIO_PROCESS, ps->pid);
 	if (pri == -1 || pri > CPU_DEFAULT_PRI)
 		setpriority(PRIO_PGRP, ps->pid, CPU_DEFAULT_PRI);
@@ -254,7 +256,9 @@ static int cpu_foreground_state(void *data)
 static int cpu_background_state(void *data)
 {
 	struct proc_status *ps = (struct proc_status *)data;
-	_D("app background: pid = %d, appname = %s", ps->pid, ps->appid);
+	assert(ps && ps->pai);
+
+	_D("app background: pid = %d, appname = %s", ps->pid, ps->pai->appid);
 	setpriority(PRIO_PGRP, ps->pid, CPU_BACKGROUND_PRI);
 	cpu_move_cgroup(ps->pid, CPU_BACKGROUND_GROUP);
 	return RESOURCED_ERROR_NONE;
@@ -263,9 +267,11 @@ static int cpu_background_state(void *data)
 static int cpu_restrict_state(void *data)
 {
 	struct proc_status *ps = (struct proc_status *)data;
-	_D("app suspend: pid = %d, appname = %s", ps->pid, ps->appid);
+	assert(ps && ps->pai);
+
 	if (CHECK_BIT(ps->pai->categories, PROC_BG_MEDIA))
 		return RESOURCED_ERROR_NONE;
+	_D("app suspend: pid = %d, appname = %s", ps->pid, ps->pai->appid);
 	cpu_move_cgroup(ps->pid, CPU_CPUQUOTA_GROUP);
 	return RESOURCED_ERROR_NONE;
 }
@@ -274,7 +280,9 @@ static int cpu_active_state(void *data)
 {
 	struct proc_status *ps = (struct proc_status *)data;
 	int oom_score_adj = 0, ret;
-	_D("app active : pid = %d, appname = %s", ps->pid, ps->appid);
+	assert(ps && ps->pai);
+
+	_D("app active : pid = %d, appname = %s", ps->pid, ps->pai->appid);
 	ret = proc_get_oom_score_adj(ps->pid, &oom_score_adj);
 	if (ret || oom_score_adj < OOMADJ_PREVIOUS_DEFAULT)
 		return RESOURCED_ERROR_NONE;
@@ -285,12 +293,12 @@ static int cpu_active_state(void *data)
 static int cpu_prelaunch_state(void *data)
 {
 	struct proc_status *ps = (struct proc_status *)data;
-	struct proc_app_info *pai = ps->pai;
 	int i = 0;
+	assert(ps && ps->pai);
 
 	if (!cpu_predefined_timer)
 		return RESOURCED_ERROR_NONE;
-	if (pai->type & PROC_WEBAPP) {
+	if (ps->pai->type & PROC_WEBAPP) {
 		for (i = 0; i < def_list.num; i++) {
 			if (def_list.control[i].type == SET_WRT) {
 				cpu_move_cgroup(def_list.control[i].pid, CPU_DEFAULT_CGROUP);
@@ -306,6 +314,7 @@ static int cpu_prelaunch_state(void *data)
 static int cpu_system_state(void *data)
 {
 	struct proc_status *ps = (struct proc_status *)data;
+	assert(ps && ps->pai);
 
 	_D("system service : pid = %d", ps->pid);
 	cpu_move_cgroup(ps->pid, CPU_BACKGROUND_GROUP);
@@ -315,6 +324,8 @@ static int cpu_system_state(void *data)
 static int cpu_terminatestart_state(void *data)
 {
 	struct proc_status *ps = (struct proc_status *)data;
+	assert(ps && ps->pai);
+
 	cpu_move_cgroup(ps->pid, CPU_DEFAULT_CGROUP);
 	return RESOURCED_ERROR_NONE;
 }
