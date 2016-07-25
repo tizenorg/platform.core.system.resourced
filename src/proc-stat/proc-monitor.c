@@ -613,7 +613,6 @@ static void proc_dbus_prelaunch_signal_handler(void *data, DBusMessage *msg)
 	pai->flags = flags;
 	pai->type = PROC_TYPE_READY;
 	pai->categories = categories;
-	ps.appid = appid;
 	ps.pai = pai;
 	resourced_notify(RESOURCED_NOTIFIER_APP_PRELAUNCH, &ps);
 	lowmem_proactive_oom_killer(flags, appid);
