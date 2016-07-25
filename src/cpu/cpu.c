@@ -263,9 +263,9 @@ static int cpu_background_state(void *data)
 static int cpu_restrict_state(void *data)
 {
 	struct proc_status *ps = (struct proc_status *)data;
-	_D("app suspend: pid = %d, appname = %s", ps->pid, ps->appid);
 	if (CHECK_BIT(ps->pai->categories, PROC_BG_MEDIA))
 		return RESOURCED_ERROR_NONE;
+	_D("app suspend: pid = %d, appname = %s", ps->pid, ps->appid);
 	cpu_move_cgroup(ps->pid, CPU_CPUQUOTA_GROUP);
 	return RESOURCED_ERROR_NONE;
 }

@@ -154,6 +154,7 @@ static int proc_backgrd_manage(int currentpid, int active, int oom_score_adj)
 				memset(&ps, 0, sizeof(struct proc_status));
 				ps.pai = spi;
 				ps.pid = pid;
+				ps.appid = spi->appid;
 				resourced_notify(
 					    RESOURCED_NOTIFIER_APP_SUSPEND_READY,
 					    &ps);
