@@ -118,7 +118,6 @@ static int proc_backgrd_manage(int currentpid, int active, int oom_score_adj)
 	}
 
 	ps.pid = currentpid;
-	ps.appid = pai->appid;
 	ps.pai = pai;
 	if (active)
 		flag = RESOURCED_NOTIFIER_APP_BACKGRD_ACTIVE;
@@ -461,7 +460,6 @@ int proc_set_inactive(int pid, int oom_score_adj)
 		if (pai) {
 			struct proc_status ps = {0};
 			ps.pid = pid;
-			ps.appid = pai->appid;;
 			ps.pai = pai;
 			pai->lru_state = PROC_BACKGROUND;
 			ret = proc_set_oom_score_adj(pid, OOMADJ_BACKGRD_UNLOCKED);
