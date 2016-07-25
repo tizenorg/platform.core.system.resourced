@@ -273,7 +273,6 @@ static int heart_cpu_update_app_list(void *data)
 		if (!pai->ai)
 			continue;
 		ps.pid = pai->main_pid;
-		ps.appid = pai->appid;
 		ps.pai = pai;
 		heart_cpu_update_state(&ps);
 	}

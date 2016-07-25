@@ -782,10 +782,8 @@ void proc_set_group(pid_t ownerpid, pid_t childpid, char *pkgname)
 		ps.pid = owner->main_pid;
 		proc_set_oom_score_adj(owner->main_pid, child_oom);
 	} else {
-		if (owner_oom <= OOMADJ_BACKGRD_LOCKED) {
+		if (owner_oom <= OOMADJ_BACKGRD_LOCKED)
 			ps.pid = childpid;
-			ps.appid = owner->appid;
-		}
 		proc_set_oom_score_adj(childpid, owner_oom);
 	}
 	resourced_notify(RESOURCED_NOTIFIER_APP_WAKEUP, &ps);
@@ -873,7 +871,6 @@ int resourced_proc_status_change(int status, pid_t pid, char *app_name, char *pk
 	}
 
 	ps.pid = pid;
-	ps.appid = app_name;
 	ps.pai = NULL;
 	switch (status) {
 	case PROC_CGROUP_SET_FOREGRD:
@@ -897,10 +894,8 @@ int resourced_proc_status_change(int status, pid_t pid, char *app_name, char *pk
 				return RESOURCED_ERROR_NO_DATA;
 			notitype = RESOURCED_NOTIFIER_APP_FOREGRD;
 		}
-		if (ps.pai) {
-			ps.appid = ps.pai->appid;
+		if (ps.pai)
 			resourced_notify(notitype, &ps);
-		}
 
 		if (proc_get_freezer_status() == CGROUP_FREEZER_DISABLED)
 			break;
@@ -1058,8 +1053,6 @@ int resourced_proc_status_change(int status, pid_t pid, char *app_name, char *pk
 		break;
 	case PROC_CGROUP_SET_TERMINATED:
 		ps.pai = find_app_info(pid);
-		if (ps.pai)
-			ps.appid = ps.pai->appid;
 		resourced_notify(RESOURCED_NOTIFIER_APP_TERMINATED, &ps);
 		proc_remove_app_list(pid);
 		break;

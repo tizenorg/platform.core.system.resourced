@@ -403,7 +403,7 @@ static int decision_app_terminated_cb(void *data)
 
 	pthread_mutex_lock(&decision_list_mutex);
 
-	dt = decision_table_find(ps->appid, ps->pai->program->pkgname);
+	dt = decision_table_find(ps->pai->appid, ps->pai->program->pkgname);
 
 	if (!dt) {
 		pthread_mutex_unlock(&decision_list_mutex);
@@ -412,12 +412,12 @@ static int decision_app_terminated_cb(void *data)
 
 	ret = decision_table_write(dt);
 	if (ret < 0)
-		_D("decision table write failed for %s", ps->appid);
+		_D("decision table write failed for %s", ps->pai->appid);
 
-	g_hash_table_remove(decision_app_list, (gconstpointer)ps->appid);
+	g_hash_table_remove(decision_app_list, (gconstpointer)ps->pai->appid);
 
 	pthread_mutex_unlock(&decision_list_mutex);
-	_I("%s table is removed from decision table", ps->appid);
+	_I("%s table is removed from decision table", ps->pai->appid);
 
 	return RESOURCED_ERROR_NONE;
 }

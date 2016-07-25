@@ -60,7 +60,6 @@ struct child_pid {
 
 struct proc_status {
 	pid_t pid;
-	char* appid;
 	struct proc_app_info *pai;
 };
 
