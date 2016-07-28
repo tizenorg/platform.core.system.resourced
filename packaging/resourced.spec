@@ -250,9 +250,9 @@ fi
 %if %{?heart_module} == ON
 	%config %{rd_config_path}/heart.conf
 	%attr(700, root, root) %{TZ_SYS_ETC}/dump.d/module.d/dump_heart_data.sh
-	%attr(700, app, app) %{logging_storage_db_full_path}
-	%attr(700, app, app) %{logging_storage_db_full_path}-shm
-	%attr(700, app, app) %{logging_storage_db_full_path}-wal
+	%attr(700, root, root) %{logging_storage_db_full_path}
+	%attr(700, root, root) %{logging_storage_db_full_path}-shm
+	%attr(700, root, root) %{logging_storage_db_full_path}-wal
 %endif
 #mem-stress
 %if %{?mem_stress} == ON
